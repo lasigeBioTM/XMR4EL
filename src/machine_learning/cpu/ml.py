@@ -38,7 +38,7 @@ class LogisticRegressionCPU(Classifier):
         model.fit(X_train, y_train)
         return cls(model=model, model_type='LogisticRegressionCPU')
     
-class KMeansCPU(Classifier):
+class KMeansCPU(Clustering):
 
     @classmethod
     def train(cls, X_train):
@@ -59,10 +59,18 @@ class KMeansCPU(Classifier):
     def get_labels(self):
         return self.model.labels_
     
-class BirchCPU(Classifier):
+class BirchCPU(Clustering):
 
     @classmethod
     def train(cls, X_train):
+
+        """
+            'threshold': 1,
+            'branching_factor': 50,
+            'n_clusters': 16,
+            'compute_labels': True,       
+        """
+
         defaults = {
             'threshold': 0.5,
             'branching_factor': 16,
