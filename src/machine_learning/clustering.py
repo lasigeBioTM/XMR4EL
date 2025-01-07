@@ -12,6 +12,10 @@ class Clustering():
         os.makedirs(clustering_folder, exist_ok=True)
         with open(os.path.join(clustering_folder, 'clustering.pkl'), 'wb') as fout:
             pickle.dump({'model': self.model, 'model_type': self.model_type}, fout)
+
+    def fit(self, corpus):
+        labels = self.model.fit(corpus).labels_
+        return labels
     
     @classmethod
     def load(cls, clustering_folder):
@@ -24,7 +28,7 @@ class Clustering():
     def save_labels(self, clustering_folder):
         os.makedirs(clustering_folder, exist_ok=True)
 
-        if self.model_type == 'HierarchicalCPU':
+        if self.model_type == 'HierarchicalCPU' or self.model_type == 'BirchCPU' or self.model.type == 'KMeansCPU':
             labels = self.model.labels_
         elif self.model_type == 'HierarchicalGPU':
             labels = self.model.labels_.to_numpy()
