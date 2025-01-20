@@ -77,6 +77,7 @@ class BirchCPU(Clustering):
             'n_clusters': 16,
             'compute_labels': True,
         }
+        
         # X_normalized = normalize(X_train)
         model = Birch(**defaults)
         model.fit(X_train)

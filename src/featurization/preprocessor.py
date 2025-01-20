@@ -68,17 +68,15 @@ class Preprocessor():
         assert os.path.exists(train_filepath), f"{train_filepath} does not exist"
         assert os.path.exists(labels_filepath), f"{labels_filepath} does not exist"
 
-        train_df = pd.read_csv(train_filepath, header=None, names=['id', 'train_name'], delimiter="\t")
-        # Corpus
-        train_data = train_df['train_name'].to_list()
+        train_df = pd.read_csv(train_filepath, header=None, names=['id', 'corpus_name'], delimiter="\t")
 
-        labels_df = pd.read_csv(labels_filepath, header=None, names=['label'])
-        # Dense Matrix
-        labels_data = labels_df['label'].to_list()
+        grouped_train_df = train_df.groupby('id')['corpus_name'].apply(list).reset_index()
+
+        labels_df = pd.read_csv(labels_filepath, header=None, names=['id'], delimiter="\t")
 
         return {
-                'labels_data':labels_data, 
-                'corpus': train_data
-                }
+            "labels": labels_df['id'].tolist(),
+            "corpus": grouped_train_df['corpus_name'].tolist()
+        }
     
         
