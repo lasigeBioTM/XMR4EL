@@ -9,14 +9,15 @@ from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU, KMeansCPU, L
 
 class HieararchicalLinearModel():
 
-    def __init__(self, model=None, model_type=None):
+    def __init__(self, model=None, model_clustering_type=None, model_linear_type=None):
         self.model = model
-        self.model_type = model_type
+        self.model_clustering_type = model_clustering_type
+        self.model_linear_type = model_linear_type
 
     def save(self, linear_model_folder):
         os.makedirs(linear_model_folder, exist_ok=True)
-        with open(os.path.join(linear_model_folder, 'linear_model.pkl'), 'wb') as fout:
-            pickle.dump({'model': self.model, 'model_type': self.model_type}, fout)
+        with open(os.path.join(linear_model_folder, 'hierarchical_linear_model.pkl'), 'wb') as fout:
+            pickle.dump({'model': self.model, 'model_clustering_type': self.model_clustering_type, 'model_linear_type': self.model_linear_type}, fout)
 
     @classmethod
     def load(cls, linear_model_folder):
@@ -50,8 +51,8 @@ class HieararchicalLinearModel():
         top_k_indices = get_top_k_indices(y_proba, 2)
 
         """
-            pegar os top 5 clusters de cada row, e fazer os filhos, 
-            e com os 5 desses fazer outros 5
+            pegar os top x clusters de cada row, e fazer os filhos, 
+            e com os x desses fazer outros x
             Para testar tentar com 2 
 
             Fazer 3 niveis, root, child, leaf.
@@ -77,8 +78,10 @@ class HieararchicalLinearModel():
             
             # Going One By One, Revamp the pipeline
             # for each cluster inside top_k_indices
+
             for child_cluster in np.unique(top_k_indices):
                 print('Cluster', child_cluster)
+
                 # Mais tempo, mas menos memoria
                 child_filtered_embeddings = get_embeddings_from_cluster_label(X_child_data, y_child_data, child_cluster)
 
@@ -86,6 +89,7 @@ class HieararchicalLinearModel():
                 # agglomerative_clustering = AgglomerativeClusteringCPU.train(filtered_embeddings.toarray()) 
                 kmeans_clustering = KMeansCPU.train(child_filtered_embeddings) 
                 child_cluster_labels = kmeans_clustering.get_labels() 
+
                 # Save The Algorithm   
                 cluster_labels_algorithms[child_cluster] = child_cluster_labels
 
