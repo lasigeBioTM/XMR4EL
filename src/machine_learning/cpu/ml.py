@@ -4,7 +4,7 @@ from sklearn.preprocessing import normalize
 
 from joblib import parallel_backend
 
-from machine_learning.joblib_runtime import force_multi_core_processing_clustering_models, force_multi_core_processing_linear_models
+from src.machine_learning.joblib_runtime import force_multi_core_processing_clustering_models, force_multi_core_processing_linear_models
 from src.machine_learning.clustering import Clustering
 from src.machine_learning.classifier import Classifier
 
