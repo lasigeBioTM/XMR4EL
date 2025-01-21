@@ -41,7 +41,7 @@ def main():
 
     X_train_feat = vectorizer_model.predict(X_train)
 
-    # print(X_train_feat.shape)
+    print(X_train_feat.shape)
 
     hierarchical_clustering_model = create_hierarchical_clustering(X_train_feat.astype(np.float32))
     
