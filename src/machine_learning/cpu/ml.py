@@ -66,21 +66,22 @@ class BirchCPU(Clustering):
     @classmethod
     def train(cls, X_train):
 
+        """
         defaults = {
             'threshold': 0.95,
             'branching_factor': 50,
             'n_clusters': 16,
             'compute_labels': True,    
         }   
-    
         """
-            defaults = {
-                'threshold': 0.5,
-                'branching_factor': 16,
-                'n_clusters': 16,
-                'compute_labels': True,
-            }
-        """
+        
+        defaults = {
+            'threshold': 0.5,
+            'branching_factor': 16,
+            'n_clusters': 16,
+            'compute_labels': True,
+        }
+        
         
         with parallel_backend('threading', n_jobs=-1):
             # X_normalized = normalize(X_train)
