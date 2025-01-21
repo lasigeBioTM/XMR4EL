@@ -1,8 +1,10 @@
 import numpy as np
+import pandas as pd
 
 from src.app.commandhelper import MainCommand
 from src.app.utils import create_hierarchical_clustering, create_hierarchical_linear_model, create_vectorizer, load_train_and_labels_file
 from src.featurization.preprocessor import Preprocessor
+from src.machine_learning.clustering import Clustering
 
 
 """
@@ -31,19 +33,27 @@ def main():
     # Dense Matrix
     Y_train = [str(parsed) for parsed in parsed_train_data["labels"]]
     X_train = [str(parsed) for parsed in parsed_train_data["corpus"]]
+    
+    # X_train = [lst[:5] for lst in X_train]
 
     # Turn on erase mode when training
     vectorizer_model = create_vectorizer(X_train)
 
     X_train_feat = vectorizer_model.predict(X_train)
 
-    print(X_train_feat.shape)
+    # print(X_train_feat.shape)
 
     hierarchical_clustering_model = create_hierarchical_clustering(X_train_feat.astype(np.float32))
+    
+    # hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_old.pkl").model
 
-    Y_train_feat = hierarchical_clustering_model.load_labels()
-
-    # hierarchical_linear_model = create_hierarchical_linear_model(X_train_feat, Y_train)
+    Y_train_feat = hierarchical_clustering_model.labels_
+    
+    print(pd.DataFrame(Y_train_feat))
+    
+    # print(Y_train_feat)
+    
+    # hierarchical_linear_model = create_hierarchical_linear_model(X_train_feat, Y_train_feat[:13240], 2)
 
 
 if __name__ == "__main__":
