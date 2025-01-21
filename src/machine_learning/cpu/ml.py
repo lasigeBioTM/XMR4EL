@@ -4,21 +4,22 @@ from sklearn.preprocessing import normalize
 
 from joblib import parallel_backend
 
+from machine_learning.joblib_runtime import force_multi_core_processing_clustering_models, force_multi_core_processing_linear_models
 from src.machine_learning.clustering import Clustering
 from src.machine_learning.classifier import Classifier
+
 
 class AgglomerativeClusteringCPU(Clustering):
     
     @classmethod
-    def train(cls, embeddings):
+    def train(cls, X_train):
         defaults = {
             'n_clusters': 16,           
         }
+        
+        model = force_multi_core_processing_clustering_models(AgglomerativeClustering(**defaults), X_train)
 
-        # defaults.update(kwargs)
-        model = AgglomerativeClustering(**defaults)
-        model.fit(embeddings)
-        return cls(model=model, model_type='HierarchicalCPU')
+        return cls(model=model, model_type='AgglomerativeClusteringCPU')
 
     def get_labels(self):
         return self.model.labels_
@@ -26,7 +27,7 @@ class AgglomerativeClusteringCPU(Clustering):
 class LogisticRegressionCPU(Classifier):
 
     @classmethod
-    def train(cls, X_train, y_train):
+    def train(cls, X_train, Y_train):
         defaults = {
             'random_state': 0,
             'solver': 'lbfgs',
@@ -34,10 +35,7 @@ class LogisticRegressionCPU(Classifier):
             'verbose': 0
         }
 
-        # SVM
-        model = LogisticRegression(**defaults)
-        # X_train = csr_matrix(X_train)
-        model.fit(X_train, y_train)
+        model = force_multi_core_processing_linear_models(LogisticRegression(**defaults), X_train, Y_train)
         return cls(model=model, model_type='LogisticRegressionCPU')
     
 class KMeansCPU(Clustering):
@@ -52,10 +50,7 @@ class KMeansCPU(Clustering):
         }
         
         X_normalized = normalize(X_train)
-        # X_train -> Embeddings
-        # If a sparse matrix is passed, a copy will be made if it’s not in CSR format.
-        model = KMeans(**defaults)
-        model.fit(X_normalized)
+        model = force_multi_core_processing_clustering_models(KMeans(**defaults), X_normalized)
         return cls(model=model, model_type='KMeansCPU')
     
     def get_labels(self):
@@ -76,19 +71,17 @@ class BirchCPU(Clustering):
         """
         
         defaults = {
-            'threshold': 0.5,
+            'threshold': 0.7,
             'branching_factor': 16,
             'n_clusters': 16,
             'compute_labels': True,
         }
         
         
-        with parallel_backend('threading', n_jobs=-1):
-            # X_normalized = normalize(X_train)
-            model = Birch(**defaults)
-            model.fit(X_train)
+        model = force_multi_core_processing_clustering_models(Birch(**defaults), X_train)
             
         return cls(model=model, model_type='BirchCPU')
     
     def get_labels(self):
         return self.model.labels_
+    
