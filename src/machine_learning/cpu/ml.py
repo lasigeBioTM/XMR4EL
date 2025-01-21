@@ -2,6 +2,8 @@ from sklearn.cluster import AgglomerativeClustering, KMeans, Birch
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import normalize
 
+from joblib import parallel_backend
+
 from src.machine_learning.clustering import Clustering
 from src.machine_learning.classifier import Classifier
 
@@ -80,9 +82,11 @@ class BirchCPU(Clustering):
             }
         """
         
-        # X_normalized = normalize(X_train)
-        model = Birch(**defaults)
-        model.fit(X_train)
+        with parallel_backend('threading', n_jobs=-1):
+            # X_normalized = normalize(X_train)
+            model = Birch(**defaults)
+            model.fit(X_train)
+            
         return cls(model=model, model_type='BirchCPU')
     
     def get_labels(self):
