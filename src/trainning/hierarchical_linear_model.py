@@ -29,8 +29,9 @@ class HieararchicalLinearModel():
     
     @classmethod
     # X_data = embeddings, y_data = cluster labels
-    def execute_pipeline(cls, X_data, y_data):
+    def execute_pipeline(cls, X_data, y_data, k, top_k_threshold = 0):
 
+        # Splitting Data
         X_train, X_test, y_train, y_test = train_test_split(
             X_data, 
             y_data, 
@@ -38,17 +39,25 @@ class HieararchicalLinearModel():
             random_state=42
             )
         
-        # Regression Class
+        # Regression Model used in the root level, will all the embeddings and cluster labels
         root_model = LogisticRegressionCPU.train(X_train, y_train).model
 
+        # Generates probabilities for each cluster
         y_proba = root_model.predict_proba(X_test)
                 
-        def get_top_k_indices(y_proba, k):
-            top_k_indices = np.argsort(y_proba, axis=1)[:, -k:][:, ::-1]
-            # top_k_probabilities = np.take_along_axis(y_proba, top_k_indices, axis=1)
-            return top_k_indices
+        print(y_proba)        
+                
+        def get_top_k_indices(y_proba, k, top_k_threshold):
+            
+            filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
+            print(filtered_proba)
+            top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
+            return top_k_indices.tolist()
 
-        top_k_indices = get_top_k_indices(y_proba, 2)
+        # Gets the k most likely clusters for each test sample
+        top_k_indices = get_top_k_indices(y_proba, k, top_k_threshold)
+        
+        print(top_k_indices)
 
         """
             pegar os top x clusters de cada row, e fazer os filhos, 
@@ -61,13 +70,17 @@ class HieararchicalLinearModel():
             para esse clustering realizar outra logistic regression,
             E fazer isto novemente, para a leaf, depois tem se de fazer o predict
             top_k.
+            
             Prever o top_k clusters do root_classifier, 
             Depois para cada top_k cluster, utilizar o respetivo child classifier 
             para prever o top_k desse classifiear, depois faz se novamente, 
             No final combina-se todos os scores de todos os scores para o ultimo
             top_k labels
         """
-
+        
+        print(np.unique(top_k_indices))
+        exit()
+        
         def execute_child_pipeline(X_child_data, y_child_data, child_top_k_indices):
             cluster_labels_algorithms = {}
             linear_algorithms = {}
@@ -78,11 +91,11 @@ class HieararchicalLinearModel():
             
             # Going One By One, Revamp the pipeline
             # for each cluster inside top_k_indices
-
             for child_cluster in np.unique(top_k_indices):
                 print('Cluster', child_cluster)
 
-                # Mais tempo, mas menos memoria
+                # Mais tempo, mas menos memoria, 
+                # Filter Data to Each Cluster
                 child_filtered_embeddings = get_embeddings_from_cluster_label(X_child_data, y_child_data, child_cluster)
 
                 print('Started Clustering')
@@ -109,11 +122,51 @@ class HieararchicalLinearModel():
 
         samples = {}
         counter = 0
+
         for top_k_list in top_k_indices:
+            # For Each of the top-k clusters predicted by the root model, a child pipeline is executed
             samples[counter] = execute_child_pipeline(X_data, y_data, top_k_list)
             counter += 1
 
         print(samples)
-
         
+
+    # Execute Machine Learning Matching, X_data = embeddings, Y_data = clusters_labels_from_embeddings
+    def execute_mlm_pipeline(cls, X_data, Y_data, k):
+        
+        def execute_linear_model(X_data, Y_data, k):
+            
+            # Splitting Data
+            X_train, X_test, y_train, y_test = train_test_split(
+                X_data, 
+                Y_data, 
+                test_size=0.2, 
+                random_state=42
+                )
+        
+            # Regression Model used in the root level, will all the embeddings and cluster labels
+            linear_model = LogisticRegressionCPU.train(X_train, y_train).model
+
+            # Generates probabilities for each cluster
+            y_proba = linear_model.predict_proba(X_test)
+                    
+            def get_top_k_indices(y_proba, k):
+                top_k_indices = np.argsort(y_proba, axis=1)[:, -k:][:, ::-1]
+                # top_k_probabilities = np.take_along_axis(y_proba, top_k_indices, axis=1)
+                return top_k_indices
+
+            # Gets the k most likely clusters for each test sample
+            top_k_indices = get_top_k_indices(y_proba, k)
+            
+            return {'linear_model': linear_model, 'top_k_indices': top_k_indices} 
+        
+        
+        # Embeddings, Label To Filter
+        def get_embeddings_from_cluster_label(X_data, y_data, label):
+            return X_data[y_data == label] 
+        
+        def execute_clustering_model():
+            
+            pass
+
                 

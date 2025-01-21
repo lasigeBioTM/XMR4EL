@@ -64,19 +64,21 @@ class BirchCPU(Clustering):
     @classmethod
     def train(cls, X_train):
 
-        """
-            'threshold': 1,
+        defaults = {
+            'threshold': 0.95,
             'branching_factor': 50,
             'n_clusters': 16,
-            'compute_labels': True,       
+            'compute_labels': True,    
+        }   
+    
         """
-
-        defaults = {
-            'threshold': 0.5,
-            'branching_factor': 16,
-            'n_clusters': 16,
-            'compute_labels': True,
-        }
+            defaults = {
+                'threshold': 0.5,
+                'branching_factor': 16,
+                'n_clusters': 16,
+                'compute_labels': True,
+            }
+        """
         
         # X_normalized = normalize(X_train)
         model = Birch(**defaults)

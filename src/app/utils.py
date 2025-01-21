@@ -55,11 +55,11 @@ def load_hierarchical_clustering(clustering_path):
 
     return model
 
-def create_hierarchical_linear_model(X_train_feat, Y_train):
+def create_hierarchical_linear_model(X_train_feat, Y_train, k):
     hlm_path = "data/processed/hlm"
 
     print("Processing Hierarchical Linear Algorithm")
-    model = HieararchicalLinearModel.execute_pipeline(X_train_feat, Y_train)
+    model = HieararchicalLinearModel.execute_pipeline(X_train_feat, Y_train, k)
     model.save(hlm_path)
     print("Hierarchical Linear Model Saved")
 
@@ -72,6 +72,8 @@ def load_hierarchical_linear_model(hlm_path):
     except Exception as e:
         print(f"Could not load Hierarchical Linear Model ({e}). Run the Training Script")
         exit()
+    
+    return model
 
 def run_machine_learning_matching(embeddings, clustering_labels):
     print("Trainning")

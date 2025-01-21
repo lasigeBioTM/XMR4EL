@@ -18,8 +18,8 @@ class Clustering():
         return labels
     
     @classmethod
-    def load(cls, clustering_folder):
-        clustering_path = os.path.join(clustering_folder, 'clustering.pkl')
+    def load(cls, clustering_path):
+        # clustering_path = os.path.join(clustering_folder, 'clustering.pkl')
         assert os.path.exists(clustering_path), f"{clustering_path} does not exist"
         with open(clustering_path, 'rb') as fclu:
             data = pickle.load(fclu)
