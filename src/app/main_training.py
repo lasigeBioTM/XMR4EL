@@ -43,13 +43,38 @@ def main():
 
     print(X_train_feat.shape)
 
-    hierarchical_clustering_model = create_hierarchical_clustering(X_train_feat.astype(np.float32))
+    # hierarchical_clustering_model = create_hierarchical_clustering(X_train_feat.astype(np.float32))
     
-    # hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_old.pkl").model
+    # Training of the Agglmomerative Clustering
+    hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_birch_train_100.pkl").model
+    
+    labels_df = pd.DataFrame(hierarchical_clustering_model.labels_, columns=['cluster_label'])
+    
+    """ Agglomerative Clustering
+    cluster_label  count
+        0           161
+        1           969
+        2           407
+        3           10334
+        4           231
+        5           568
+        6           216
+        7            22
+        8            55
+        9            24
+        10           53
+        11           43
+        12           27
+        13           45
+        14           63
+        15           22
+    """
+    
+    print(labels_df.groupby('cluster_label').size().reset_index(name='count'))
+    
+    exit()
 
-    Y_train_feat = hierarchical_clustering_model.labels_
-    
-    print(pd.DataFrame(Y_train_feat))
+    # Y_train_feat = hierarchical_clustering_model.labels_
     
     # print(Y_train_feat)
     
