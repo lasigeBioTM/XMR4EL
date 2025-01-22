@@ -4,7 +4,7 @@ from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU, BirchCPU
 from src.featurization.vectorizer import TfidfVectorizer
 from src.machine_learning.clustering import Clustering
-from src.trainning.hierarchical_linear_model import HieararchicalLinearModel
+from machine_learning.hierarchical_linear_model import HieararchicalLinearModel
 
 
 def load_train_and_labels_file(train_filepath, labels_filepath):
@@ -38,8 +38,8 @@ def create_hierarchical_clustering(embeddings):
 
     print("Processing Hierarchical Clustering Algorithm")
     # Changing to Agglomerative Clustering
-    model = AgglomerativeClusteringCPU.train(embeddings.toarray())
-    # model = BirchCPU.train(embeddings)
+    # model = AgglomerativeClusteringCPU.train(embeddings.toarray())
+    model = BirchCPU.train(embeddings)
     model.save(clustering_path)
     print("Saved Cluster Labels")
 
