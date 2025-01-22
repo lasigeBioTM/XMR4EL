@@ -37,6 +37,7 @@ def create_hierarchical_clustering(embeddings):
     clustering_path = "data/processed/clustering"
 
     print("Processing Hierarchical Clustering Algorithm")
+    # Changing to Agglomerative Clustering
     model = AgglomerativeClusteringCPU.train(embeddings.toarray())
     # model = BirchCPU.train(embeddings)
     model.save(clustering_path)
