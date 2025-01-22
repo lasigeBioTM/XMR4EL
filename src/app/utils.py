@@ -4,7 +4,7 @@ from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU, BirchCPU
 from src.featurization.vectorizer import TfidfVectorizer
 from src.machine_learning.clustering import Clustering
-from machine_learning.hierarchical_linear_model import HieararchicalLinearModel
+from src.machine_learning.hierarchical_linear_model import HieararchicalLinearModel
 
 
 def load_train_and_labels_file(train_filepath, labels_filepath):
