@@ -1,10 +1,17 @@
 import numpy as np
 import pandas as pd
 
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
 from src.app.commandhelper import MainCommand
 from src.app.utils import create_hierarchical_clustering, create_hierarchical_linear_model, create_vectorizer, load_train_and_labels_file
 from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.clustering import Clustering
+from src.machine_learning.cpu.ml import KMeansCPU
+from src.machine_learning.hierarchical_clustering import KmeansRanker
+
 
 
 """
@@ -45,10 +52,24 @@ def main():
 
     # hierarchical_clustering_model = create_hierarchical_clustering(X_train_feat.astype(np.float32))
     
-    # Training of the Agglmomerative Clustering
-    hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_birch_train_100.pkl").model
+    # Training of the Agglmomerative Clustering or Birch (Impossible to Read Birch)
+    # silhouette avg: 0.0017
+    hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
+    # hierarchical_clustering_model = KMeansCPU.train(X_train_feat).model
+    
+    # scores = KmeansRanker().ranker(X_train_feat)
+    
+    # print(scores)
+    
+    hcm_labels = hierarchical_clustering_model.labels_
+    
+    silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
+    
+    print(silhouette_avg)
     
     labels_df = pd.DataFrame(hierarchical_clustering_model.labels_, columns=['cluster_label'])
+    
+    exit()
     
     """ Agglomerative Clustering
     cluster_label  count
