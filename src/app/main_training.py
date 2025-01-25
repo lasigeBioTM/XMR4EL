@@ -10,7 +10,8 @@ from src.app.utils import create_hierarchical_clustering, create_hierarchical_li
 from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.clustering import Clustering
 from src.machine_learning.cpu.ml import KMeansCPU
-from src.machine_learning.hierarchical_clustering import KmeansRanker
+from src.machine_learning.hierarchical_clustering import KmeansRanker, DivisiveHierarchicalClustering
+from src.machine_learning.hierarchical_linear_model import HieararchicalLinearModel
 
 
 
@@ -57,19 +58,22 @@ def main():
     hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
     # hierarchical_clustering_model = KMeansCPU.train(X_train_feat).model
     
+    
+    # divisive_hierarchical_labels = DivisiveHierarchicalClustering().fit(X_train_feat)
+    
+    # print(divisive_hierarchical_labels)
+    
     # scores = KmeansRanker().ranker(X_train_feat)
     
     # print(scores)
     
-    hcm_labels = hierarchical_clustering_model.labels_
+    # hcm_labels = hierarchical_clustering_model.labels_
     
-    silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
+    # silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
     
-    print(silhouette_avg)
+    # print(silhouette_avg)
     
-    labels_df = pd.DataFrame(hierarchical_clustering_model.labels_, columns=['cluster_label'])
-    
-    exit()
+    # labels_df = pd.DataFrame(hierarchical_clustering_model.labels_, columns=['cluster_label'])
     
     """ Agglomerative Clustering
     cluster_label  count
@@ -91,15 +95,16 @@ def main():
         15           22
     """
     
-    print(labels_df.groupby('cluster_label').size().reset_index(name='count'))
-    
-    exit()
+    # print(labels_df.groupby('cluster_label').size().reset_index(name='count'))
 
-    # Y_train_feat = hierarchical_clustering_model.labels_
+    Y_train_feat = hierarchical_clustering_model.labels_
     
-    # print(Y_train_feat)
-    
+
+    # Embeddings -> X_train_feat ClusterLabels -> Y_train_feat (is this data, more labels than embeddings)
     # hierarchical_linear_model = create_hierarchical_linear_model(X_train_feat, Y_train_feat[:13240], 2)
+    
+    print("Starting HML")
+    hierarchical_linear_model = HieararchicalLinearModel.fit(X_train_feat, Y_train_feat)
 
 
 if __name__ == "__main__":

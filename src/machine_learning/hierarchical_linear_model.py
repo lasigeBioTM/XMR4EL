@@ -27,6 +27,65 @@ class HieararchicalLinearModel():
             data = pickle.load(fclu)
         return cls(model=data['model'], model_type=data['model_type'])
     
+    
+    @classmethod
+    def fit(cls, X, Y, top_k=2, top_k_threshold=0.9, max_leaf_size=100, depth=3):
+    
+        def execute_pipeline(X, Y):
+            
+            # Splitting Data
+            X_train, X_test, y_train, y_test = train_test_split(
+            X, # Embeddings
+            Y, # ClusterLabels
+            test_size=0.2, 
+            random_state=42
+            )    
+            
+            # Use of an linear model
+            linear_model = LogisticRegressionCPU.train(X, Y).model
+            
+            # Generates probabilities for each cluster
+            y_proba = linear_model.predict_proba(X_test)
+
+            def get_top_k_indices(y_proba, k, top_k_threshold):
+            
+                filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
+                print(filtered_proba)
+                top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
+                return top_k_indices.tolist()
+
+            # Gets the k most likely clusters for each test sample
+            top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
+            
+            # print(np.unique(top_k_indices))
+            
+            # Embeddings, Label To Filter
+            def get_embeddings_from_cluster_label(X, Y, label):
+                return X[Y == label] 
+            
+            for indice in np.unique(top_k_indices):
+                embeddings = get_embeddings_from_cluster_label(X, Y, indice)
+                
+                emb_shape = embeddings.shape[0]
+                
+                if emb_shape < max_leaf_size:
+                    #end
+                
+                clustering_model = KMeansCPU.train(embeddings, defaults={'n_clusters':2, 'max_iter':30}).model
+                
+                print(indice, clustering_model.labels_)
+                
+                execute_pipeline()
+                
+        
+        execute_pipeline(X, Y)
+            
+            
+    
+    
+    
+    
+    """"
     @classmethod
     # X_data = embeddings, y_data = cluster labels
     def execute_pipeline(cls, X_data, y_data, k, top_k_threshold = 0):
@@ -59,7 +118,7 @@ class HieararchicalLinearModel():
         
         print(top_k_indices)
 
-        """
+        
             pegar os top x clusters de cada row, e fazer os filhos, 
             e com os x desses fazer outros x
             Para testar tentar com 2 
@@ -76,7 +135,7 @@ class HieararchicalLinearModel():
             para prever o top_k desse classifiear, depois faz se novamente, 
             No final combina-se todos os scores de todos os scores para o ultimo
             top_k labels
-        """
+        
         
         print(np.unique(top_k_indices))
         exit()
@@ -132,7 +191,7 @@ class HieararchicalLinearModel():
         
 
     # Execute Machine Learning Matching, X_data = embeddings, Y_data = clusters_labels_from_embeddings
-    def execute_mlm_pipeline(cls, X_data, Y_data, k):
+    def execute_mlm_pipeline(cls, X_data, Y_data, k, depth=3):
         
         def execute_linear_model(X_data, Y_data, k):
             
@@ -168,5 +227,5 @@ class HieararchicalLinearModel():
         def execute_clustering_model():
             
             pass
-
+        """
                 
