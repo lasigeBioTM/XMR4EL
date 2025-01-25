@@ -41,16 +41,16 @@ class LogisticRegressionCPU(Classifier):
 class KMeansCPU(Clustering):
 
     @classmethod
-    def train(cls, X_train):
-        defaults = {
-            'n_clusters': 16,
-            'max_iter': 20,
-            'random_state': 0,
-            'n_init': 10,
-        }
-        
-        X_normalized = normalize(X_train)
-        model = force_multi_core_processing_clustering_models(KMeans(**defaults), X_normalized)
+    def train(cls, X_train, defaults={}):
+        """
+            defaults = {
+                'n_clusters': 16,
+                'max_iter': 20,
+                'random_state': 0,
+                'n_init': 10,
+            }
+        """
+        model = force_multi_core_processing_clustering_models(KMeans(**defaults), X_train)
         return cls(model=model, model_type='KMeansCPU')
     
     def get_labels(self):
