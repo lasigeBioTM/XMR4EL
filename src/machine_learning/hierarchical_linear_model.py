@@ -80,8 +80,6 @@ class HieararchicalLinearModel():
             stratify=Y # Ensures Class Balance
             )    
             
-            print(Y)
-            
             # Number of iter to not converge
             n_iter = n_iter_labels(Y)
             
@@ -144,6 +142,10 @@ class HieararchicalLinearModel():
             if better_top_k_score <= top_k_score:
                 better_top_k_score = top_k_score
             else:
-                top_k_better_results =False
+                top_k_better_results = False
+                
+        self
+                
+        return top_k_score
         
         
