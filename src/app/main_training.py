@@ -95,8 +95,6 @@ def main():
         14           63
         15           22
     """
-    
-    # print(labels_df.groupby('cluster_label').size().reset_index(name='count'))
 
     Y_train_feat = hierarchical_clustering_model.labels_
     
@@ -105,7 +103,7 @@ def main():
     # hierarchical_linear_model = create_hierarchical_linear_model(X_train_feat, Y_train_feat[:13240], 2)
     
     print("Starting HML")
-    hierarchical_linear_model = HieararchicalLinearModel.fit(X_train_feat, Y_train_feat)
+    HieararchicalLinearModel.fit(X_train_feat, Y_train_feat)
 
 
 if __name__ == "__main__":
