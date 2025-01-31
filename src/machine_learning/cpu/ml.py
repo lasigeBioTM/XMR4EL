@@ -27,14 +27,15 @@ class AgglomerativeClusteringCPU(Clustering):
 class LogisticRegressionCPU(Classifier):
 
     @classmethod
-    def train(cls, X_train, Y_train):
-        defaults = {
-            'random_state': 0,
-            'solver': 'lbfgs',
-            'max_iter': 100,
-            'verbose': 0
-        }
-
+    def train(cls, X_train, Y_train, defaults={}):
+        if defaults == {}:
+             defaults = {
+                'random_state': 0,
+                'solver': 'lbfgs',
+                'max_iter': 100,
+                'verbose': 0
+            }
+        
         model = force_multi_core_processing_linear_models(LogisticRegression(**defaults), X_train, Y_train)
         return cls(model=model, model_type='LogisticRegressionCPU')
     
@@ -42,14 +43,13 @@ class KMeansCPU(Clustering):
 
     @classmethod
     def train(cls, X_train, defaults={}):
-        """
+        if defaults == {}:
             defaults = {
                 'n_clusters': 16,
                 'max_iter': 20,
                 'random_state': 0,
                 'n_init': 10,
             }
-        """
         model = force_multi_core_processing_clustering_models(KMeans(**defaults), X_train)
         return cls(model=model, model_type='KMeansCPU')
     

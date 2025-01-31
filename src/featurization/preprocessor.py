@@ -20,8 +20,8 @@ class Preprocessor():
             pickle.dump({'model': self.model, 'model_type': self.model_type}, fout)
 
     @classmethod
-    def load(cls, preprocessor_folder):
-        preprocessor_path = os.path.join(preprocessor_folder, 'vectorizer.pkl')
+    def load(cls, preprocessor_path):
+        # preprocessor_path = os.path.join(preprocessor_folder, 'vectorizer.pkl')
         assert os.path.exists(preprocessor_path), f"{preprocessor_path} does not exist"
         with open(preprocessor_path, 'rb') as fclu:
             data = pickle.load(fclu)

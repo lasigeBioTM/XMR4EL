@@ -6,7 +6,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
 from src.app.commandhelper import MainCommand
-from src.app.utils import create_hierarchical_clustering, create_hierarchical_linear_model, create_vectorizer, load_train_and_labels_file
+from src.app.utils import create_hierarchical_clustering, create_hierarchical_linear_model, create_vectorizer, load_train_and_labels_file, load_vectorizer
 from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.clustering import Clustering
 from src.machine_learning.cpu.ml import KMeansCPU
@@ -45,7 +45,8 @@ def main():
     # X_train = [lst[:5] for lst in X_train]
 
     # Turn on erase mode when training
-    vectorizer_model = create_vectorizer(X_train)
+    # vectorizer_model = create_vectorizer(X_train)
+    vectorizer_model = load_vectorizer("data/processed/vectorizer/vectorizer.pkl")
 
     X_train_feat = vectorizer_model.predict(X_train)
 
