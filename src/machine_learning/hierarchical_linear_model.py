@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import top_k_accuracy_score
 
 from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU, KMeansCPU, LogisticRegressionCPU
 
@@ -29,203 +30,120 @@ class HieararchicalLinearModel():
     
     
     @classmethod
-    def fit(cls, X, Y, top_k=2, top_k_threshold=0.9, max_leaf_size=100, depth=3):
+    def fit(cls, X, Y, top_k=3, top_k_threshold=0.9, max_leaf_size=100, min_leaf_size=30):
     
         def execute_pipeline(X, Y):
+            
+            # Gets an List with all the embeddings and the labels with the score of more probable
+            def get_top_k_indices(y_proba, k, top_k_threshold):
+                filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
+                # print(filtered_proba)
+                top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
+                return top_k_indices.tolist()
+
+            # Final top_k_accuracy_score
+            def top_k_accuracy_method(y_test, y_proba, k):            
+                return top_k_accuracy_score(y_test, y_proba, k=k, normalize=True)
+            
+            # Embeddings, Label To Filter
+            def get_embeddings_from_cluster_label(X, Y, label):
+                return X[Y == label], np.where(Y == label)[0]
+            
+            def n_iter_labels(Y):
+                num_classes = len(np.unique(Y))  # Count unique labels
+                base_iter = 100  # Base iterations for small label sets
+                max_iter_scaled = base_iter + (10 * num_classes)  # Scale with labels
+                return max_iter_scaled
+            
+            def checkHowManyTimesALabelIsChosenTopKAccuracy(top_k_indices):
+                unique_list = np.unique(top_k_indices)
+                times_list = []
+                
+                for label in unique_list:
+                    label_counter = 0
+                    for lst in top_k_indices:
+                        for x in lst:    
+                            if x == label:
+                                label_counter += 1
+                                break
+                            
+                    times_list.append((label.item(), label_counter))
+                
+                return times_list
             
             # Splitting Data
             X_train, X_test, y_train, y_test = train_test_split(
             X, # Embeddings
             Y, # ClusterLabels
             test_size=0.2, 
-            random_state=42
+            random_state=42,
+            stratify=Y # Ensures Class Balance
             )    
             
+            print(Y)
+            
+            # Number of iter to not converge
+            n_iter = n_iter_labels(Y)
+            
             # Use of an linear model
-            linear_model = LogisticRegressionCPU.train(X, Y).model
+            linear_model = LogisticRegressionCPU.train(X, Y, defaults={'solver': 'lbfgs', 'max_iter': n_iter, 'random_state': 0}).model
             
             # Generates probabilities for each cluster
             y_proba = linear_model.predict_proba(X_test)
-
-            def get_top_k_indices(y_proba, k, top_k_threshold):
-            
-                filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
-                print(filtered_proba)
-                top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
-                return top_k_indices.tolist()
-
+                
             # Gets the k most likely clusters for each test sample
             top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
             
-            # print(np.unique(top_k_indices))
+            print(np.unique(top_k_indices))
+            print(checkHowManyTimesALabelIsChosenTopKAccuracy(top_k_indices))
             
-            # Embeddings, Label To Filter
-            def get_embeddings_from_cluster_label(X, Y, label):
-                return X[Y == label] 
+            top_k_score = top_k_accuracy_method(y_test, y_proba, k=3)
             
-            for indice in np.unique(top_k_indices):
-                embeddings = get_embeddings_from_cluster_label(X, Y, indice)
+            new_combined_labels = [None] * X.shape[0]
+        
+            for indice in np.unique(Y):
+                embeddings, indices_in_cluster = get_embeddings_from_cluster_label(X, Y, indice)
                 
-                emb_shape = embeddings.shape[0]
+                n_emb = embeddings.shape[0]
                 
-                if emb_shape < max_leaf_size:
-                    #end
-                
-                clustering_model = KMeansCPU.train(embeddings, defaults={'n_clusters':2, 'max_iter':30}).model
-                
-                print(indice, clustering_model.labels_)
-                
-                execute_pipeline()
-                
-        
-        execute_pipeline(X, Y)
-            
-            
-    
-    
-    
-    
-    """"
-    @classmethod
-    # X_data = embeddings, y_data = cluster labels
-    def execute_pipeline(cls, X_data, y_data, k, top_k_threshold = 0):
-
-        # Splitting Data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_data, 
-            y_data, 
-            test_size=0.2, 
-            random_state=42
-            )
-        
-        # Regression Model used in the root level, will all the embeddings and cluster labels
-        root_model = LogisticRegressionCPU.train(X_train, y_train).model
-
-        # Generates probabilities for each cluster
-        y_proba = root_model.predict_proba(X_test)
-                
-        print(y_proba)        
-                
-        def get_top_k_indices(y_proba, k, top_k_threshold):
-            
-            filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
-            print(filtered_proba)
-            top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
-            return top_k_indices.tolist()
-
-        # Gets the k most likely clusters for each test sample
-        top_k_indices = get_top_k_indices(y_proba, k, top_k_threshold)
-        
-        print(top_k_indices)
-
-        
-            pegar os top x clusters de cada row, e fazer os filhos, 
-            e com os x desses fazer outros x
-            Para testar tentar com 2 
-
-            Fazer 3 niveis, root, child, leaf.
-            Começa-se por fazer uma LogisticRegression na root, 
-            Depois fazer para cada cluster, outro algoritmo de clustering e 
-            para esse clustering realizar outra logistic regression,
-            E fazer isto novemente, para a leaf, depois tem se de fazer o predict
-            top_k.
-            
-            Prever o top_k clusters do root_classifier, 
-            Depois para cada top_k cluster, utilizar o respetivo child classifier 
-            para prever o top_k desse classifiear, depois faz se novamente, 
-            No final combina-se todos os scores de todos os scores para o ultimo
-            top_k labels
-        
-        
-        print(np.unique(top_k_indices))
-        exit()
-        
-        def execute_child_pipeline(X_child_data, y_child_data, child_top_k_indices):
-            cluster_labels_algorithms = {}
-            linear_algorithms = {}
-
-            # Embeddings, Label To Filter
-            def get_embeddings_from_cluster_label(X_data, y_data, label):
-                return X_data[y_data == label] 
-            
-            # Going One By One, Revamp the pipeline
-            # for each cluster inside top_k_indices
-            for child_cluster in np.unique(top_k_indices):
-                print('Cluster', child_cluster)
-
-                # Mais tempo, mas menos memoria, 
-                # Filter Data to Each Cluster
-                child_filtered_embeddings = get_embeddings_from_cluster_label(X_child_data, y_child_data, child_cluster)
-
-                print('Started Clustering')
-                # agglomerative_clustering = AgglomerativeClusteringCPU.train(filtered_embeddings.toarray()) 
-                kmeans_clustering = KMeansCPU.train(child_filtered_embeddings) 
-                child_cluster_labels = kmeans_clustering.get_labels() 
-
-                # Save The Algorithm   
-                cluster_labels_algorithms[child_cluster] = child_cluster_labels
-
-                child_X_train, child_X_test, child_y_train, child_y_test = train_test_split(
-                child_filtered_embeddings, 
-                child_cluster_labels, 
-                test_size=0.2, 
-                random_state=42
-                )
-
-                print('Started Logistic')
-                logistic_regression = LogisticRegressionCPU.train(child_X_train, child_y_train)
-                # Save The Algorithm
-                linear_algorithms[child_cluster] = logistic_regression.model
-            
-            return {'cluster_labels': cluster_labels_algorithms, 'linear_models': linear_algorithms}
-
-        samples = {}
-        counter = 0
-
-        for top_k_list in top_k_indices:
-            # For Each of the top-k clusters predicted by the root model, a child pipeline is executed
-            samples[counter] = execute_child_pipeline(X_data, y_data, top_k_list)
-            counter += 1
-
-        print(samples)
-        
-
-    # Execute Machine Learning Matching, X_data = embeddings, Y_data = clusters_labels_from_embeddings
-    def execute_mlm_pipeline(cls, X_data, Y_data, k, depth=3):
-        
-        def execute_linear_model(X_data, Y_data, k):
-            
-            # Splitting Data
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_data, 
-                Y_data, 
-                test_size=0.2, 
-                random_state=42
-                )
-        
-            # Regression Model used in the root level, will all the embeddings and cluster labels
-            linear_model = LogisticRegressionCPU.train(X_train, y_train).model
-
-            # Generates probabilities for each cluster
-            y_proba = linear_model.predict_proba(X_test)
+                if ((n_emb >= min_leaf_size and n_emb <= max_leaf_size) or n_emb >= max_leaf_size) and indice in np.unique(top_k_indices):
                     
-            def get_top_k_indices(y_proba, k):
-                top_k_indices = np.argsort(y_proba, axis=1)[:, -k:][:, ::-1]
-                # top_k_probabilities = np.take_along_axis(y_proba, top_k_indices, axis=1)
-                return top_k_indices
-
-            # Gets the k most likely clusters for each test sample
-            top_k_indices = get_top_k_indices(y_proba, k)
+                    # K-Means Clustering model
+                    clustering_model = KMeansCPU.train(embeddings, defaults={'n_clusters':2, 'max_iter':100, 'random_state':0}).model
+                    
+                    # New Cluster Labels
+                    kmeans_labels = clustering_model.labels_
+                    
+                    # Combine the original cluster label (indice) with the new sub-cluster label (a, b, ...)                    
+                    for idx, label in zip(indices_in_cluster, kmeans_labels):
+                        new_combined_labels[idx] = f"{indice}{chr(65 + int(label))}"  # 'A', 'B', etc.
+                    
+                else:
+                    # If the cluster does not undergo clustering, keep the original label
+                    for i in indices_in_cluster:
+                        new_combined_labels[i] = f"{indice}"  # Keep original label  
             
-            return {'linear_model': linear_model, 'top_k_indices': top_k_indices} 
-        
-        
-        # Embeddings, Label To Filter
-        def get_embeddings_from_cluster_label(X_data, y_data, label):
-            return X_data[y_data == label] 
-        
-        def execute_clustering_model():
             
-            pass
-        """
-                
+            return (np.array(new_combined_labels), top_k_score)
+        
+        # Rest of the pipeline
+        combined_labels, top_k_score = execute_pipeline(X, Y)
+        
+        better_top_k_score = top_k_score
+        
+        print(f"First Top-K Score: {better_top_k_score}")
+        
+        top_k_better_results = True
+        
+        while(top_k_better_results):
+            
+            combined_labels, top_k_score = execute_pipeline(X, combined_labels)
+            
+            print(f"Child Top-K Score: {top_k_score}")
+            
+            if better_top_k_score <= top_k_score:
+                better_top_k_score = top_k_score
+            else:
+                top_k_better_results =False
+        
+        
