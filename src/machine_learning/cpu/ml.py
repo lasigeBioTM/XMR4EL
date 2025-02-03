@@ -1,4 +1,4 @@
-from sklearn.cluster import AgglomerativeClustering, KMeans, Birch
+from sklearn.cluster import AgglomerativeClustering, KMeans, Birch, MiniBatchKMeans
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import normalize
 
@@ -42,7 +42,7 @@ class LogisticRegressionCPU(Classifier):
 class KMeansCPU(Clustering):
 
     @classmethod
-    def train(cls, X_train, defaults={}):
+    def fit(cls, X_train, defaults={}):
         if defaults == {}:
             defaults = {
                 'n_clusters': 16,
@@ -53,8 +53,19 @@ class KMeansCPU(Clustering):
         model = force_multi_core_processing_clustering_models(KMeans(**defaults), X_train)
         return cls(model=model, model_type='KMeansCPU')
     
-    def get_labels(self):
-        return self.model.labels_
+class MiniBatchKMeansCPU(Clustering):
+    
+    @classmethod
+    def fit(cls, X_train, defaults={}):
+        if defaults == {}:
+            defaults = {
+                'n_clusters': 16,
+                'max_iter': 20,
+                'random_state': 0,
+                'n_init': 10,
+            }
+        model = force_multi_core_processing_clustering_models(MiniBatchKMeans(**defaults), X_train)
+        return cls(model=model, model_type='MiniBatchKMeansCPU')
     
 class BirchCPU(Clustering):
 

@@ -59,6 +59,7 @@ def main():
     hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
     # hierarchical_clustering_model = KMeansCPU.train(X_train_feat).model
     
+    # DivisiveHierarchicalClustering.fit(X_train_feat)
     
     # divisive_hierarchical_labels = DivisiveHierarchicalClustering().fit(X_train_feat)
     
@@ -68,9 +69,13 @@ def main():
     
     # print(scores)
     
-    # hcm_labels = hierarchical_clustering_model.labels_
+    hcm_labels = hierarchical_clustering_model.labels_
     
-    # silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
+    silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
+    
+    print(silhouette_avg)
+    
+    exit()
     
     # print(silhouette_avg)
     
