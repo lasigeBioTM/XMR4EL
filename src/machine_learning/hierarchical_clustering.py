@@ -7,7 +7,11 @@ from sklearn.cluster import KMeans, MiniBatchKMeans, AgglomerativeClustering
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, pairwise_distances
 
-from src.machine_learning.cpu.ml import KMeansCPU, MiniBatchKMeansCPU
+from scipy.spatial.distance import cdist
+
+from collections import Counter
+
+from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU, KMeansCPU, MiniBatchKMeansCPU
 
 
 """
@@ -180,18 +184,29 @@ class DivisiveHierarchicalClustering():
         self.model_linear_type = model_linear_type
     
     @classmethod
-    def fit(cls, X, min_leaf_size=20, max_leaf_size=50, random_state=0, spherical=True):
+    def fit(cls, X):
         
-        def execute_pipeline(X, min_leaf_size, max_leaf_size, random_state=0, spherical=True):
+        def compute_n_iter(num_classes):
+            return 100 + (10 * num_classes)
             
-            def compute_n_iter(X):
-                num_classes = len(np.unique(X))  # Count unique labels
-                base_iter = 100  # Base iterations for small label sets
-                max_iter_scaled = base_iter + (10 * num_classes)  # Scale with labels
-                return max_iter_scaled   
-            
-            def compute_branching_factor(L, k_min=2, k_max=20):
-                return min(max(L // 100, k_min), k_max)
+        def compute_branching_factor(L, k_min=2, k_max=20):
+            return min(max(L // 100, k_min), k_max)
+
+        def tokenize_labels(labels_list):
+            seen = {}  # Dictionary to store unique labels and their numeric values
+            numeric_values = []
+
+            for token in labels_list:
+                if token not in seen:
+                    seen[token] = len(seen)  # Assign a new numeric value
+                numeric_values.append(seen[token])
+
+            return np.array(numeric_values)
+        
+        def checkHowManyTimesALabelIsChosen(labels_list):
+            return list(Counter(labels_list).items())
+        
+        def execute_pipeline(X, min_leaf_size=200, max_leaf_size=500, random_state=0, spherical=True):
             
             # Embeddings, Label To Filter
             def get_embeddings_from_cluster_label(X, Y, label):
@@ -205,56 +220,91 @@ class DivisiveHierarchicalClustering():
             def silhouette_score_sklearn(X, Y):
                 return silhouette_score(X, Y)
 
-            n_splits, n_iter = compute_branching_factor(X.shape[0]), compute_n_iter([range(20)])
+            n_splits = compute_branching_factor(X.shape[0])
+            n_iter = compute_n_iter(n_splits)
             
             X_normalized = normalize(X)
             # Y = MiniBatchKMeansCPU.fit(X_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
-            Y = KMeansCPU.fit(X_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
+            kmeans_model = KMeansCPU.fit(X_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model
+            Y = kmeans_model.labels_
+            
+            # print(np.unique(Y))
+            # print(len(kmeans_model.cluster_centers_))
+            
+            initial_kmeans_clusters_centers = kmeans_model.cluster_centers_
             
             new_combined_labels = [None] * X.shape[0]
+            centroid_list = []
             
             for indice in np.unique(Y):
                 
                 emb, inds = get_embeddings_from_cluster_label(X, Y, indice)
                 n_ind = len(inds)
                 
-                # wcss = variance_score(emb.toarray())
-                # print(indice, n_ind, wcss)
+                # print(indice, n_ind)
+                
+                wcss = variance_score(emb.toarray())
+                print(indice, n_ind, wcss)
                 
                 # print(indice, n_ind)
                 
                 if (n_ind >= min_leaf_size and n_ind <= max_leaf_size) or n_ind >= max_leaf_size:
                     
-                    n_splits, n_iter = compute_branching_factor(n_ind), compute_n_iter(n_ind)
+                    n_splits = compute_branching_factor(n_ind)
+                    n_iter = compute_n_iter(n_splits)
                     
                     emb_normalized = normalize(emb)
                     # kmeans_labels = MiniBatchKMeansCPU.fit(emb_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
-                    kmeans_labels = KMeansCPU.fit(emb_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
+                    kmeans_model = KMeansCPU.fit(emb_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model
+                    
+                    kmeans_labels = kmeans_model.labels_ 
+                    
+                    centroid_list.extend(kmeans_model.cluster_centers_)
                     
                     # Combine the original cluster label (indice) with the new sub-cluster label (a, b, ...)                    
                     for idx, label in zip(inds, kmeans_labels):
                         new_combined_labels[idx] = f"{indice}{chr(65 + int(label))}"  # 'A', 'B', etc.
                         
                 else:
+                    
+                    centroid_list.append(initial_kmeans_clusters_centers[indice])
                     # If the cluster does not undergo clustering, keep the original label
                     for i in inds:
                         new_combined_labels[i] = f"{indice}"  # Keep original label  
+                    
             
-            sil_score = silhouette_score_sklearn(X, new_combined_labels)
+            sil_score = silhouette_score_sklearn(X, tokenize_labels(new_combined_labels))
             
-            return (np.array(new_combined_labels), sil_score)
-    
+            # print(checkHowManyTimesALabelIsChosen(new_combined_labels))
+            
+            return np.array(centroid_list), tokenize_labels(new_combined_labels), sil_score
+        
+        centroid_array, labels, sil_score = execute_pipeline(X)
+        
+        print(checkHowManyTimesALabelIsChosen(labels))
+        
+        return centroid_array, labels, sil_score
+        
+        """
+        agglomerative_model = AgglomerativeClusteringCPU.fit(centroid_array, {'n_clusters': 50, 'linkage': 'ward', 'metric': 'euclidean'}).model
+        agglomerative_labels = agglomerative_model.labels_     
+           
+        closest_centroids = np.argmin(cdist(X.toarray(), centroid_array), axis=1)
+        mapped_labels = agglomerative_labels[closest_centroids]
+        
+        sil_score = silhouette_score(X, mapped_labels)
+        
+        print(sil_score)
     
         # MiniBatchKMneas, ['1A' '12I' '12I' ... '4Q' '4E' '4Q'] 0.002835875033179563
         # Normalized MiniBatchKMeans['1B' '12D' '12D' ... '4I' '4I' '4I'] 0.0034478190115853004
         
         # Kmeans, ['10C' '10C' '10C' ... '19T' '5B' '19T'] 0.008872945873208136
-        # ---> Spherical Normalized KMeans, ['10B' '10B' '10F' ... '19D' '5A' '19D'] 0.011431971189709515 (one rodeo)
+        # ---> Spherical Normalized KMeans, ['10B' '10B' '10F' ... '19D' '5A' '19D'] 0.011431971189709515 (one rodeo), min_leaf_size = 10, max_leaf_size=50, 0.0124846
         
-        # Agglomerative Clustering, 0.0017651454611719664
-                
-    
-                    
+        # Agglomerative Clustering, 0.0017651454611719664     
+        """
+
 # Example usage
 if __name__ == "__main__":
     # Generate synthetic data
