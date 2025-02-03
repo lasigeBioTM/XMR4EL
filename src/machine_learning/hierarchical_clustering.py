@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
+import math
 
 from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans, MiniBatchKMeans, AgglomerativeClustering
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, pairwise_distances
+
+from src.machine_learning.cpu.ml import KMeansCPU, MiniBatchKMeansCPU
 
 
 """
@@ -59,7 +62,7 @@ from sklearn.metrics import silhouette_score, pairwise_distances
     from soyclustering import SphericalKMeans -> Spherical Kmeans, right now normalizing the data
 """
 
-class DivisiveHierarchicalClustering:
+class HybridHierarchicalClustering:
     
     # n_splits best case for the training data
     def __init__(self, n_splits=24, n_iter=100, min_leaf_size=10, max_leaf_size=100, spherical=True, distance_metric="cosine", linkage='complete', final_fit=False, seed=0):
@@ -134,7 +137,7 @@ class DivisiveHierarchicalClustering:
     def _agglomerative_clustering_sklearn(self, X):
         return AgglomerativeClustering(n_clusters=None, distance_threshold=0.5, linkage=self.linkage, metric=self.distance_metric).fit(X)
     
-    
+
 
 class KmeansRanker():
     
@@ -169,7 +172,89 @@ class KmeansRanker():
         return scores
             
             
+class DivisiveHierarchicalClustering():
+    
+    def __init__(self, model=None, model_clustering_type=None, model_linear_type=None):
+        self.model = model
+        self.model_clustering_type = model_clustering_type
+        self.model_linear_type = model_linear_type
+    
+    @classmethod
+    def fit(cls, X, min_leaf_size=20, max_leaf_size=50, random_state=0, spherical=True):
         
+        def execute_pipeline(X, min_leaf_size, max_leaf_size, random_state=0, spherical=True):
+            
+            def compute_n_iter(X):
+                num_classes = len(np.unique(X))  # Count unique labels
+                base_iter = 100  # Base iterations for small label sets
+                max_iter_scaled = base_iter + (10 * num_classes)  # Scale with labels
+                return max_iter_scaled   
+            
+            def compute_branching_factor(L, k_min=2, k_max=20):
+                return min(max(L // 100, k_min), k_max)
+            
+            # Embeddings, Label To Filter
+            def get_embeddings_from_cluster_label(X, Y, label):
+                return X[Y == label], np.where(Y == label)[0]
+            
+            # Compute WCSS (Intra Cluster Invariance)
+            def variance_score(X):
+                return np.sum((X - X.mean(axis=0))**2)
+            
+            # Compute Silhouette Score
+            def silhouette_score_sklearn(X, Y):
+                return silhouette_score(X, Y)
+
+            n_splits, n_iter = compute_branching_factor(X.shape[0]), compute_n_iter([range(20)])
+            
+            X_normalized = normalize(X)
+            # Y = MiniBatchKMeansCPU.fit(X_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
+            Y = KMeansCPU.fit(X_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
+            
+            new_combined_labels = [None] * X.shape[0]
+            
+            for indice in np.unique(Y):
+                
+                emb, inds = get_embeddings_from_cluster_label(X, Y, indice)
+                n_ind = len(inds)
+                
+                # wcss = variance_score(emb.toarray())
+                # print(indice, n_ind, wcss)
+                
+                # print(indice, n_ind)
+                
+                if (n_ind >= min_leaf_size and n_ind <= max_leaf_size) or n_ind >= max_leaf_size:
+                    
+                    n_splits, n_iter = compute_branching_factor(n_ind), compute_n_iter(n_ind)
+                    
+                    emb_normalized = normalize(emb)
+                    # kmeans_labels = MiniBatchKMeansCPU.fit(emb_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
+                    kmeans_labels = KMeansCPU.fit(emb_normalized, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model.labels_
+                    
+                    # Combine the original cluster label (indice) with the new sub-cluster label (a, b, ...)                    
+                    for idx, label in zip(inds, kmeans_labels):
+                        new_combined_labels[idx] = f"{indice}{chr(65 + int(label))}"  # 'A', 'B', etc.
+                        
+                else:
+                    # If the cluster does not undergo clustering, keep the original label
+                    for i in inds:
+                        new_combined_labels[i] = f"{indice}"  # Keep original label  
+            
+            sil_score = silhouette_score_sklearn(X, new_combined_labels)
+            
+            return (np.array(new_combined_labels), sil_score)
+    
+    
+        # MiniBatchKMneas, ['1A' '12I' '12I' ... '4Q' '4E' '4Q'] 0.002835875033179563
+        # Normalized MiniBatchKMeans['1B' '12D' '12D' ... '4I' '4I' '4I'] 0.0034478190115853004
+        
+        # Kmeans, ['10C' '10C' '10C' ... '19T' '5B' '19T'] 0.008872945873208136
+        # ---> Spherical Normalized KMeans, ['10B' '10B' '10F' ... '19D' '5A' '19D'] 0.011431971189709515 (one rodeo)
+        
+        # Agglomerative Clustering, 0.0017651454611719664
+                
+    
+                    
 # Example usage
 if __name__ == "__main__":
     # Generate synthetic data
@@ -183,6 +268,3 @@ if __name__ == "__main__":
     clusters = dhkmeans.fit(X)
     
     print(clusters)
-
-    
-        

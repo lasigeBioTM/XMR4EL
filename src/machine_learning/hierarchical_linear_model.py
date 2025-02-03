@@ -84,7 +84,7 @@ class HieararchicalLinearModel():
             n_iter = n_iter_labels(Y)
             
             # Use of an linear model
-            linear_model = LogisticRegressionCPU.train(X, Y, defaults={'solver': 'lbfgs', 'max_iter': n_iter, 'random_state': 0}).model
+            linear_model = LogisticRegressionCPU.train(X, Y, defaults={'solver': 'lbfgs', 'max_iter': n_iter, 'random_state': 0}).model 
             
             # Generates probabilities for each cluster
             y_proba = linear_model.predict_proba(X_test)
@@ -107,7 +107,7 @@ class HieararchicalLinearModel():
                 if ((n_emb >= min_leaf_size and n_emb <= max_leaf_size) or n_emb >= max_leaf_size) and indice in np.unique(top_k_indices):
                     
                     # K-Means Clustering model
-                    clustering_model = KMeansCPU.train(embeddings, defaults={'n_clusters':2, 'max_iter':100, 'random_state':0}).model
+                    clustering_model = KMeansCPU.fit(embeddings, defaults={'n_clusters':2, 'max_iter':100, 'random_state':0}).model
                     
                     # New Cluster Labels
                     kmeans_labels = clustering_model.labels_
@@ -143,8 +143,6 @@ class HieararchicalLinearModel():
                 better_top_k_score = top_k_score
             else:
                 top_k_better_results = False
-                
-        self
                 
         return top_k_score
         
