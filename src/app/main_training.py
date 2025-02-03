@@ -56,12 +56,18 @@ def main():
     
     # Training of the Agglmomerative Clustering or Birch (Impossible to Read Birch)
     # silhouette avg: 0.0017
-    hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
+    
+    # First Top-K Score: 0.9992447129909365
+    # hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
+    # Y_train_feat = hierarchical_clustering_model.labels_
+    
     # hierarchical_clustering_model = KMeansCPU.train(X_train_feat).model
     
-    # DivisiveHierarchicalClustering.fit(X_train_feat)
+    # First Top-K Score: 0.9920694864048338
+    centroid_array, Y_train_feat, sil_score = DivisiveHierarchicalClustering.fit(X_train_feat)
     
-    # divisive_hierarchical_labels = DivisiveHierarchicalClustering().fit(X_train_feat)
+    exit()
+    
     
     # print(divisive_hierarchical_labels)
     
@@ -69,13 +75,11 @@ def main():
     
     # print(scores)
     
-    hcm_labels = hierarchical_clustering_model.labels_
+    # hcm_labels = hierarchical_clustering_model.labels_
     
-    silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
+    # silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
     
-    print(silhouette_avg)
-    
-    exit()
+    # print(silhouette_avg)
     
     # print(silhouette_avg)
     
@@ -100,8 +104,6 @@ def main():
         14           63
         15           22
     """
-
-    Y_train_feat = hierarchical_clustering_model.labels_
     
 
     # Embeddings -> X_train_feat ClusterLabels -> Y_train_feat (is this data, more labels than embeddings)

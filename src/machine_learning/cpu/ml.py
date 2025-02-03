@@ -12,11 +12,12 @@ from src.machine_learning.classifier import Classifier
 class AgglomerativeClusteringCPU(Clustering):
     
     @classmethod
-    def train(cls, X_train):
-        defaults = {
-            'n_clusters': 16,           
-        }
-        
+    def fit(cls, X_train, defaults={}):
+        if defaults == {}:
+            defaults = {
+                'n_clusters': 16,           
+            }
+            
         model = force_multi_core_processing_clustering_models(AgglomerativeClustering(**defaults), X_train)
 
         return cls(model=model, model_type='AgglomerativeClusteringCPU')
