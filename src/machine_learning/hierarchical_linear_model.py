@@ -4,16 +4,18 @@ import pickle
 import numpy as np
 
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import top_k_accuracy_score
+from sklearn.metrics import top_k_accuracy_score, pairwise_distances_argmin_min
 
-from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU, KMeansCPU, LogisticRegressionCPU
+from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
 
 class HieararchicalLinearModel():
 
-    def __init__(self, model=None, model_clustering_type=None, model_linear_type=None):
-        self.model = model
+    def __init__(self, model_clustering_type=None, model_linear_type=None, labels_=None, top_k_score_=None, top_k_=None):
         self.model_clustering_type = model_clustering_type
         self.model_linear_type = model_linear_type
+        self.labels_ = labels_
+        self.top_k_score_ = top_k_score_
+        self.top_k_ = top_k_
 
     def save(self, linear_model_folder):
         os.makedirs(linear_model_folder, exist_ok=True)
@@ -32,8 +34,41 @@ class HieararchicalLinearModel():
     @classmethod
     def fit(cls, X, Y, top_k=3, top_k_threshold=0.9, min_leaf_size=10, max_leaf_size=50):
     
-        def execute_pipeline(X, Y):
+        def merge_small_clusters(X, labels, min_cluster_size=10):
+            # Get unique cluster labels
+            unique_labels = np.unique(labels)
+                
+            # Exclude centroids of clusters with fewer than `min_cluster_size`
+            valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
+                
+            # Compute centroids of each cluster
+            centroids = np.array([
+                X[labels == label].mean(axis=0).A.flatten()  # Convert mean to dense
+                for label in unique_labels
+            ])
             
+            # Create a copy of the labels to update
+            updated_labels = labels.copy()
+
+            for label in unique_labels:                
+                cluster_indices = np.where(labels == label)[0]
+                    
+                if len(cluster_indices) <= min_cluster_size:
+                    # Get the points in the small cluster
+                    cluster_points = X[cluster_indices]
+                        
+                    # Compute distances of the small cluster points to all valid centroids
+                    distances = pairwise_distances_argmin_min(cluster_points, centroids)[1]
+                        
+                    # Assign the points in the small cluster to the nearest valid centroid
+                    closest_centroid_idx = np.argmin(distances)
+                        
+                    # Assign the small cluster's points to the closest cluster
+                    updated_labels[labels == label] = valid_labels[closest_centroid_idx]
+                
+            return updated_labels
+    
+        def execute_pipeline(X, Y):
             # Gets an List with all the embeddings and the labels with the score of more probable
             def get_top_k_indices(y_proba, k, top_k_threshold):
                 filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
@@ -71,8 +106,6 @@ class HieararchicalLinearModel():
                 
                 return times_list
             
-            print(Y)
-            
             # Splitting Data
             X_train, X_test, y_train, y_test = train_test_split(
             X, # Embeddings
@@ -94,8 +127,8 @@ class HieararchicalLinearModel():
             # Gets the k most likely clusters for each test sample
             top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
             
-            print(np.unique(top_k_indices))
-            print(checkHowManyTimesALabelIsChosenTopKAccuracy(top_k_indices))
+            # print(np.unique(top_k_indices))
+            # print(checkHowManyTimesALabelIsChosenTopKAccuracy(top_k_indices))
             
             top_k_score = top_k_accuracy_method(y_test, y_proba, k=3)
             
@@ -126,26 +159,38 @@ class HieararchicalLinearModel():
             
             return (np.array(new_combined_labels), top_k_score)
         
-        # Rest of the pipeline
+        # Execute the initial pipeline to get combined_labels and top_k_score
         combined_labels, top_k_score = execute_pipeline(X, Y)
         
-        better_top_k_score = top_k_score
-        
-        print(f"First Top-K Score: {better_top_k_score}")
+        # Store the best top-k labels initially
+        best_labels = combined_labels
+        best_top_k_score = top_k_score
         
         top_k_better_results = True
         
-        while(top_k_better_results):
+        # First merge of small clusters
+        merged_labels = merge_small_clusters(X, combined_labels, min_cluster_size=10)
+        print(f"First Top-{top_k} Score: {top_k_score}, Number of Labels: {np.unique(merged_labels).shape[0]}")
+        
+        while top_k_better_results:
+            # Execute the pipeline again with merged labels
+            child_labels, child_top_k_score = execute_pipeline(X, merged_labels)
             
-            combined_labels, top_k_score = execute_pipeline(X, combined_labels)
+            print(f"Child Top-{top_k} Score: {child_top_k_score}, Number of Labels: {np.unique(child_labels).shape[0]}")
             
-            print(f"Child Top-K Score: {top_k_score}")
-            
-            if better_top_k_score <= top_k_score:
-                better_top_k_score = top_k_score
-            else:
-                top_k_better_results = False
+            # If the new top-k score is better (greater), update the labels and top-k score
+            if child_top_k_score > best_top_k_score:
+                best_top_k_score = child_top_k_score
+                best_labels = child_labels
+                print(f"New Best Top-{top_k} Score: {best_top_k_score}, Number of Labels: {np.unique(best_labels).shape[0]}")
                 
-        return top_k_score
+                # Merge small clusters again for the child labels
+                merged_labels = merge_small_clusters(X, best_labels, min_cluster_size=10)
+            else:
+                # Stop if the score doesn't improve
+                top_k_better_results = False
+                    
+        # model_clustering_type=None, model_linear_type=None, labels_=None, top_k_score_=None, k_=None
+        return cls("KMeansCPU", "LogisticRegressionCPU", best_labels, top_k_score, top_k)
         
         

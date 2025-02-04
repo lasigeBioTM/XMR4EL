@@ -66,9 +66,10 @@ def main():
     # First Top-K Score: 0.9920694864048338
     # centroid_array, Y_train_feat, sil_score = DivisiveHierarchicalClustering.fit(X_train_feat)
     
-    Y_train_feat = DivisiveHierarchicalClustering.fit_template(X_train_feat)
+    Y_train_feat = DivisiveHierarchicalClustering.fit(X_train_feat).labels_
     
-    exit()
+    # print(Y_train_feat)
+    
     
     # print(divisive_hierarchical_labels)
     
@@ -111,7 +112,10 @@ def main():
     # hierarchical_linear_model = create_hierarchical_linear_model(X_train_feat, Y_train_feat[:13240], 2)
     
     print("Starting HML")
-    HieararchicalLinearModel.fit(X_train_feat, Y_train_feat)
+    hierarchical_linear_model = HieararchicalLinearModel.fit(X_train_feat, Y_train_feat)
+    
+    print(hierarchical_linear_model.top_k_score_)
+    
 
 
 if __name__ == "__main__":
