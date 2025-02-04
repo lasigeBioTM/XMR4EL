@@ -41,8 +41,6 @@ def main():
     # Dense Matrix
     Y_train = [str(parsed) for parsed in parsed_train_data["labels"]]
     X_train = [str(parsed) for parsed in parsed_train_data["corpus"]]
-    
-    # X_train = [lst[:5] for lst in X_train]
 
     # Turn on erase mode when training
     # vectorizer_model = create_vectorizer(X_train)
@@ -51,41 +49,17 @@ def main():
     X_train_feat = vectorizer_model.predict(X_train)
 
     print(X_train_feat.shape)
-
-    # hierarchical_clustering_model = create_hierarchical_clustering(X_train_feat.astype(np.float32))
     
     # Training of the Agglmomerative Clustering or Birch (Impossible to Read Birch)
     # silhouette avg: 0.0017
     
     # First Top-K Score: 0.9992447129909365
-    # hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
-    # Y_train_feat = hierarchical_clustering_model.labels_
-    
-    # hierarchical_clustering_model = KMeansCPU.train(X_train_feat).model
-    
-    # First Top-K Score: 0.9920694864048338
-    # centroid_array, Y_train_feat, sil_score = DivisiveHierarchicalClustering.fit(X_train_feat)
-    
-    Y_train_feat = DivisiveHierarchicalClustering.fit(X_train_feat).labels
-    
-    # print(Y_train_feat)
-    
-    
-    # print(divisive_hierarchical_labels)
-    
-    # scores = KmeansRanker().ranker(X_train_feat)
-    
-    # print(scores)
-    
-    # hcm_labels = hierarchical_clustering_model.labels_
-    
-    # silhouette_avg = silhouette_score(X_train_feat, hcm_labels)
-    
-    # print(silhouette_avg)
-    
-    # print(silhouette_avg)
-    
-    # labels_df = pd.DataFrame(hierarchical_clustering_model.labels_, columns=['cluster_label'])
+    hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
+    Y_train_feat = hierarchical_clustering_model.labels_
+
+    # print("Starting Divisive Hierarchical Clustering")
+    # divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(X_train_feat)
+    # Y_train_feat = divisive_hierarchical_clustering.labels
     
     """ Agglomerative Clustering
     cluster_label  count
@@ -107,16 +81,14 @@ def main():
         15           22
     """
     
-
-    # Embeddings -> X_train_feat ClusterLabels -> Y_train_feat (is this data, more labels than embeddings)
-    # hierarchical_linear_model = create_hierarchical_linear_model(X_train_feat, Y_train_feat[:13240], 2)
     
+    # Meu metodo deve ser melhor em termos de clustering
+    # Divisive Hierarchical Clustering -> Top-1 Score 0.8557401812688822 / Top-3 Score 0.9569486404833837 / Top-5 Score 0.9724320241691843
+    # Agglomerative Clustering -> Top-1 Score 0.9686555891238671 / Top-3 Score 1.0 / Top-5 Score 1.0 
     print("Starting HML")
-    hierarchical_linear_model = HierarchicalLinearModel.fit(X_train_feat, Y_train_feat)
+    hierarchical_linear_model = HierarchicalLinearModel.fit(X_train_feat, Y_train_feat, top_k=3)
     
-    print("Top-K Score", hierarchical_linear_model.top_k_score)
-    
-
+    print(f"Top-{hierarchical_linear_model.top_k} Score {hierarchical_linear_model.top_k_score}")
 
 if __name__ == "__main__":
     main()
