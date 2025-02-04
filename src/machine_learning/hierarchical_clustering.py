@@ -10,70 +10,80 @@ from src.machine_learning.cpu.ml import KMeansCPU
      
 class DivisiveHierarchicalClustering():
     
-    def __init__(self, model_clustering_type=None, labels_=None, cluster_centroids_=None):
-        self.model_clustering_type = model_clustering_type
-        self.labels_ = labels_
-        self.cluster_centroids_ = cluster_centroids_
+    def __init__(self, clustering_model_type=None, labels=None, centroids=None):
+        """
+        Initialize the clustering model, labels, and centroids
+        """
+        self.clustering_model_type = clustering_model_type
+        self.labels = labels
+        self.centroids = centroids
     
     @classmethod
-    def fit(cls, X):
-        
-        def compute_n_iter(num_classes):
+    def fit(cls, X, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True):
+        """
+        Main method to perform divisive hierarchical clustering
+        """
+        def compute_iterations(num_classes):
+            """
+            Compute the number of iterations based on the number of classes
+            """
             return 100 + (10 * num_classes)
             
-        def compute_branching_factor(L, k_min=2, k_max=16):
-            return min(max(L // 100, k_min), k_max)
+        def compute_branching_factor(num_samples, min_clusters=2, max_clusters=16):
+            """
+            Compute branching factor based on the number of samples
+            """
+            return min(max(num_samples // 100, min_clusters), max_clusters)
 
-        def tokenize_labels(labels_list):
-            seen = {}  # Dictionary to store unique labels and their numeric values
-            numeric_values = []
+        def encode_labels(labels_list):
+            """
+            Convert string labels into numeric labels
+            """
+            label_to_idx = {}
+            encoded_labels = []
 
-            for token in labels_list:
-                if token not in seen:
-                    seen[token] = len(seen)  # Assign a new numeric value
-                numeric_values.append(seen[token])
+            for label in labels_list:
+                if label not in label_to_idx:
+                    label_to_idx[label] = len(label_to_idx)
+                encoded_labels.append(label_to_idx[label])
 
-            return np.array(numeric_values)
+            return np.array(encoded_labels)
         
-        def checkHowManyTimesALabelIsChosen(labels_list):
+        def count_label_occurrences(labels_list):
+            """
+            Count occurrences of each label in the list
+            """
             return list(Counter(labels_list).items())
         
-        def get_cluster_centroids(X, labels):
+        def calculate_centroids(X, labels):
+            """
+            Calculate the centroids of the clusters based on the labels
+            """
             return np.array([
-                X[labels == label].mean(axis=0).A.flatten()  # Convert mean to dense
+                X[labels == label].mean(axis=0).A.flatten()  # Convert mean to dense array
                 for label in np.unique(labels)
-            ])    
+            ])  
         
         def merge_small_clusters(X, labels, min_cluster_size=10):
-            # Get unique cluster labels
+            """
+            Merge clusters that are smaller than a given threshold by reassigning their points
+            """
             unique_labels = np.unique(labels)
-            
-            # Exclude centroids of clusters with fewer than `min_cluster_size`
             valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
-            
-            # Compute centroids of each cluster
             centroids = np.array([
-                X[labels == label].mean(axis=0).A.flatten()  # Convert mean to dense
+                X[labels == label].mean(axis=0).A.flatten()
                 for label in unique_labels
             ])
-        
-            # Create a copy of the labels to update
+            
             updated_labels = labels.copy()
 
             for label in unique_labels:                
                 cluster_indices = np.where(labels == label)[0]
-                
                 if len(cluster_indices) <= min_cluster_size:
-                    # Get the points in the small cluster
+                    # Reassign points to the nearest valid centroid
                     cluster_points = X[cluster_indices]
-                    
-                    # Compute distances of the small cluster points to all valid centroids
                     distances = pairwise_distances_argmin_min(cluster_points, centroids)[1]
-                    
-                    # Assign the points in the small cluster to the nearest valid centroid
                     closest_centroid_idx = np.argmin(distances)
-                    
-                    # Assign the small cluster's points to the closest cluster
                     updated_labels[labels == label] = valid_labels[closest_centroid_idx]
             
             return updated_labels
@@ -82,54 +92,54 @@ class DivisiveHierarchicalClustering():
         # Depth = 2, 0.008548
         # Depth = 3, 0.011572, clearing min=10, 0.012697098340191351 127
         # Depth = 4, 0.011774 
-        def execute_pipeline(X, depth=3, max_leaf_size=100, prefix="", random_state=0, inertia_threshold=1e-3, silhouette_threshold=0, spherical=True):
-            
-            X_size = X.shape[0]
-            
-            if X_size < max_leaf_size or depth == 0:
-                return {i: prefix for i in range(X_size)}
+        def recursive_clustering(X, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True):
+            """
+            Recursively perform the clustering process
+            """
+            if X.shape[0] < max_leaf_size or depth == 0:
+                return {i: prefix for i in range(X.shape[0])}
             
             n_splits = compute_branching_factor(X.shape[0])
-            n_iter = compute_n_iter(n_splits)
+            n_iter = compute_iterations(n_splits)
             
             if spherical:
                 X = normalize(X, norm="l2", axis=1)
                 
-            kmeans_model = KMeansCPU.fit(X, {'n_clusters':n_splits, 'max_iter':n_iter, 'random_state':random_state}).model
+            kmeans_model = KMeansCPU.fit(X, {'n_clusters': n_splits, 'max_iter': n_iter, 'random_state': random_state}).model
             cluster_labels = kmeans_model.labels_
             
-            # Store indices for each cluster
             labels_dict = {}
-            unique_clusters = np.unique(cluster_labels)
-            
-            for i, cluster_id in enumerate(unique_clusters):
+            for i, cluster_id in enumerate(np.unique(cluster_labels)):
                 cluster_indices = np.where(cluster_labels == cluster_id)[0]
-                new_prefix = prefix + chr(67 + i)
+                new_prefix = prefix + chr(67 + i)  # C is ASCII 67, used as a prefix for recursive clustering
                 
-                # Recursively cluster each group
-                sub_labels = execute_pipeline(X[cluster_indices], depth - 1, max_leaf_size, new_prefix, random_state, spherical)
+                # Recursively cluster each subset of data
+                sub_labels = recursive_clustering(X[cluster_indices], depth - 1, max_leaf_size, new_prefix, random_state, spherical)
                 
-                # Map back to global indices
+                # Map local cluster labels to global indices
                 for local_idx, global_idx in enumerate(cluster_indices):
-                    labels_dict[global_idx] = sub_labels[local_idx]                    
+                    labels_dict[global_idx] = sub_labels[local_idx]
                     
             return labels_dict            
         
-        labels_dict = execute_pipeline(X)
+        # Start recursive clustering
+        labels_dict = recursive_clustering(X, depth, max_leaf_size, prefix, random_state, spherical)
         
-        labels_list = [None] * len(labels_dict)
-        
+        # Rebuild the labels list from the label dictionary
+        final_labels = [None] * len(labels_dict)
         for idx, label in labels_dict.items():
-            labels_list[int(idx)] = label
+            final_labels[int(idx)] = label
         
-        counter_list = checkHowManyTimesALabelIsChosen(labels_list)
-
-        merged_labels_list = merge_small_clusters(X, np.array(labels_list), min_cluster_size=10)
+        # Merge small clusters and update the labels
+        merged_labels = merge_small_clusters(X, np.array(final_labels), min_cluster_size=10)
         
-        counter_list = checkHowManyTimesALabelIsChosen(merged_labels_list)
-        # print(counter_list, len(counter_list))
+        # Calculate silhouette score
+        print("Silhouette Score:", silhouette_score(X, merged_labels))
         
-        print("Silhouette Score:", silhouette_score(X, merged_labels_list), "Number of Labels:", len(counter_list))
-        
-        return cls("Hierarchical KMeansCPU", tokenize_labels(merged_labels_list), get_cluster_centroids(X, np.array(labels_list)))
+        # Return the model with final labels and centroids
+        return cls(
+            clustering_model_type="Hierarchical KMeansCPU", 
+            labels=encode_labels(merged_labels), 
+            centroids=calculate_centroids(X, np.array(final_labels))
+        )
                     

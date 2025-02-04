@@ -11,7 +11,7 @@ from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.clustering import Clustering
 from src.machine_learning.cpu.ml import KMeansCPU
 from src.machine_learning.hierarchical_clustering import DivisiveHierarchicalClustering
-from src.machine_learning.hierarchical_linear_model import HieararchicalLinearModel
+from src.machine_learning.hierarchical_linear_model import HierarchicalLinearModel
 
 
 
@@ -66,7 +66,7 @@ def main():
     # First Top-K Score: 0.9920694864048338
     # centroid_array, Y_train_feat, sil_score = DivisiveHierarchicalClustering.fit(X_train_feat)
     
-    Y_train_feat = DivisiveHierarchicalClustering.fit(X_train_feat).labels_
+    Y_train_feat = DivisiveHierarchicalClustering.fit(X_train_feat).labels
     
     # print(Y_train_feat)
     
@@ -112,9 +112,9 @@ def main():
     # hierarchical_linear_model = create_hierarchical_linear_model(X_train_feat, Y_train_feat[:13240], 2)
     
     print("Starting HML")
-    hierarchical_linear_model = HieararchicalLinearModel.fit(X_train_feat, Y_train_feat)
+    hierarchical_linear_model = HierarchicalLinearModel.fit(X_train_feat, Y_train_feat)
     
-    print(hierarchical_linear_model.top_k_score_)
+    print("Top-K Score", hierarchical_linear_model.top_k_score)
     
 
 

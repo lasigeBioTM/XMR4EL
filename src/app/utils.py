@@ -1,8 +1,8 @@
 from src.featurization.preprocessor import Preprocessor
-from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU, BirchCPU
+from src.machine_learning.cpu.ml import AgglomerativeClusteringCPU
 from src.featurization.vectorizer import BioBertVectorizer, TfidfVectorizer
 from src.machine_learning.clustering import Clustering
-from src.machine_learning.hierarchical_linear_model import HieararchicalLinearModel
+from src.machine_learning.hierarchical_linear_model import HierarchicalLinearModel
 
 
 def load_train_and_labels_file(train_filepath, labels_filepath):
@@ -54,7 +54,7 @@ def create_hierarchical_linear_model(X_train_feat, Y_train, k):
     hlm_path = "data/processed/hlm"
 
     print("Processing Hierarchical Linear Algorithm")
-    model = HieararchicalLinearModel.execute_pipeline(X_train_feat, Y_train, k)
+    model = HierarchicalLinearModel.execute_pipeline(X_train_feat, Y_train, k)
     model.save(hlm_path)
     print("Hierarchical Linear Model Saved")
 
@@ -62,7 +62,7 @@ def create_hierarchical_linear_model(X_train_feat, Y_train, k):
 
 def load_hierarchical_linear_model(hlm_path):
     try:
-        model = HieararchicalLinearModel.load(hlm_path)
+        model = HierarchicalLinearModel.load(hlm_path)
         print(f"Loaded HierarchicalLinearModel, Type: Express what clustering and linear model was used\n")
     except Exception as e:
         print(f"Could not load Hierarchical Linear Model ({e}). Run the Training Script")
@@ -73,7 +73,7 @@ def load_hierarchical_linear_model(hlm_path):
 def run_machine_learning_matching(embeddings, clustering_labels):
     print("Trainning")
     # TrainCPU.train(embeddings, clustering_labels)
-    HieararchicalLinearModel.execute_pipeline(embeddings, clustering_labels)
+    HierarchicalLinearModel.execute_pipeline(embeddings, clustering_labels)
 
 def run_ranking_model():
     pass
