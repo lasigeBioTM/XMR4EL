@@ -10,7 +10,7 @@ from src.app.utils import create_hierarchical_clustering, create_hierarchical_li
 from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.clustering import Clustering
 from src.machine_learning.cpu.ml import KMeansCPU
-from src.machine_learning.hierarchical_clustering import KmeansRanker, DivisiveHierarchicalClustering
+from src.machine_learning.hierarchical_clustering import DivisiveHierarchicalClustering
 from src.machine_learning.hierarchical_linear_model import HieararchicalLinearModel
 
 
@@ -64,10 +64,11 @@ def main():
     # hierarchical_clustering_model = KMeansCPU.train(X_train_feat).model
     
     # First Top-K Score: 0.9920694864048338
-    centroid_array, Y_train_feat, sil_score = DivisiveHierarchicalClustering.fit(X_train_feat)
+    # centroid_array, Y_train_feat, sil_score = DivisiveHierarchicalClustering.fit(X_train_feat)
+    
+    Y_train_feat = DivisiveHierarchicalClustering.fit_template(X_train_feat)
     
     exit()
-    
     
     # print(divisive_hierarchical_labels)
     
