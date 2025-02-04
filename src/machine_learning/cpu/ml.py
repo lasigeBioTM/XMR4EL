@@ -1,9 +1,9 @@
 from sklearn.cluster import AgglomerativeClustering, KMeans,MiniBatchKMeans
 from sklearn.linear_model import LogisticRegression
 
+from src.machine_learning.classifier import Classifier
 from src.machine_learning.cpu.joblib_runtime import force_multi_core_processing_clustering_models, force_multi_core_processing_linear_models
 from src.machine_learning.clustering import Clustering
-from src.machine_learning.classifier import Classifier
 
 
 class AgglomerativeClusteringCPU(Clustering):
