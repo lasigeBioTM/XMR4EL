@@ -30,7 +30,7 @@ class HieararchicalLinearModel():
     
     
     @classmethod
-    def fit(cls, X, Y, top_k=3, top_k_threshold=0.9, max_leaf_size=100, min_leaf_size=30):
+    def fit(cls, X, Y, top_k=3, top_k_threshold=0.9, min_leaf_size=10, max_leaf_size=50):
     
         def execute_pipeline(X, Y):
             
