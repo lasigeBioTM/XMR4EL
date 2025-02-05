@@ -52,7 +52,7 @@ class BioBertVectorizer(Preprocessor):
     
     model_name = "dmis-lab/biobert-base-cased-v1.2"
     
-    def predict(cls, corpus):
+    def predict(corpus):
         model_name = "dmis-lab/biobert-base-cased-v1.2"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModel.from_pretrained(model_name)
