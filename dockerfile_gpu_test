@@ -1,14 +1,11 @@
 # Use the official NVIDIA CUDA 11.6 image as the base image
-FROM nvidia/cuda:11.6.1-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu20.04
 
 # Set environment variables to prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install any other dependencies as needed (for example, CUDA Python packages)
 # RUN pip install <your-package>
-
-# Set the working directory
-WORKDIR /workspace
 
 # Set the default command to run when the container starts
 CMD ["bash"]
