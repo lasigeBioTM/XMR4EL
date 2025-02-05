@@ -8,18 +8,24 @@ class Clustering():
         self.model = model
         self.model_type = model_type
 
-    def save(self, clustering_folder):
-        os.makedirs(clustering_folder, exist_ok=True)
-        with open(os.path.join(clustering_folder, 'clustering.pkl'), 'wb') as fout:
-            pickle.dump({'model': self.model, 'model_type': self.model_type}, fout)
+    def save(self, directory):
+        os.makedirs(directory, exist_ok=True)
+        model_data = {
+            'model': self.model, 
+            'model_type': self.model_type
+        }
+        with open(os.path.join(directory, 'clustering.pkl'), 'wb') as fout:
+            pickle.dump(model_data, fout)
 
     @classmethod
-    def load(cls, clustering_path):
-        # clustering_path = os.path.join(clustering_folder, 'clustering.pkl')
-        assert os.path.exists(clustering_path), f"{clustering_path} does not exist"
-        with open(clustering_path, 'rb') as fclu:
+    def load(cls, model_path):
+        assert os.path.exists(model_path), f"{model_path} does not exist"
+        with open(model_path, 'rb') as fclu:
             data = pickle.load(fclu)
-        return cls(model=data['model'], model_type=data['model_type'])    
+        return cls(
+            model=data['model'], 
+            model_type=data['model_type']
+        )
     
     
     def model_type(self):

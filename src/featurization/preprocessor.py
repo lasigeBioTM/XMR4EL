@@ -1,7 +1,10 @@
 import json
 import pickle
 import os
+import numpy as np
 import pandas as pd
+
+from scipy.sparse import csr_matrix
 
 kb_dict = {
     'medic': 'DiseaseID',
@@ -14,18 +17,34 @@ class Preprocessor():
         self.model = model
         self.model_type = model_type
 
-    def save(self, preprocessor_folder):
-        os.makedirs(preprocessor_folder, exist_ok=True)
-        with open(os.path.join(preprocessor_folder, 'vectorizer.pkl'), 'wb') as fout:
-            pickle.dump({'model': self.model, 'model_type': self.model_type}, fout)
+    def save(self, directory):
+        os.makedirs(directory, exist_ok=True)
+        model_data = {
+            'model': self.model, 
+            'model_type': self.model_type
+        }
+        with open(os.path.join(directory, 'vectorizer.pkl'), 'wb') as fout:
+            pickle.dump(model_data, fout)
 
     @classmethod
-    def load(cls, preprocessor_path):
-        # preprocessor_path = os.path.join(preprocessor_folder, 'vectorizer.pkl')
-        assert os.path.exists(preprocessor_path), f"{preprocessor_path} does not exist"
-        with open(preprocessor_path, 'rb') as fclu:
+    def load(cls, model_path):
+        assert os.path.exists(model_path), f"{model_path} does not exist"
+        with open(model_path, 'rb') as fclu:
             data = pickle.load(fclu)
-        return cls(model=data['model'], model_type=data['model_type'])
+        return cls(
+            model=data['model'], 
+            model_type=data['model_type']
+        )
+    
+    @staticmethod
+    def save_biobert_labels(embeddings, directory):
+        assert os.path.exists(directory),f"{directory} does not exist"
+        np.save(directory, embeddings)
+    
+    @staticmethod
+    def load_biobert_labels(directory):
+        assert os.path.exists(directory),f"{directory} does not exist"
+        return csr_matrix(np.load(directory))
     
     @staticmethod
     def load_labels_from_file(labels_folder):
@@ -59,9 +78,6 @@ class Preprocessor():
         processed_labels_id = list(labels_dict.keys())
 
         return (processed_labels_id, processed_labels_data)
-
-    def predict(self, corpus):
-        return self.model.transform(corpus)
     
     @staticmethod 
     def load_data_from_file(train_filepath, labels_filepath):

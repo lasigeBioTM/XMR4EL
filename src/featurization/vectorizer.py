@@ -1,5 +1,7 @@
-import numpy as np
+import os
 import torch
+
+import numpy as np
 
 from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVec
 from transformers import AutoTokenizer, AutoModel
@@ -43,25 +45,22 @@ class TfidfVectorizer(Preprocessor):
         model.fit(trn_corpus)
         return cls(model=model, model_type='TfidfSkLearn')
     
-class BioBertVectorizer():
+    def predict(self, corpus):
+        return self.model.transform(corpus)
     
-    def __init__(self, model_name, tokenizer, model):
-        self.model_name = model_name
-        self.tokenizer = tokenizer
-        self.model = model
+class BioBertVectorizer(Preprocessor):
     
-    @classmethod
-    def load_model(cls):
+    model_name = "dmis-lab/biobert-base-cased-v1.2"
+    
+    def predict(cls, corpus):
         model_name = "dmis-lab/biobert-base-cased-v1.2"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModel.from_pretrained(model_name)
-        return cls(model_name, tokenizer, model)
-    
-    def predict(cls, corpus):
-        inputs = cls.tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
+        
+        inputs = tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
         with torch.no_grad():
-            outputs = cls.model(**inputs)
-        return outputs.last_hidden_state.mean(dim=1) 
+            outputs = model(**inputs)
+        return outputs.last_hidden_state.squeeze(0).numpy() 
         
 """
 class DistilBertVectorizer():
