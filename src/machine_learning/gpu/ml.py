@@ -1,50 +1,51 @@
-import subprocess
-
+from src.machine_learning.classifier import Classifier
 from src.machine_learning.clustering import Clustering
 
+from cuml.cluster import KMeans
+from cuml.linear_model import LogisticRegression
 
-try:
-    subprocess.check_output('nvidia-smi')
-    GPU_AVAILABLE = True
-except Exception: # this command not being found can raise quite a few different errors depending on the configuration
-    print('No Nvidia GPU in system!')
-    GPU_AVAILABLE = False
-
-if GPU_AVAILABLE:
-    import cudf
-    import cupy as cp
-    from cuml.cluster import AgglomerativeClustering
-    from cuml.linear_model import LogisticRegression
-
-
-class AgglomerativeClusteringGPU(Clustering):
+class KMeansGPU(Clustering):
+    DEFAULTS = {
+        'n_clusters': 16,
+        'max_iter': 20,
+        'random_state': 0,
+        'n_init': 10,
+        'output_type': 'numpy'
+    }
 
     @classmethod
-    def train(cls, embeddings):
-        defaults = {
-            'n_clusters': 16,
-            'metric': 'euclidean',
-        }
+    def create_model(cls, kwargs):
+        params = {**cls.DEFAULTS, **kwargs}
+        return cls(
+            model = KMeans(**params),
+            model_type = 'KMeansGPU'
+        )
 
-        # defaults.update(kwargs)
-        model = AgglomerativeClustering(**defaults)
-        embeddings = cudf.DataFrame(embeddings)
-        model.fit(embeddings)
-        return cls(model=model, model_type='HierarchicalGPU')
+    def fit(self, X_train):
+        self.model = self.model.fit(X_train.toarray())
+        return self.model
     
-    def get_labels(self):
-        return self.model.labels_.to_numpy()
-    
-class LogisticRegressionGPU(Clustering):
+class LogisticRegressionGPU(Classifier):
+
+    DEFAULTS = {
+        'random_state': 0,
+        'solver': 'qn',
+        'max_iter': 1000,
+        'verbose': 0,
+        'penalty': 'l2',
+        'output_type': 'numpy'
+    }
 
     @classmethod
-    def train(cls, x_train, y_train, **kwargs):
-        defaults = {}
-        model = LogisticRegression(**defaults)
+    def create_model(cls, kwargs):
+        params = {**cls.DEFAULTS, **kwargs}
+        params['max_inter'] *= 10
+        return cls(
+            model = LogisticRegression(**params), 
+            model_type = 'LogisticRegressionGPU'
+        )
 
-        subset_size = 5000
-
-        cp.get_default_memory_pool().free_all_blocks()
-        model.fit(x_train[:subset_size], y_train[:subset_size])
-        cp.get_default_memory_pool().free_all_blocks()
-        return cls(model=model, model_type='LogisticRegressionGPU')
+    def fit(self, X_train, Y_train):
+        self.model = self.model.fit(X_train.toarray(), Y_train)
+        return self.model   
+    

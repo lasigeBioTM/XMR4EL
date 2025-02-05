@@ -1,4 +1,6 @@
+import os
 import numpy as np
+import pickle
 
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, pairwise_distances_argmin_min
@@ -6,7 +8,6 @@ from sklearn.metrics import silhouette_score, pairwise_distances_argmin_min
 from collections import Counter
 
 from src.machine_learning.cpu.ml import KMeansCPU
-
      
 class DivisiveHierarchicalClustering():
     
@@ -17,9 +18,36 @@ class DivisiveHierarchicalClustering():
         self.clustering_model_type = clustering_model_type
         self.labels = labels
         self.centroids = centroids
+        
+    def save(self, directory):
+        """
+        Saves the trained model (clustering and linear models) to the specified directory.
+        """
+        os.makedirs(directory, exist_ok=True)
+        model_data = {
+            'clustering_model_type': self.clustering_model_type,
+            'labels': self.labels,
+            'centroids': self.centroids
+        }
+        with open(os.path.join(directory, 'hierarchical_clustering_model.pkl'), 'wb') as fout:
+            pickle.dump(model_data, fout)
+
+    @classmethod
+    def load(cls, model_path):
+        """
+        Loads a previously saved model from the specified path.
+        """
+        assert os.path.exists(model_path), f"{model_path} does not exist"
+        with open(model_path, 'rb') as fclu:
+            data = pickle.load(fclu)
+        return cls(
+            clustering_model_type=data['clustering_model_type'], 
+            labels=data['labels'],
+            centroids=data['centroids']
+        )
     
     @classmethod
-    def fit(cls, X, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True):
+    def fit(cls, X, CLUSTERING_MODEL, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True):
         """
         Main method to perform divisive hierarchical clustering
         """
@@ -104,8 +132,10 @@ class DivisiveHierarchicalClustering():
             
             if spherical:
                 X = normalize(X, norm="l2", axis=1)
+            
+            # Fiting Clustering Model
+            kmeans_model = CLUSTERING_MODEL.create_model({'n_clusters': n_splits, 'max_iter': n_iter, 'random_state': random_state}).fit(X)
                 
-            kmeans_model = KMeansCPU.fit(X, {'n_clusters': n_splits, 'max_iter': n_iter, 'random_state': random_state}).model
             cluster_labels = kmeans_model.labels_
             
             labels_dict = {}
@@ -137,9 +167,11 @@ class DivisiveHierarchicalClustering():
         print("Silhouette Score:", silhouette_score(X, merged_labels))
         
         # Return the model with final labels and centroids
+        
         return cls(
-            clustering_model_type="Hierarchical KMeansCPU", 
+            clustering_model_type=CLUSTERING_MODEL.model_type, 
             labels=encode_labels(merged_labels), 
             centroids=calculate_centroids(X, np.array(final_labels))
         )
+        
                     
