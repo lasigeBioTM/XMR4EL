@@ -1,9 +1,13 @@
 import os
 import pickle
+
 import numpy as np
+
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import top_k_accuracy_score, pairwise_distances_argmin_min
+
 from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
+
 
 class HierarchicalLinearModel:
     """
@@ -11,22 +15,23 @@ class HierarchicalLinearModel:
     It iteratively refines clusters and predicts probabilities with a logistic model.
     """
 
-    def __init__(self, clustering_model=None, linear_model=None, labels=None, top_k_score=None, top_k=None):
+    def __init__(self, clustering_model_type=None, linear_model_type=None, labels=None, top_k_score=None, top_k=None, gpu_usage=False):
         """
         Initializes the hierarchical model with clustering, logistic regression, and top-k accuracy score.
 
         Parameters:
         clustering_model (str): Type of clustering model (e.g., 'KMeansCPU')
-        linear_model (str): Type of linear model (e.g., 'LogisticRegressionCPU')
+        linear_model_type (str): Type of linear model (e.g., 'LogisticRegressionCPU')
         labels (array): Initial cluster labels
         top_k_score (float): Top-k accuracy score
         top_k (int): Number of top labels to consider
         """
-        self.clustering_model = clustering_model
-        self.linear_model = linear_model
+        self.clustering_model_type = clustering_model_type
+        self.linear_model_type = linear_model_type
         self.labels = labels
         self.top_k_score = top_k_score
         self.top_k = top_k
+        self.gpu_usage = False
 
     def save(self, directory):
         """
@@ -34,8 +39,8 @@ class HierarchicalLinearModel:
         """
         os.makedirs(directory, exist_ok=True)
         model_data = {
-            'clustering_model': self.clustering_model,
-            'linear_model': self.linear_model,
+            'clustering_model_type': self.clustering_model_type,
+            'linear_model_type': self.linear_model_type,
             'labels': self.labels,
             'top_k_score': self.top_k_score,
             'top_k': self.top_k
@@ -52,15 +57,15 @@ class HierarchicalLinearModel:
         with open(model_path, 'rb') as fclu:
             data = pickle.load(fclu)
         return cls(
-            clustering_model=data['clustering_model'], 
-            linear_model=data['linear_model'],
+            clustering_model_type=data['clustering_model_type'], 
+            linear_model_type=data['linear_model_type'],
             labels=data['labels'],
             top_k_score=data['top_k_score'],
             top_k=data['top_k']
         )
     
     @classmethod
-    def fit(cls, X, Y, top_k=3, top_k_threshold=0.9, min_cluster_size=10, max_cluster_size=50):
+    def fit(cls, X, Y, LINEAR_MODEL, CLUSTERING_MODEL, top_k=3, top_k_threshold=0.9, min_cluster_size=10, max_cluster_size=50):
         """
         Fits the model using clustering and logistic regression, and iteratively refines the cluster labels.
         """
@@ -118,10 +123,8 @@ class HierarchicalLinearModel:
             X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42, stratify=Y)
             n_iter = calculate_iteration_count(Y)
             
-            # Train logistic regression model
-            linear_model = LogisticRegressionCPU.train(
-                X, Y, defaults={'solver': 'lbfgs', 'max_iter': n_iter, 'random_state': 0}
-            ).model
+            # Train Logistic Regression Model
+            linear_model = LINEAR_MODEL.create_model({'max_iter': n_iter}).fit(X, Y)
             
             # Predict probabilities
             y_proba = linear_model.predict_proba(X_test)
@@ -140,9 +143,10 @@ class HierarchicalLinearModel:
 
                 if ((n_emb >= min_cluster_size and n_emb <= max_cluster_size) or n_emb >= max_cluster_size) and label in np.unique(top_k_indices):
                     n_iter = calculate_iteration_count(np.array([range(2)]))
-                    clustering_model = KMeansCPU.fit(
-                        embeddings, defaults={'n_clusters': 2, 'max_iter': n_iter, 'random_state': 0}
-                    ).model
+                    
+                    
+                    clustering_model = CLUSTERING_MODEL.create_model({'n_clusters': 2, 'max_iter': n_iter, 'random_state': 0}).fit(embeddings)
+                
                     kmeans_labels = clustering_model.labels_
 
                     for idx, label in zip(indices, kmeans_labels):

@@ -9,7 +9,7 @@ from src.app.commandhelper import MainCommand
 from src.app.utils import create_hierarchical_clustering, create_hierarchical_linear_model, create_vectorizer, load_train_and_labels_file, load_vectorizer
 from src.featurization.preprocessor import Preprocessor
 from src.machine_learning.clustering import Clustering
-from src.machine_learning.cpu.ml import KMeansCPU
+from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
 from src.machine_learning.hierarchical_clustering import DivisiveHierarchicalClustering
 from src.machine_learning.hierarchical_linear_model import HierarchicalLinearModel
 
@@ -54,13 +54,14 @@ def main():
     # silhouette avg: 0.0017
     
     # First Top-K Score: 0.9992447129909365
-    hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
-    Y_train_feat = hierarchical_clustering_model.labels_
+    # hierarchical_clustering_model = Clustering.load("data/processed/clustering/clustering_agglo_train_100.pkl").model
+    # Y_train_feat = hierarchical_clustering_model.labels_
 
     # print("Starting Divisive Hierarchical Clustering")
-    # divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(X_train_feat)
-    # Y_train_feat = divisive_hierarchical_clustering.labels
-    
+    # Silhouette Score, Silhouette Score: 0.015109556894242556
+    divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(X_train_feat, CLUSTERING_MODEL=KMeansCPU.create_model())
+    Y_train_feat = divisive_hierarchical_clustering.labels
+
     """ Agglomerative Clustering
     cluster_label  count
         0           161
@@ -83,10 +84,12 @@ def main():
     
     
     # Meu metodo deve ser melhor em termos de clustering
-    # Divisive Hierarchical Clustering -> Top-1 Score 0.8557401812688822 / Top-3 Score 0.9569486404833837 / Top-5 Score 0.9724320241691843
+    # Divisive Hierarchical Clustering -> Top-1 Score 0.8557401812688822 / Top-3 Score 0.9561933534743202 / Top-5 Score 0.9724320241691843
     # Agglomerative Clustering -> Top-1 Score 0.9686555891238671 / Top-3 Score 1.0 / Top-5 Score 1.0 
     print("Starting HML")
-    hierarchical_linear_model = HierarchicalLinearModel.fit(X_train_feat, Y_train_feat, top_k=3)
+    hierarchical_linear_model = HierarchicalLinearModel.fit(
+        X_train_feat, Y_train_feat, 
+        LINEAR_MODEL=LogisticRegressionCPU.create_model(), CLUSTERING_MODEL=KMeansCPU.create_model(), top_k=3)
     
     print(f"Top-{hierarchical_linear_model.top_k} Score {hierarchical_linear_model.top_k_score}")
 

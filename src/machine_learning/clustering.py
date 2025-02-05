@@ -1,6 +1,6 @@
 import os
 import pickle
-import pandas as pd
+
 
 class Clustering():
 
@@ -13,10 +13,6 @@ class Clustering():
         with open(os.path.join(clustering_folder, 'clustering.pkl'), 'wb') as fout:
             pickle.dump({'model': self.model, 'model_type': self.model_type}, fout)
 
-    def fit(self, corpus):
-        labels = self.model.fit(corpus).labels_
-        return labels
-    
     @classmethod
     def load(cls, clustering_path):
         # clustering_path = os.path.join(clustering_folder, 'clustering.pkl')
@@ -25,19 +21,6 @@ class Clustering():
             data = pickle.load(fclu)
         return cls(model=data['model'], model_type=data['model_type'])    
     
-    def save_labels(self, clustering_folder):
-        os.makedirs(clustering_folder, exist_ok=True)
-
-        if self.model_type == 'HierarchicalCPU' or self.model_type == 'BirchCPU' or self.model.type == 'KMeansCPU':
-            labels = self.model.labels_
-        elif self.model_type == 'HierarchicalGPU':
-            labels = self.model.labels_.to_numpy()
-
-        clustering_df = pd.DataFrame({'Labels': labels})
-        clustering_df.to_parquet(os.path.join(clustering_folder, 'labels.parquet'))
-
-    @staticmethod
-    def load_labels(clustering_folder):
-        clustering_path = os.path.join(clustering_folder, 'labels.parquet')
-        assert os.path.exists(clustering_path), f"{clustering_path} does not exist"
-        return pd.read_parquet(clustering_path)
+    
+    def model_type(self):
+        return self.model_type
