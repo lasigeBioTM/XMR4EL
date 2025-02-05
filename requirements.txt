@@ -2,3 +2,5 @@ scikit-learn==1.6.0
 pandas==2.2.3
 nltk==3.9.1
 pyarrow==18.1.0
+torch
+transformers
