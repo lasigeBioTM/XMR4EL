@@ -24,19 +24,6 @@ def is_cuda_available():
     else:
         print("nvidia-smi command not found. Assuming no NVIDIA GPU.")
 
-    # If GPU is available, import the GPU-specific models
-    if gpu_available:
-        try:
-            
-            from src.machine_learning.gpu.ml import KMeansGPU, LogisticRegressioGPU
-            
-        except ImportError as e:
-            print(f"Error importing GPU models: {e}. Defaulting to CPU models.")
-            
-            from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
-            
-            gpu_available = False  # If import fails, fall back to CPU
-
     return gpu_available
 
 GPU_AVAILABLE = is_cuda_available()
@@ -74,22 +61,43 @@ def load_tdidf_vectorizer(directory):
 def create_hierarchical_clustering(X_train_feat):
     if GPU_AVAILABLE:
         print("Processing Hierarchical Clustering Algorithm with GPU SUPPORT")
+        
+        from src.machine_learning.gpu.ml import KMeansGPU
+        
         divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(X_train_feat, CLUSTERING_MODEL=KMeansGPU.create_model())
     else:
         print("Processing Hierarchical Clustering Algorithm with CPU SUPPORT")
+        
+        from src.machine_learning.cpu.ml import KMeansCPU
+        
         divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(X_train_feat, CLUSTERING_MODEL=KMeansCPU.create_model())
     return divisive_hierarchical_clustering.labels
 
 def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
+    
     if GPU_AVAILABLE:
+        
+        from src.machine_learning.gpu.ml import KMeansGPU, LogisticRegressionGPU
+        
+        print("Processing Hierarchical Linear Model with GPU SUPPORT")
         hierarchical_linear_model = HierarchicalLinearModel.fit(
-            X_train_feat, Y_train_feat, 
-            LINEAR_MODEL=LogisticRegressionGPU.create_model(), CLUSTERING_MODEL=KMeansGPU.create_model(), top_k=3
+            X_train_feat, 
+            Y_train_feat, 
+            LINEAR_MODEL=LogisticRegressionGPU.create_model(), 
+            CLUSTERING_MODEL=KMeansGPU.create_model(), 
+            top_k=k
         )
     else:
+        
+        from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
+        
+        print("Processing Hierarchical Linear Model with CPU SUPPORT")
         hierarchical_linear_model = HierarchicalLinearModel.fit(
-            X_train_feat, Y_train_feat, 
-            LINEAR_MODEL=LogisticRegressionCPU.create_model(), CLUSTERING_MODEL=KMeansCPU.create_model(), top_k=3
+            X_train_feat, 
+            Y_train_feat, 
+            LINEAR_MODEL=LogisticRegressionCPU.create_model(), 
+            CLUSTERING_MODEL=KMeansCPU.create_model(), 
+            top_k=k
         )
 
     return hierarchical_linear_model.top_k, hierarchical_linear_model.top_k_score
