@@ -63,7 +63,7 @@ class BioBertVectorizer(Preprocessor):
         
         
         model = AutoModelForSequenceClassification.from_pretrained(cls.model_name)
-        tokenizer = AutoTokenizer.from_pretrainded(cls.model_name)
+        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
         # Create dummy input
         inputs = tokenizer("dummy test", return_tensors="pt")
