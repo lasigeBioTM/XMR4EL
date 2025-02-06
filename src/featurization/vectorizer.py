@@ -98,8 +98,8 @@ class BioBertVectorizer(Preprocessor):
         
         # Convert tensors to NumPy arrays
         onnx_inputs = {
-            "input_ids": inputs["input_ids"].astype(np.int64),
-            "attention_mask": inputs["attention_mask"].astype(np.int64)
+            "input_ids": inputs["input_ids"].numpy().astype(np.int64),
+            "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
         }
 
         # Run inference
