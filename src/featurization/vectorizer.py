@@ -66,7 +66,8 @@ class BioBertVectorizer(Preprocessor):
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
         # Create dummy input
-        inputs = tokenizer("dummy test", return_tensors="pt")
+        dummy_test = ["This is a dummy test sentence for ONNX export."]
+        inputs = tokenizer(dummy_test, return_tensors="pt", padding=True, truncation=True, max_length=512)
         
       # Export to ONNX
         torch.onnx.export(
@@ -75,7 +76,9 @@ class BioBertVectorizer(Preprocessor):
             directory,
             input_names=["input_ids", "attention_mask"],
             output_names=["logits"],
-            dynamic_axes={"input_ids": {0: "batch"}, "attention_mask": {0: "batch"}},
+            dynamic_axes={
+                "input_ids": {0: "batch", 1: "seq_length"}, 
+                "attention_mask": {0: "batch", 1: "seq_length"}},
             opset_version=14
         )
         print("Export complete.")
@@ -91,10 +94,13 @@ class BioBertVectorizer(Preprocessor):
         session = ort.InferenceSession(directory)
         
         # Tokenize input
-        inputs = tokenizer(corpus, return_tensors="pt", padding=True, truncation=True)
+        inputs = tokenizer(corpus, return_tensors="pt", padding=True, truncation=True, max_length=512)
         
         # Convert tensors to NumPy arrays
-        onnx_inputs = {k: v.numpy() for k, v in inputs.items()}
+        onnx_inputs = {
+            "input_ids": inputs["input_ids"].astype(np.int64),
+            "attention_mask": inputs["attention_mask"].astype(np.int64)
+        }
 
         # Run inference
         return session.run(None, onnx_inputs)[0]
