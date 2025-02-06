@@ -62,7 +62,7 @@ class BioBertVectorizer(Preprocessor):
             print("ONNX model doesn't exist. Exporting.")
         
         
-        model = AutoModelForSequenceClassification.from_pretrained(cls.model_name)
+        model = AutoModel.from_pretrained(cls.model_name)
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
         # Create dummy input
@@ -76,7 +76,7 @@ class BioBertVectorizer(Preprocessor):
             input_names=["input_ids", "attention_mask"],
             output_names=["logits"],
             dynamic_axes={"input_ids": {0: "batch"}, "attention_mask": {0: "batch"}},
-            opset_version=11
+            opset_version=14
         )
         print("Export complete.")
     
