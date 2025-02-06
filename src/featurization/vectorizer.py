@@ -1,11 +1,11 @@
 import os
 import torch
 
+import onnxruntime as ort
 import numpy as np
 
 from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVec
-from transformers import AutoTokenizer, AutoModel
-from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+from transformers import AutoTokenizer, AutoModel, AutoModelForSequenceClassification
 
 from src.featurization.preprocessor import Preprocessor
 
@@ -52,10 +52,57 @@ class BioBertVectorizer(Preprocessor):
     
     model_name = "dmis-lab/biobert-base-cased-v1.2"
     
-    def predict(corpus):
-        model_name = "dmis-lab/biobert-base-cased-v1.2"
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModel.from_pretrained(model_name)
+    @classmethod
+    def export_to_onnx(cls, directory):
+        """Exports BioBERT to ONNX if not already exported."""
+        if os.path.exists(directory):
+            print("ONNX model already exists. Skipping Export.")
+            return 
+        else:
+            print("ONNX model doesn't exist. Exporting.")
+        
+        
+        model = AutoModelForSequenceClassification.from_pretrained(cls.model_name)
+        tokenizer = AutoTokenizer.from_pretrainded(cls.model_name)
+        
+        # Create dummy input
+        inputs = tokenizer("dummy test", return_tensors="pt")
+        
+      # Export to ONNX
+        torch.onnx.export(
+            model, 
+            (inputs["input_ids"], inputs["attention_mask"]), 
+            directory,
+            input_names=["input_ids", "attention_mask"],
+            output_names=["logits"],
+            dynamic_axes={"input_ids": {0: "batch"}, "attention_mask": {0: "batch"}},
+            opset_version=11
+        )
+        print("Export complete.")
+    
+    @classmethod
+    def predict_cpu(cls, corpus, directory):
+        """Runs inference using ONNX for faster CPU execution"""
+        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        
+        # Ensure ONNX model is exported before running inference
+        cls.export_to_onnx(directory)
+        
+        session = ort.InferenceSession(directory)
+        
+        # Tokenize input
+        inputs = tokenizer(corpus, return_tensors="pt")
+        
+        # Convert tensors to NumPy arrays
+        onnx_inputs = {k: v.numpy() for k, v in inputs.items()}
+
+        # Run inference
+        return session.run(None, onnx_inputs)[0]
+    
+    @classmethod
+    def predict_gpu(cls, corpus):
+        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        model = AutoModel.from_pretrained(cls.model_name)
         
         inputs = tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
         with torch.no_grad():

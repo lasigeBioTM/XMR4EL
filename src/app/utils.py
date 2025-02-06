@@ -32,11 +32,16 @@ def load_train_and_labels_file(train_filepath, labels_filepath):
     print("Getting Processed Labels from Preprocessor")
     return Preprocessor.load_data_from_file(train_filepath, labels_filepath)
 
-def create_bio_bert_vectorizer(corpus, directory):
+def create_bio_bert_vectorizer(corpus, directory_embeddings, directory_cpu_onnx_model):
     print("Running BioBert")
-    assert os.path.exists(directory),f"{directory} does not exist"
-    embeddings = BioBertVectorizer.predict(corpus)
-    Preprocessor.save_biobert_labels(embeddings, directory)
+    assert os.path.exists(directory_embeddings),f"{directory_embeddings} does not exist"
+    
+    if GPU_AVAILABLE:
+        embeddings = BioBertVectorizer.predict_gpu(corpus)
+        Preprocessor.save_biobert_labels(embeddings, directory_embeddings)
+    else:
+        embeddings = BioBertVectorizer.predict_cpu(corpus, directory_cpu_onnx_model)
+        Preprocessor.save_biobert_labels(embeddings, directory_embeddings)
     print("Saved BioBert Embeddings")
     return embeddings
 
