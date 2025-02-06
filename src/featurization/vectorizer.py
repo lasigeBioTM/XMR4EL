@@ -91,7 +91,7 @@ class BioBertVectorizer(Preprocessor):
         session = ort.InferenceSession(directory)
         
         # Tokenize input
-        inputs = tokenizer(corpus, return_tensors="pt")
+        inputs = tokenizer(corpus, return_tensors="pt", padding=True, truncation=True)
         
         # Convert tensors to NumPy arrays
         onnx_inputs = {k: v.numpy() for k, v in inputs.items()}
