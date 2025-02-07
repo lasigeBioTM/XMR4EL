@@ -142,7 +142,7 @@ class BioBertVectorizer(Preprocessor):
             print(f"Deleted: {f}")
         
         return sparse_embeddings
-    
+        
     @classmethod
     def predict_gpu(cls, corpus):
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)

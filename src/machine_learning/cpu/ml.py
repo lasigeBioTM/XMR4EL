@@ -31,7 +31,8 @@ class LogisticRegressionCPU(Classifier):
         'random_state': 0,
         'solver': 'lbfgs',
         'max_iter': 100,
-        'verbose': 0
+        'verbose': 0,
+        'n_jobs': -1
     }
 
     @classmethod
@@ -43,8 +44,8 @@ class LogisticRegressionCPU(Classifier):
         )
 
     def fit(self, X_train, Y_train):
-        self.model = force_multi_core_processing_linear_models(self.model, X_train, Y_train)
-        return self.model    
+        return self.model.fit(X_train, Y_train)
+  
     
 class KMeansCPU(Clustering):
     DEFAULTS = {
