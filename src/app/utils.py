@@ -42,7 +42,7 @@ def create_bio_bert_vectorizer(corpus, directory_embeddings, directory_cpu_onnx_
     else:
         output_prefix = output_embeddings_file.split('.')[0]   
         embeddings = BioBertVectorizer.predict_cpu(corpus=corpus, 
-                                                   directory_cpu_onnx_model=directory_cpu_onnx_model, 
+                                                   directory=directory_cpu_onnx_model, 
                                                    output_prefix=output_prefix)
         Preprocessor.save_biobert_labels(embeddings, directory_embeddings)
     print("Saved BioBert Embeddings")
