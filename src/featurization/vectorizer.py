@@ -1,5 +1,6 @@
 import os
 import torch
+import glob
 
 import onnxruntime as ort
 import numpy as np
@@ -84,7 +85,7 @@ class BioBertVectorizer(Preprocessor):
         print("Export complete.")
     
     @classmethod
-    def predict_cpu(cls, corpus, directory, batch_size=200, output_file="onnx_embeddings.npy"):
+    def predict_cpu(cls, corpus, directory, batch_size=1000, output_file="onnx_embeddings.npy"):
         """Runs inference using ONNX for faster CPU execution"""
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
@@ -97,15 +98,20 @@ class BioBertVectorizer(Preprocessor):
         if os.path.exists(output_file):
             print("File Already Exists, remove it or rename it")
             exit()
+            
+            
+        batch_size = int(corpus.shape[0] / 10)
         
         #Split corpus into smaller batches 
         num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
         print(num_batches)
-        all_results = []
         
-        for i in range(num_batches):
-            # Get the current batch
-            batch = corpus[i * batch_size: (i + 1) * batch_size]
+        for batch_idx in range(num_batches):
+            print(f"Number of the batch: {batch_idx}")
+            
+            start = batch_idx * batch_size
+            end = min((batch_idx + 1) * batch_size, len(corpus))
+            batch = corpus[start:end]
             
             # Tokenize input
             inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
@@ -121,21 +127,22 @@ class BioBertVectorizer(Preprocessor):
             
             batch_results = batch_results[:, 0, :]
             
-            with open(output_file, "ab") as f:
-                np.save(f, batch_results)
+            batch_filename = f"{output_file}_batch{batch_idx}.npz"
+            np.savez_compressed(batch_filename, embeddings=batch_results)
                 
-        embeddings_list = []
-        with open(output_file, "rb") as f:
-            while True:
-                try:
-                    embeddings_list.append(np.load(f))
-                except ValueError:  # End of file reached
-                    break
+        output_prefix = output_file.split(".")[0]       
                 
-        # Convert list to NumPy array
-        final_embeddings = np.concatenate(embeddings_list, axis=0)
+        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
+        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
         
-        return final_embeddings
+        np.savez_compressed(output_file, embeddings=all_embeddings)
+        
+        # Remove all batch files after saving the final file
+        for f in batch_files:
+            os.remove(f)
+            print(f"Deleted: {f}")
+        
+        return all_embeddings
     
     @classmethod
     def predict_gpu(cls, corpus):
