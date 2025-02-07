@@ -5,7 +5,7 @@ import onnxruntime as ort
 import numpy as np
 
 from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVec
-from transformers import AutoTokenizer, AutoModel, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModel
 
 from src.featurization.preprocessor import Preprocessor
 
@@ -67,7 +67,7 @@ class BioBertVectorizer(Preprocessor):
         
         # Create dummy input
         dummy_test = ["This is a dummy test sentence for ONNX export."]
-        inputs = tokenizer(dummy_test, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        inputs = tokenizer(dummy_test, return_tensors="pt", padding=True, truncation=True, max_length=256)
         
       # Export to ONNX
         torch.onnx.export(
@@ -115,17 +115,18 @@ class BioBertVectorizer(Preprocessor):
             outputs = model(**inputs)
         return outputs.last_hidden_state.squeeze(0).numpy() 
         
+
 """
-class DistilBertVectorizer():
+    class DistilBertVectorizer():
 
-    model_name = "distilbert-base-uncased"
-    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-    model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+        model_name = "distilbert-base-uncased"
+        tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+        model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
 
-    @classmethod
-    def predict(cls, corpus):
-        inputs = cls.tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
-        with torch.no_grad():
-            outputs = cls.model(**inputs)
-        return outputs.last_hidden_state.mean(dim=1) 
+        @classmethod
+        def predict(cls, corpus):
+            inputs = cls.tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
+            with torch.no_grad():
+                outputs = cls.model(**inputs)
+            return outputs.last_hidden_state.mean(dim=1) 
 """
