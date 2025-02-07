@@ -7,6 +7,7 @@ import numpy as np
 
 from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVec
 from transformers import AutoTokenizer, AutoModel
+from scipy.sparse import csr_matrix
 
 from src.featurization.preprocessor import Preprocessor
 
@@ -85,7 +86,7 @@ class BioBertVectorizer(Preprocessor):
         print("Export complete.")
     
     @classmethod
-    def predict_cpu(cls, corpus, directory, batch_size=400, output_file="onnx_embeddings.npy"):
+    def predict_cpu(cls, corpus, directory, batch_size=400, output_prefix="onnx_embeddings"):
         """Runs inference using ONNX for faster CPU execution"""
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
@@ -94,16 +95,9 @@ class BioBertVectorizer(Preprocessor):
         
         session = ort.InferenceSession(directory)
         
-        # Create or clear the output file if it already exists
-        if os.path.exists(output_file):
-            print("File Already Exists, remove it or rename it")
-            exit()
-        
         #Split corpus into smaller batches 
         num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
         print(num_batches)
-        
-        output_prefix = output_file.split(".")[0]   
         
         for batch_idx in range(num_batches):
             print(f"Number of the batch: {batch_idx}")
@@ -129,17 +123,25 @@ class BioBertVectorizer(Preprocessor):
             batch_filename = f"{output_prefix}_batch{batch_idx}.npz"
             np.savez_compressed(batch_filename, embeddings=batch_results)  
                 
+        # After processing all batches, load the embeddings        
         batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
+        
+        # Concatenate all batches 
         all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
         
-        np.savez_compressed(output_file, embeddings=all_embeddings)
+        # Convert the dense embeddings to a sparse matrix (CSR format)
+        sparse_embeddings = csr_matrix(all_embeddings)
+        
+        # Save the sparse embeddings to a file
+        sparse_filename = f"{output_prefix}_sparse.npz"
+        np.savez_compressed(f"{output_prefix}.npz", embeddings=all_embeddings)
         
         # Remove all batch files after saving the final file
         for f in batch_files:
             os.remove(f)
             print(f"Deleted: {f}")
         
-        return all_embeddings
+        return sparse_embeddings
     
     @classmethod
     def predict_gpu(cls, corpus):
