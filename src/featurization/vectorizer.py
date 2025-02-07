@@ -119,6 +119,8 @@ class BioBertVectorizer(Preprocessor):
             # Run inference for the current batch
             batch_results = session.run(None, onnx_inputs)[0]
             
+            batch_results = batch_results[:, 0, :]
+            
             with open(output_file, "ab") as f:
                 np.save(f, batch_results)
                 
