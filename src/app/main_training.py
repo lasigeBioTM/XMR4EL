@@ -28,6 +28,7 @@ def main():
     
     vectorizer_directory = "data/processed/vectorizer"
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
+    onnx_embeddigns = "data/processed/vectorizer/biobert_onnx_cpu_embeddings.npy"
     vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
 
     parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
@@ -37,7 +38,7 @@ def main():
     X_train = [str(parsed) for parsed in parsed_train_data["corpus"]]
     
     if not os.path.exists(vectorizer_filepath):
-        X_train_feat = create_bio_bert_vectorizer(X_train, vectorizer_directory, onnx_directory)
+        X_train_feat = create_bio_bert_vectorizer(X_train, vectorizer_directory, onnx_directory, onnx_embeddigns)
     else:
         X_train_feat = load_bio_bert_vectorizer(vectorizer_filepath)
         
