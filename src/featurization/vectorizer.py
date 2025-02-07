@@ -85,7 +85,7 @@ class BioBertVectorizer(Preprocessor):
         print("Export complete.")
     
     @classmethod
-    def predict_cpu(cls, corpus, directory, batch_size=1000, output_file="onnx_embeddings.npy"):
+    def predict_cpu(cls, corpus, directory, batch_size=400, output_file="onnx_embeddings.npy"):
         """Runs inference using ONNX for faster CPU execution"""
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
@@ -98,13 +98,12 @@ class BioBertVectorizer(Preprocessor):
         if os.path.exists(output_file):
             print("File Already Exists, remove it or rename it")
             exit()
-            
-            
-        batch_size = int(len(corpus) / 10)
         
         #Split corpus into smaller batches 
         num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
         print(num_batches)
+        
+        output_prefix = output_file.split(".")[0]   
         
         for batch_idx in range(num_batches):
             print(f"Number of the batch: {batch_idx}")
@@ -127,10 +126,8 @@ class BioBertVectorizer(Preprocessor):
             
             batch_results = batch_results[:, 0, :]
             
-            batch_filename = f"{output_file}_batch{batch_idx}.npz"
-            np.savez_compressed(batch_filename, embeddings=batch_results)
-                
-        output_prefix = output_file.split(".")[0]       
+            batch_filename = f"{output_prefix}_batch{batch_idx}.npz"
+            np.savez_compressed(batch_filename, embeddings=batch_results)  
                 
         batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
         all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
