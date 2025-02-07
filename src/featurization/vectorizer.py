@@ -100,7 +100,7 @@ class BioBertVectorizer(Preprocessor):
             exit()
             
             
-        batch_size = int(corpus.shape[0] / 10)
+        batch_size = int(len(corpus) / 10)
         
         #Split corpus into smaller batches 
         num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
