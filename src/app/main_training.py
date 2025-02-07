@@ -28,7 +28,7 @@ def main():
     
     vectorizer_directory = "data/processed/vectorizer"
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
-    onnx_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_cpu_embeddings.npy"
+    onnx_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_cpu_sparse.npz"
     vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
 
     parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
