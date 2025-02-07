@@ -37,7 +37,7 @@ def main():
     # Y_train = [str(parsed) for parsed in parsed_train_data["labels"]]
     X_train = [str(parsed) for parsed in parsed_train_data["corpus"]]
     
-    
+    # See paths
     if os.path.exists(vectorizer_directory):
         if os.path.exists(onnx_embeddigns_filepath):
             print(f"Path {onnx_embeddigns_filepath} does exists")
