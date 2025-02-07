@@ -67,7 +67,7 @@ class BioBertVectorizer(Preprocessor):
         
         # Create dummy input
         dummy_test = ["This is a dummy test sentence for ONNX export."]
-        inputs = tokenizer(dummy_test, return_tensors="pt", padding=True, truncation=True, max_length=256)
+        inputs = tokenizer(dummy_test, return_tensors="pt", padding=True, truncation=True, max_length=512)
         
       # Export to ONNX
         torch.onnx.export(
@@ -84,7 +84,7 @@ class BioBertVectorizer(Preprocessor):
         print("Export complete.")
     
     @classmethod
-    def predict_cpu(cls, corpus, directory):
+    def predict_cpu(cls, corpus, directory, batch_size=200, output_file="onnx_embeddings.npy"):
         """Runs inference using ONNX for faster CPU execution"""
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
@@ -93,17 +93,47 @@ class BioBertVectorizer(Preprocessor):
         
         session = ort.InferenceSession(directory)
         
-        # Tokenize input
-        inputs = tokenizer(corpus, return_tensors="pt", padding=True, truncation=True, max_length=256)
+        # Create or clear the output file if it already exists
+        if os.path.exists(output_file):
+            print("File Already Exists, remove it or rename it")
+            exit()
         
-        # Convert tensors to NumPy arrays
-        onnx_inputs = {
-            "input_ids": inputs["input_ids"].numpy().astype(np.int64),
-            "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
-        }
-
-        # Run inference
-        return session.run(None, onnx_inputs)[0]
+        #Split corpus into smaller batches 
+        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
+        print(num_batches)
+        all_results = []
+        
+        for i in range(num_batches):
+            # Get the current batch
+            batch = corpus[i * batch_size: (i + 1) * batch_size]
+            
+            # Tokenize input
+            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
+            
+            # Convert tensors to NumPy arrays
+            onnx_inputs = {
+                "input_ids": inputs["input_ids"].numpy().astype(np.int64),
+                "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
+            }
+            
+            # Run inference for the current batch
+            batch_results = session.run(None, onnx_inputs)[0]
+            
+            with open(output_file, "ab") as f:
+                np.save(f, batch_results)
+                
+        embeddings_list = []
+        with open(output_file, "rb") as f:
+            while True:
+                try:
+                    embeddings_list.append(np.load(f))
+                except ValueError:  # End of file reached
+                    break
+                
+        # Convert list to NumPy array
+        final_embeddings = np.concatenate(embeddings_list, axis=0)
+        
+        return final_embeddings
     
     @classmethod
     def predict_gpu(cls, corpus):
