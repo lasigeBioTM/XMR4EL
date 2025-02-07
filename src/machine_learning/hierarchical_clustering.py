@@ -88,7 +88,7 @@ class DivisiveHierarchicalClustering():
             Calculate the centroids of the clusters based on the labels
             """
             return np.array([
-                X[labels == label].mean(axis=0).A.flatten()  # Convert mean to dense array
+                X[labels == label].mean(axis=0).flatten()  # Convert mean to dense array
                 for label in np.unique(labels)
             ])  
         
