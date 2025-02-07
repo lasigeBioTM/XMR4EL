@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, load_npz
 
 kb_dict = {
     'medic': 'DiseaseID',
@@ -37,14 +37,9 @@ class Preprocessor():
         )
     
     @staticmethod
-    def save_biobert_labels(embeddings, directory):
-        assert os.path.exists(directory),f"{directory} does not exist"
-        np.save(directory, embeddings)
-    
-    @staticmethod
     def load_biobert_labels(directory):
         assert os.path.exists(directory),f"{directory} does not exist"
-        return csr_matrix(np.load(directory))
+        return np.load(directory)['embeddings']
     
     @staticmethod
     def load_labels_from_file(labels_folder):
