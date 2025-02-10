@@ -36,10 +36,15 @@ class Preprocessor():
             model_type=data['model_type']
         )
     
+    @classmethod
+    def save_biobert_labels(all_embeddings, directory):
+        assert os.path.exists(directory),f"{directory} does not exist" 
+        np.savez_compressed(directory, embeddings=all_embeddings)
+    
     @staticmethod
     def load_biobert_labels(directory):
         assert os.path.exists(directory),f"{directory} does not exist"
-        return csr_matrix(np.load(directory)['embeddings'])
+        return np.load(directory)['embeddings']
     
     @staticmethod
     def load_labels_from_file(labels_folder):

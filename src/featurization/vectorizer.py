@@ -132,10 +132,6 @@ class BioBertVectorizer(Preprocessor):
         # Convert the dense embeddings to a sparse matrix (CSR format)
         sparse_embeddings = csr_matrix(all_embeddings)
         
-        # Save the sparse embeddings to a file
-        sparse_filename = f"{output_prefix}_sparse.npz"
-        np.savez_compressed(f"{output_prefix}.npz", embeddings=all_embeddings)
-        
         # Remove all batch files after saving the final file
         for f in batch_files:
             os.remove(f)
@@ -151,7 +147,7 @@ class BioBertVectorizer(Preprocessor):
         inputs = tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
         with torch.no_grad():
             outputs = model(**inputs)
-        return outputs.last_hidden_state.squeeze(0).numpy() 
+        return csr_matrix(outputs.last_hidden_state.squeeze(0).numpy())
         
 
 """
