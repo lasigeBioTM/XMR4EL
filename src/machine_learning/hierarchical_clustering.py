@@ -168,9 +168,13 @@ class DivisiveHierarchicalClustering():
         
         # Return the model with final labels and centroids
         
+        labels = encode_labels(merged_labels)
+        
+        print(labels)
+        
         return cls(
             clustering_model_type=CLUSTERING_MODEL.model_type, 
-            labels=encode_labels(merged_labels), 
+            labels=labels, 
             centroids=calculate_centroids(X, np.array(final_labels))
         )
         
