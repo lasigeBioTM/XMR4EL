@@ -36,15 +36,17 @@ def create_bio_bert_vectorizer(corpus, directory_embeddings, directory_cpu_onnx_
     print("Running BioBert")
     assert os.path.exists(directory_embeddings),f"{directory_embeddings} does not exist"
     
+    output_prefix = output_embeddings_file.split('.')[0]  
+    
     if GPU_AVAILABLE:
+        print("Graphics Processing")
         embeddings = BioBertVectorizer.predict_gpu(corpus)
-        Preprocessor.save_biobert_labels(embeddings, directory_embeddings)
-    else:
-        output_prefix = output_embeddings_file.split('.')[0]   
+        Preprocessor.save_biobert_labels(embeddings, f"{output_prefix}_gpu.npz")
+    else:  
         embeddings = BioBertVectorizer.predict_cpu(corpus=corpus, 
                                                    directory=directory_cpu_onnx_model, 
                                                    output_prefix=output_prefix)
-        Preprocessor.save_biobert_labels(embeddings, directory_embeddings)
+        Preprocessor.save_biobert_labels(embeddings, f"{output_prefix}_cpu.npz")
     print("Saved BioBert Embeddings")
     return embeddings
 

@@ -120,7 +120,7 @@ class DivisiveHierarchicalClustering():
         # Depth = 2, 0.008548
         # Depth = 3, 0.011572, clearing min=10, 0.012697098340191351 127
         # Depth = 4, 0.011774 
-        def recursive_clustering(X, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True):
+        def recursive_clustering(X, depth=2, max_leaf_size=100, prefix="", random_state=0, spherical=True):
             """
             Recursively perform the clustering process
             """
@@ -171,6 +171,10 @@ class DivisiveHierarchicalClustering():
         labels = encode_labels(merged_labels)
         
         print(labels)
+        
+        label_occurence = count_label_occurrences(labels)
+        
+        print(label_occurence, len(label_occurence))
         
         return cls(
             clustering_model_type=CLUSTERING_MODEL.model_type, 
