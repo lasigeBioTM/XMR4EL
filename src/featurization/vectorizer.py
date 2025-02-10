@@ -144,7 +144,7 @@ class BioBertVectorizer(Preprocessor):
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         model = AutoModel.from_pretrained(cls.model_name)
         
-        inputs = tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
+        inputs = tokenizer(corpus, return_tensors='pt', padding=True, truncation=True, max_length=512)
         with torch.no_grad():
             outputs = model(**inputs)
         return csr_matrix(outputs.last_hidden_state.squeeze(0).numpy())
