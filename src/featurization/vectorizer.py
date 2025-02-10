@@ -139,16 +139,65 @@ class BioBertVectorizer(Preprocessor):
         
         return sparse_embeddings
         
+        
     @classmethod
-    def predict_gpu(cls, corpus):
+    def predict_gpu(cls, corpus, batch_size=400, output_prefix="gpu_embeddings"):
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        model = AutoModel.from_pretrained(cls.model_name)
+        model = AutoModel.from_pretrained(cls.model_name).to("cuda")  # Load model to GPU
+        model.eval()  # Set to inference mode
         
-        inputs = tokenizer(corpus, return_tensors='pt', padding=True, truncation=True, max_length=512)
-        with torch.no_grad():
-            outputs = model(**inputs)
-        return csr_matrix(outputs.last_hidden_state.squeeze(0).numpy())
+        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
+        print(f"Total batches: {num_batches}")
+
+        for batch_idx in range(num_batches):
+            print(f"Processing batch {batch_idx}")
+
+            start = batch_idx * batch_size
+            end = min((batch_idx + 1) * batch_size, len(corpus))
+            batch = corpus[start:end]
+
+            # Tokenize & move input tensors to GPU
+            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512).to("cuda")
+
+            with torch.no_grad():
+                outputs = model(**inputs)  # Forward pass on GPU
+                batch_results = outputs.last_hidden_state[:, 0, :].cpu().numpy()  # Move results to CPU
+
+            batch_filename = f"{output_prefix}_batch{batch_idx}.npz"
+            np.savez_compressed(batch_filename, embeddings=batch_results)
+
+        # Load and concatenate all batch embeddings
+        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
+        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
+
+        # Convert dense embeddings to sparse matrix (CSR format)
+        sparse_embeddings = csr_matrix(all_embeddings)
+
+        # Clean up batch files
+        for f in batch_files:
+            os.remove(f)
+            print(f"Deleted: {f}")
+
+        return sparse_embeddings
+            
+
+ 
+                
+        # After processing all batches, load the embeddings        
+        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
         
+        # Concatenate all batches 
+        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
+        
+        # Convert the dense embeddings to a sparse matrix (CSR format)
+        sparse_embeddings = csr_matrix(all_embeddings)
+        
+        # Remove all batch files after saving the final file
+        for f in batch_files:
+            os.remove(f)
+            print(f"Deleted: {f}")
+        
+        return sparse_embeddings
 
 """
     class DistilBertVectorizer():
