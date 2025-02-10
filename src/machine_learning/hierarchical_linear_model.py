@@ -123,8 +123,8 @@ class HierarchicalLinearModel:
             X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42, stratify=Y)
             n_iter = calculate_iteration_count(Y)
             
-            # Train Logistic Regression Model
-            linear_model = LINEAR_MODEL.create_model({'max_iter': n_iter}).fit(X, Y)
+            # Train Logistic Regression Model AUMENTAR O NUMERO DE INTERAÇÕES
+            linear_model = LINEAR_MODEL.create_model({'max_iter': 1000}).fit(X, Y)
             
             # Predict probabilities
             y_proba = linear_model.predict_proba(X_test)
