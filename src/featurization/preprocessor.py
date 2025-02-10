@@ -35,8 +35,8 @@ class Preprocessor():
             model=data['model'], 
             model_type=data['model_type']
         )
-    
-    @classmethod
+        
+    @staticmethod
     def save_biobert_labels(all_embeddings, directory):
         assert os.path.exists(directory),f"{directory} does not exist" 
         np.savez_compressed(directory, embeddings=all_embeddings)
