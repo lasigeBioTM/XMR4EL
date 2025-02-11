@@ -3,10 +3,9 @@ import pickle
 
 import numpy as np
 
+from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import top_k_accuracy_score, pairwise_distances_argmin_min
-
-from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
 
 
 class HierarchicalLinearModel:
@@ -122,14 +121,18 @@ class HierarchicalLinearModel:
                 num_classes = len(np.unique(Y))
                 return 100 + (10 * num_classes)
             
+            # Initialize LabelEncoder and transform Y_train
+            label_encoder = LabelEncoder()
+            y_encoded = label_encoder.fit_transform(Y)
+            
             # Train-test split
-            X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42, stratify=Y)
+            X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42, stratify=Y)
             n_iter = calculate_iteration_count(Y)
             
             # Train Logistic Regression Model AUMENTAR O NUMERO DE INTERAÇÕES
             # Need find a way to calculate interactions, test "saga" and "newton-cg", get rid of lbfgs
-            # CPU -> linear_model = LINEAR_MODEL.create_model({'max_iter': 1000, 'solver':'saga', 'penalty': 'l2'}).fit(X, Y)
-            linear_model = LINEAR_MODEL.create_model({'max_iter': 100}).fit(X, Y)
+            # CPU -> linear_model = LINEAR_MODEL.create_model({'max_iter': 1000, 'solver':'saga', 'penalty': 'l2'}).fit(X_train, y_train)
+            linear_model = LINEAR_MODEL.create_model({'max_iter': 100}).fit(X_train, y_train)
             
             # Predict probabilities
             y_proba = linear_model.predict_proba(X_test)
@@ -148,8 +151,6 @@ class HierarchicalLinearModel:
 
                 if ((n_emb >= min_cluster_size and n_emb <= max_cluster_size) or n_emb >= max_cluster_size) and label in np.unique(top_k_indices):
                     n_iter = calculate_iteration_count(np.array([range(2)]))
-                    
-                    
                     clustering_model = CLUSTERING_MODEL.create_model({'n_clusters': 2, 'max_iter': n_iter, 'random_state': 0}).fit(embeddings)
                 
                     kmeans_labels = clustering_model.labels_
@@ -159,6 +160,9 @@ class HierarchicalLinearModel:
                 else:
                     for i in indices:
                         new_labels[i] = f"{label}"
+            
+            # Convert new labels back to original string labels
+            new_labels = label_encoder.inverse_transform([int(label[0]) for label in new_labels])  # Decode the label back to original
             
             return np.array(new_labels), top_k_score
         

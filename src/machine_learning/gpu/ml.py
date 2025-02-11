@@ -29,7 +29,6 @@ class KMeansGPU(Clustering):
 class LogisticRegressionGPU(Classifier):
 
     DEFAULTS = {
-        'random_state': 0,
         'solver': 'qn',
         'max_iter': 1000,
         'verbose': 0,
