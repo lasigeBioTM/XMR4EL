@@ -161,7 +161,6 @@ class HierarchicalLinearModel:
                 n_emb = embeddings.shape[0]
 
                 if ((n_emb >= min_cluster_size and n_emb <= max_cluster_size) or n_emb >= max_cluster_size) and label in np.unique(top_k_indices):
-                    print(len(embeddings), n_emb)
                     n_iter = calculate_iteration_count(n_emb)
                     clustering_model = CLUSTERING_MODEL.create_model({'n_clusters': 2, 'max_iter': n_iter, 'random_state': 0}).fit(embeddings)
                 
