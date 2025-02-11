@@ -28,7 +28,8 @@ def main():
     
     vectorizer_directory = "data/processed/vectorizer"
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
-    onnx_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_cpu_sparse.npz"
+    onnx_cpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_cpu_sparse.npz"
+    onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_gpu_sparse.npz"
     vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
 
     parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
@@ -38,15 +39,18 @@ def main():
     X_train = [str(parsed) for parsed in parsed_train_data["corpus"]]
     
     # See paths
-    if os.path.exists(onnx_embeddigns_filepath):
-        print(f"Path {onnx_embeddigns_filepath} does exists")
-        X_train_feat = load_bio_bert_vectorizer(onnx_embeddigns_filepath)
+    if os.path.exists(onnx_cpu_embeddigns_filepath):
+        print(f"Path {onnx_cpu_embeddigns_filepath} does exists")
+        X_train_feat = load_bio_bert_vectorizer(onnx_cpu_embeddigns_filepath)
+    elif os.path.exists(onnx_gpu_embeddigns_filepath):
+        print(f"Path {onnx_gpu_embeddigns_filepath} does exists")
+        X_train_feat = load_bio_bert_vectorizer(onnx_gpu_embeddigns_filepath)
     else:
-        print(f"Path {onnx_embeddigns_filepath} does NOT exists")
+        print(f"Path does NOT exists")
         X_train_feat = create_bio_bert_vectorizer(corpus=X_train, 
                                                       directory_embeddings=vectorizer_directory, 
                                                       directory_cpu_onnx_model=onnx_directory, 
-                                                      output_embeddings_file=onnx_embeddigns_filepath)
+                                                      output_embeddings_file=onnx_gpu_embeddigns_filepath)
  
         
     Y_train_feat = create_hierarchical_clustering(X_train_feat)
