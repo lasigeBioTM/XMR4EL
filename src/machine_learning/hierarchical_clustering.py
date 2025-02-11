@@ -162,11 +162,11 @@ class DivisiveHierarchicalClustering():
         
         labels = encode_labels(merged_labels)
         
-        print(labels)
+        # print(labels)
         
-        label_occurence = count_label_occurrences(labels)
+        # label_occurence = count_label_occurrences(labels)
         
-        print(label_occurence, len(label_occurence))
+        # print(label_occurence, len(label_occurence))
         
         return cls(
             clustering_model_type=CLUSTERING_MODEL.model_type, 
