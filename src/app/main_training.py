@@ -38,19 +38,16 @@ def main():
     X_train = [str(parsed) for parsed in parsed_train_data["corpus"]]
     
     # See paths
-    if os.path.exists(vectorizer_directory):
-        if os.path.exists(onnx_embeddigns_filepath):
-            print(f"Path {onnx_embeddigns_filepath} does exists")
-            X_train_feat = load_bio_bert_vectorizer(onnx_embeddigns_filepath)
-        else:
-            print(f"Path {onnx_embeddigns_filepath} does NOT exists")
-            X_train_feat = create_bio_bert_vectorizer(corpus=X_train, 
+    if os.path.exists(onnx_embeddigns_filepath):
+        print(f"Path {onnx_embeddigns_filepath} does exists")
+        X_train_feat = load_bio_bert_vectorizer(onnx_embeddigns_filepath)
+    else:
+        print(f"Path {onnx_embeddigns_filepath} does NOT exists")
+        X_train_feat = create_bio_bert_vectorizer(corpus=X_train, 
                                                       directory_embeddings=vectorizer_directory, 
                                                       directory_cpu_onnx_model=onnx_directory, 
                                                       output_embeddings_file=onnx_embeddigns_filepath)
-    else:
-        print("Vectorizer Folder Not Created")
-        exit()      
+ 
         
     Y_train_feat = create_hierarchical_clustering(X_train_feat)
     
