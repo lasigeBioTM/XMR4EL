@@ -125,7 +125,8 @@ class HierarchicalLinearModel:
             
             # Train Logistic Regression Model AUMENTAR O NUMERO DE INTERAÇÕES
             # Need find a way to calculate interactions, test "saga" and "newton-cg", get rid of lbfgs
-            linear_model = LINEAR_MODEL.create_model({'max_iter': 1000, 'solver':'saga', 'penalty': 'l2'}).fit(X, Y)
+            # CPU -> linear_model = LINEAR_MODEL.create_model({'max_iter': 1000, 'solver':'saga', 'penalty': 'l2'}).fit(X, Y)
+            linear_model = LINEAR_MODEL.create_model({'max_iter': 100}).fit(X, Y)
             
             # Predict probabilities
             y_proba = linear_model.predict_proba(X_test)
