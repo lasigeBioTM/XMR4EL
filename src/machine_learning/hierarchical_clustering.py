@@ -11,13 +11,14 @@ from src.machine_learning.cpu.ml import KMeansCPU
      
 class DivisiveHierarchicalClustering():
     
-    def __init__(self, clustering_model_type=None, labels=None, centroids=None):
+    def __init__(self, clustering_model_type=None, labels=None, centroids=None, gpu_usage=False):
         """
         Initialize the clustering model, labels, and centroids
         """
         self.clustering_model_type = clustering_model_type
         self.labels = labels
         self.centroids = centroids
+        self.gpu_usage = gpu_usage
         
     def save(self, directory):
         """
@@ -27,7 +28,8 @@ class DivisiveHierarchicalClustering():
         model_data = {
             'clustering_model_type': self.clustering_model_type,
             'labels': self.labels,
-            'centroids': self.centroids
+            'centroids': self.centroids,
+            'gpu_usage': self.gpu_usage
         }
         with open(os.path.join(directory, 'hierarchical_clustering_model.pkl'), 'wb') as fout:
             pickle.dump(model_data, fout)
@@ -43,11 +45,12 @@ class DivisiveHierarchicalClustering():
         return cls(
             clustering_model_type=data['clustering_model_type'], 
             labels=data['labels'],
-            centroids=data['centroids']
+            centroids=data['centroids'],
+            gpu_usage=data['gpu_usage']
         )
     
     @classmethod
-    def fit(cls, X, CLUSTERING_MODEL, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True):
+    def fit(cls, X, CLUSTERING_MODEL, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True, gpu_usage=False):
         """
         Main method to perform divisive hierarchical clustering
         """
@@ -171,7 +174,8 @@ class DivisiveHierarchicalClustering():
         return cls(
             clustering_model_type=CLUSTERING_MODEL.model_type, 
             labels=labels, 
-            centroids=calculate_centroids(X, np.array(final_labels))
+            centroids=calculate_centroids(X, np.array(final_labels)),
+            gpu_usage=gpu_usage
         )
         
                     
