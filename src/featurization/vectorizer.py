@@ -129,15 +129,14 @@ class BioBertVectorizer(Preprocessor):
         # Concatenate all batches 
         all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
         
-        # Convert the dense embeddings to a sparse matrix (CSR format)
-        sparse_embeddings = csr_matrix(all_embeddings)
-        
         # Remove all batch files after saving the final file
         for f in batch_files:
             os.remove(f)
             print(f"Deleted: {f}")
         
-        return sparse_embeddings
+        print(all_embeddings)
+        
+        return all_embeddings
         
         
     @classmethod
@@ -170,34 +169,14 @@ class BioBertVectorizer(Preprocessor):
         batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
         all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
 
-        # Convert dense embeddings to sparse matrix (CSR format)
-        sparse_embeddings = csr_matrix(all_embeddings)
-
         # Clean up batch files
         for f in batch_files:
             os.remove(f)
             print(f"Deleted: {f}")
 
-        return sparse_embeddings
-            
+        print(all_embeddings)
 
- 
-                
-        # After processing all batches, load the embeddings        
-        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
-        
-        # Concatenate all batches 
-        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
-        
-        # Convert the dense embeddings to a sparse matrix (CSR format)
-        sparse_embeddings = csr_matrix(all_embeddings)
-        
-        # Remove all batch files after saving the final file
-        for f in batch_files:
-            os.remove(f)
-            print(f"Deleted: {f}")
-        
-        return sparse_embeddings
+        return all_embeddings
 
 """
     class DistilBertVectorizer():

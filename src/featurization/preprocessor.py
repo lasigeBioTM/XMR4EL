@@ -37,9 +37,8 @@ class Preprocessor():
         )
         
     @staticmethod
-    def save_biobert_labels(all_embeddings, directory, filepath):
-        # assert os.path.exists(directory),f"{directory} does not exist" 
-        np.savez_compressed(filepath, embeddings=all_embeddings)
+    def save_biobert_labels(all_embeddings, filepath):
+        np.save(filepath, all_embeddings)
     
     @staticmethod
     def load_biobert_labels(directory):

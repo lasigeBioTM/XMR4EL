@@ -64,18 +64,9 @@ class DivisiveHierarchicalClustering():
             return min(max(num_samples // 100, min_clusters), max_clusters)
 
         def encode_labels(labels_list):
-            """
-            Convert string labels into numeric labels
-            """
+            """Convert string labels into numeric labels"""
             label_to_idx = {}
-            encoded_labels = []
-
-            for label in labels_list:
-                if label not in label_to_idx:
-                    label_to_idx[label] = len(label_to_idx)
-                encoded_labels.append(label_to_idx[label])
-
-            return np.array(encoded_labels)
+            return np.array([label_to_idx.setdefault(label, len(label_to_idx)) for label in labels_list])
         
         def count_label_occurrences(labels_list):
             """
@@ -88,7 +79,7 @@ class DivisiveHierarchicalClustering():
             Calculate the centroids of the clusters based on the labels
             """
             return np.array([
-                X[labels == label].mean(axis=0).A.flatten()  # Convert mean to dense array
+                X[labels == label].mean(axis=0) # Convert mean to dense array
                 for label in np.unique(labels)
             ])  
         
@@ -124,8 +115,6 @@ class DivisiveHierarchicalClustering():
             """
             Recursively perform the clustering process
             """
-            
-            print(type(X))
             
             if X.shape[0] < max_leaf_size or depth == 0:
                 return {i: prefix for i in range(X.shape[0])}
