@@ -105,6 +105,9 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
             top_k=k,
             gpu_usage=True
         )
+        
+        hierarchical_linear_model.save("data/processed/regression")
+        
     else:
         
         from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
