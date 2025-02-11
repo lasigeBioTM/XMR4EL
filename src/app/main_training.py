@@ -1,6 +1,5 @@
 import os
-
-import numpy as np
+import time
 
 from src.app.commandhelper import MainCommand
 from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_clustering, create_hierarchical_linear_model, load_bio_bert_vectorizer, load_train_and_labels_file
@@ -33,6 +32,8 @@ def main():
     onnx_gpu_prefix_filepath = "data/processed/vectorizer/biobert_onnx_dense.npz"
     vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
 
+    start = time.time()
+
     parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
 
     # Dense Matrix
@@ -59,6 +60,10 @@ def main():
     top_k, top_k_score = create_hierarchical_linear_model(X_train_feat, Y_train_feat, 3)
     
     print(f"Top-{top_k} Score {top_k_score}")
+    
+    end = time.time()
+    
+    print(f"{end - start} secs of running")
 
 if __name__ == "__main__":
     main()
