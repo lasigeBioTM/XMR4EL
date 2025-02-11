@@ -44,7 +44,7 @@ class Preprocessor():
     @staticmethod
     def load_biobert_labels(directory):
         assert os.path.exists(directory),f"{directory} does not exist"
-        return np.load(directory)['embeddings']
+        return np.load(directory, allow_pickle=False)['embeddings']
     
     @staticmethod
     def load_labels_from_file(labels_folder):
