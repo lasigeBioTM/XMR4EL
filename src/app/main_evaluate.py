@@ -49,7 +49,7 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    print(hierarchical_linear_model.top_k_score)
+    print(hierarchical_linear_model.linear_model)
     
     end = time.time()
     
