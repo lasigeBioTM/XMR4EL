@@ -14,7 +14,7 @@ class HierarchicalLinearModel:
     It iteratively refines clusters and predicts probabilities with a logistic model.
     """
 
-    def __init__(self, clustering_model_type=None, linear_model_type=None, labels=None, top_k_score=None, top_k=None, gpu_usage=False):
+    def __init__(self, clustering_model_type=None, linear_model_type=None, labels=None, top_k_score=None, top_k=None):
         """
         Initializes the hierarchical model with clustering, logistic regression, and top-k accuracy score.
 
@@ -64,7 +64,7 @@ class HierarchicalLinearModel:
         )
     
     @classmethod
-    def fit(cls, X, Y, LINEAR_MODEL, CLUSTERING_MODEL, top_k=3, top_k_threshold=0.9, min_cluster_size=10, max_cluster_size=50):
+    def fit(cls, X, Y, LINEAR_MODEL, CLUSTERING_MODEL, top_k=3, top_k_threshold=0.9, min_cluster_size=10, max_cluster_size=50, gpu_usage=False):
         """
         Fits the model using clustering and logistic regression, and iteratively refines the cluster labels.
         """
@@ -132,7 +132,7 @@ class HierarchicalLinearModel:
             
             # Train Logistic Regression Model AUMENTAR O NUMERO DE INTERAÇÕES
             # Need find a way to calculate interactions, test "saga" and "newton-cg", get rid of lbfgs
-            if cls.gpu_usage:
+            if gpu_usage:
                 linear_model = LINEAR_MODEL.create_model({'max_iter': 100}).fit(X_train, y_train)
             else:
                 linear_model = LINEAR_MODEL.create_model({'max_iter': 1000, 'solver':'saga', 'penalty': 'l2'}).fit(X_train, y_train)
