@@ -32,9 +32,8 @@ def load_train_and_labels_file(train_filepath, labels_filepath):
     print("Getting Processed Labels from Preprocessor")
     return Preprocessor.load_data_from_file(train_filepath, labels_filepath)
 
-def create_bio_bert_vectorizer(corpus, directory_embeddings, directory_cpu_onnx_model, output_embeddings_file):
+def create_bio_bert_vectorizer(corpus, output_embeddings_file, directory_onnx_model=None):
     print("Running BioBert")
-    assert os.path.exists(directory_embeddings),f"{directory_embeddings} does not exist"
     
     output_prefix = output_embeddings_file.split('.')[0]  
     
@@ -44,8 +43,13 @@ def create_bio_bert_vectorizer(corpus, directory_embeddings, directory_cpu_onnx_
         output_file = f"{output_prefix}_gpu.npy"
         Preprocessor.save_biobert_labels(embeddings, output_file)
     else:  
+        
+        if directory_onnx_model == None:
+            print("Not choosen an directory to save onnx model")
+            exit()
+        
         embeddings = BioBertVectorizer.predict_cpu(corpus=corpus, 
-                                                   directory=directory_cpu_onnx_model, 
+                                                   directory=directory_onnx_model, 
                                                    output_prefix=output_prefix)
         output_file = f"{output_prefix}_cpu.npy"
         Preprocessor.save_biobert_labels(embeddings, output_file)

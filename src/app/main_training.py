@@ -50,9 +50,8 @@ def main():
     else:
         print(f"Path does NOT exists")
         X_train_feat = create_bio_bert_vectorizer(corpus=X_train, 
-                                                      directory_embeddings=vectorizer_directory, 
-                                                      directory_cpu_onnx_model=onnx_directory, 
-                                                      output_embeddings_file=onnx_gpu_prefix_filepath)
+                                                    output_embeddings_file=onnx_gpu_prefix_filepath,
+                                                    directory_onnx_model=onnx_directory)
  
         
     Y_train_feat = create_hierarchical_clustering(X_train_feat)
