@@ -28,8 +28,9 @@ def main():
     
     vectorizer_directory = "data/processed/vectorizer"
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
-    onnx_cpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_cpu_sparse.npz"
-    onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_gpu_sparse.npz"
+    onnx_cpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_cpu.npy"
+    onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_gpu.npy"
+    onnx_gpu_prefix_filepath = "data/processed/vectorizer/biobert_onnx_dense.npz"
     vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
 
     parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
@@ -50,7 +51,7 @@ def main():
         X_train_feat = create_bio_bert_vectorizer(corpus=X_train, 
                                                       directory_embeddings=vectorizer_directory, 
                                                       directory_cpu_onnx_model=onnx_directory, 
-                                                      output_embeddings_file=onnx_gpu_embeddigns_filepath)
+                                                      output_embeddings_file=onnx_gpu_prefix_filepath)
  
         
     Y_train_feat = create_hierarchical_clustering(X_train_feat)
