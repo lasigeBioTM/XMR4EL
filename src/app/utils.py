@@ -81,13 +81,27 @@ def create_hierarchical_clustering(X_train_feat):
         
         from src.machine_learning.gpu.ml import KMeansGPU
         
-        divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(X_train_feat, CLUSTERING_MODEL=KMeansGPU.create_model())
+        divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(
+            X_train_feat, 
+            CLUSTERING_MODEL=KMeansGPU.create_model(),
+            gpu_usage=True
+        )
+        
+        divisive_hierarchical_clustering.save("data/processed/clustering")
+        
     else:
         print("Processing Hierarchical Clustering Algorithm with CPU SUPPORT")
         
         from src.machine_learning.cpu.ml import KMeansCPU
         
-        divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(X_train_feat, CLUSTERING_MODEL=KMeansCPU.create_model())
+        divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(
+            X_train_feat, 
+            CLUSTERING_MODEL=KMeansCPU.create_model(),
+            gpu_usage=False
+        )
+        
+        divisive_hierarchical_clustering.save("data/processed/clustering")
+        
     return divisive_hierarchical_clustering.labels
 
 def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
@@ -118,7 +132,8 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
             Y_train_feat, 
             LINEAR_MODEL=LogisticRegressionCPU.create_model(), 
             CLUSTERING_MODEL=KMeansCPU.create_model(), 
-            top_k=k
+            top_k=k,
+            gpu_usage=False
         )
         
         hierarchical_linear_model.save("data/processed/regression")

@@ -197,7 +197,14 @@ class HierarchicalLinearModel:
             else:
                 break
 
-        return cls(best_linear_model, LINEAR_MODEL.model_type, best_labels, best_top_k_score, top_k)
+        return cls(
+            linear_model=best_linear_model, 
+            linear_model_type=LINEAR_MODEL.model_type, 
+            labels=best_labels, 
+            top_k_score=best_top_k_score, 
+            top_k=top_k,
+            gpu_usage=gpu_usage
+        )
     
     def predict(self, test_input, top_k, top_k_threshold):
         
