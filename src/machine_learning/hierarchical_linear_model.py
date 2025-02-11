@@ -75,7 +75,10 @@ class HierarchicalLinearModel:
             """
             unique_labels = np.unique(labels)
             valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
-            centroids = np.array([X[labels == label].mean(axis=0).A.flatten() for label in unique_labels])
+            centroids = np.array([
+                X[labels == label].mean(axis=0) 
+                for label in unique_labels
+            ])
             
             updated_labels = labels.copy()
             for label in unique_labels:                
