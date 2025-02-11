@@ -15,7 +15,7 @@ class KMeansGPU(Clustering):
     }
 
     @classmethod
-    def create_model(cls, kwargs):
+    def create_model(cls, kwargs={}):
         params = {**cls.DEFAULTS, **kwargs}
         return cls(
             model = KMeans(**params),
