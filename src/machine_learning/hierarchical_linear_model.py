@@ -121,12 +121,13 @@ class HierarchicalLinearModel:
                 num_classes = len(np.unique(Y))
                 return 100 + (10 * num_classes)
             
-            # Initialize LabelEncoder and transform Y_train
-            label_encoder = LabelEncoder()
-            y_encoded = label_encoder.fit_transform(Y)
+            def encode_labels(labels_list):
+                """Convert string labels into numeric labels"""
+                label_to_idx = {}
+                return np.array([label_to_idx.setdefault(label, len(label_to_idx)) for label in labels_list])
             
             # Train-test split
-            X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42, stratify=Y)
+            X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42, stratify=Y)
             n_iter = calculate_iteration_count(Y)
             
             # Train Logistic Regression Model AUMENTAR O NUMERO DE INTERAÇÕES
@@ -161,10 +162,9 @@ class HierarchicalLinearModel:
                     for i in indices:
                         new_labels[i] = f"{label}"
             
-            # Convert new labels back to original string labels
-            new_labels = label_encoder.inverse_transform([int(label[0]) for label in new_labels])  # Decode the label back to original
+            new_labels_encoded = encode_labels(new_labels)
             
-            return np.array(new_labels), top_k_score
+            return np.array(new_labels_encoded), top_k_score
         
         # Initial training
         labels, top_k_score = recursive_top_k_ranking(X, Y)
