@@ -14,7 +14,7 @@ class HierarchicalLinearModel:
     It iteratively refines clusters and predicts probabilities with a logistic model.
     """
 
-    def __init__(self, clustering_model_type=None, linear_model_type=None, labels=None, top_k_score=None, top_k=None):
+    def __init__(self, linear_model=None, linear_model_type=None, labels=None, top_k_score=None, top_k=None, gpu_usage=False):
         """
         Initializes the hierarchical model with clustering, logistic regression, and top-k accuracy score.
 
@@ -25,12 +25,12 @@ class HierarchicalLinearModel:
         top_k_score (float): Top-k accuracy score
         top_k (int): Number of top labels to consider
         """
-        self.clustering_model_type = clustering_model_type
+        self.linear_model = linear_model
         self.linear_model_type = linear_model_type
         self.labels = labels
         self.top_k_score = top_k_score
         self.top_k = top_k
-        self.gpu_usage = False
+        self.gpu_usage = gpu_usage
 
     def save(self, directory):
         """
@@ -38,11 +38,12 @@ class HierarchicalLinearModel:
         """
         os.makedirs(directory, exist_ok=True)
         model_data = {
-            'clustering_model_type': self.clustering_model_type,
+            'linear_model': self.linear_model,
             'linear_model_type': self.linear_model_type,
             'labels': self.labels,
             'top_k_score': self.top_k_score,
-            'top_k': self.top_k
+            'top_k': self.top_k,
+            'gpu_usage': self.gpu_usage
         }
         with open(os.path.join(directory, 'hierarchical_linear_model.pkl'), 'wb') as fout:
             pickle.dump(model_data, fout)
@@ -56,11 +57,12 @@ class HierarchicalLinearModel:
         with open(model_path, 'rb') as fclu:
             data = pickle.load(fclu)
         return cls(
-            clustering_model_type=data['clustering_model_type'], 
+            linear_model=data['linear_model'],
             linear_model_type=data['linear_model_type'],
             labels=data['labels'],
             top_k_score=data['top_k_score'],
-            top_k=data['top_k']
+            top_k=data['top_k'],
+            gpu_usage=data['gpu_usage']
         )
     
     @classmethod
@@ -89,8 +91,28 @@ class HierarchicalLinearModel:
                     updated_labels[labels == label] = valid_labels[closest_centroid_idx]
                 
             return updated_labels
-    
-        def recursive_top_k_ranking(X, Y):
+        
+        def encode_labels(labels_list):
+            """
+            Convert string labels into numeric labels
+            """
+            label_to_idx = {}
+            return np.array([label_to_idx.setdefault(label, len(label_to_idx)) for label in labels_list])
+        
+        def get_embeddings_by_label(X, Y, label):
+            """
+            Retrieves embeddings of a specific cluster label.
+            """
+            return X[Y == label], np.where(Y == label)[0]
+        
+        def calculate_iteration_count(num_classes):
+            """
+            Calculates the number of iterations based on the number of unique labels.
+            """
+            return 100 + (10 * num_classes)
+
+        # Embeddings, Labels
+        def linear_model_training(X, Y):
             """
             Runs the model training pipeline (clustering and logistic regression).
             """
@@ -107,35 +129,18 @@ class HierarchicalLinearModel:
                 Calculates the top-k accuracy score.
                 """
                 return top_k_accuracy_score(y_test, y_proba, k=k, normalize=True)
-            
-            def get_embeddings_by_label(X, Y, label):
-                """
-                Retrieves embeddings of a specific cluster label.
-                """
-                return X[Y == label], np.where(Y == label)[0]
-            
-            def calculate_iteration_count(Y):
-                """
-                Calculates the number of iterations based on the number of unique labels.
-                """
-                num_classes = len(np.unique(Y))
-                return 100 + (10 * num_classes)
-            
-            def encode_labels(labels_list):
-                """Convert string labels into numeric labels"""
-                label_to_idx = {}
-                return np.array([label_to_idx.setdefault(label, len(label_to_idx)) for label in labels_list])
+
             
             # Train-test split
             X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42, stratify=Y)
-            n_iter = calculate_iteration_count(Y)
+            # n_iter = calculate_iteration_count(Y)
             
             # Train Logistic Regression Model AUMENTAR O NUMERO DE INTERAÇÕES
             # Need find a way to calculate interactions, test "saga" and "newton-cg", get rid of lbfgs
             if gpu_usage:
                 linear_model = LINEAR_MODEL.create_model({'max_iter': 100}).fit(X_train, y_train)
             else:
-                linear_model = LINEAR_MODEL.create_model({'max_iter': 1000, 'solver':'saga', 'penalty': 'l2'}).fit(X_train, y_train)
+                linear_model = LINEAR_MODEL.create_model({'max_iter': 100, 'solver':'saga', 'penalty': 'l2'}).fit(X_train, y_train)
             
             # Predict probabilities
             y_proba = linear_model.predict_proba(X_test)
@@ -146,6 +151,9 @@ class HierarchicalLinearModel:
             # Compute top-k accuracy
             top_k_score = top_k_accuracy(y_test, y_proba, top_k)
             
+            return linear_model, Y, top_k_indices, top_k_score
+            
+        def clustering_model_refining(X, Y, top_k_indices):
             # Update cluster labels
             new_labels = [None] * X.shape[0]
             for label in np.unique(Y):
@@ -164,24 +172,55 @@ class HierarchicalLinearModel:
                     for i in indices:
                         new_labels[i] = f"{label}"
             
-            new_labels_encoded = encode_labels(new_labels)
+            new_labels_encoded = np.array(encode_labels(new_labels))
             
-            return np.array(new_labels_encoded), top_k_score
+            merged_labels = merge_small_clusters(X, new_labels_encoded, min_cluster_size)
+            
+            return merged_labels
         
         # Initial training
-        labels, top_k_score = recursive_top_k_ranking(X, Y)
+        linear_model, labels, top_k_indices, top_k_score = linear_model_training(X, Y)
 
-        # Refine labels and improve top-k score
-        best_labels, best_top_k_score = labels, top_k_score
-        labels = merge_small_clusters(X, labels, min_cluster_size)
-
+        # Refine labels and improve top-k score        
+        best_linear_model, best_labels, best_top_k_indices, best_top_k_score = linear_model, labels, top_k_indices, top_k_score
+        
         while True:
-            new_labels, new_top_k_score = recursive_top_k_ranking(X, labels)
+            
+            new_labels_encoded = clustering_model_refining(X, best_labels, best_top_k_indices)
+            
+            new_linear_model, new_labels, new_top_k_indices, new_top_k_score = linear_model_training(X, new_labels_encoded)
+            
             if new_top_k_score > best_top_k_score:
-                best_top_k_score = new_top_k_score
+                best_linear_model = new_linear_model
                 best_labels = new_labels
-                labels = merge_small_clusters(X, best_labels, min_cluster_size)
+                best_top_k_indices = new_top_k_indices
+                best_top_k_score = new_top_k_score
             else:
                 break
 
-        return cls("KMeansCPU", "LogisticRegressionCPU", best_labels, best_top_k_score, top_k)
+        return cls(best_linear_model, LINEAR_MODEL.model_type, best_labels, best_top_k_score, top_k)
+    
+    def predict(self, test_input, top_k, top_k_threshold):
+        
+        def get_top_k_indices(y_proba, k, top_k_threshold):
+            """
+            Returns the top-k indices for each sample based on predicted probabilities.
+            """
+            filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
+            top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
+            return top_k_indices.tolist()
+        
+        def top_k_accuracy(y_test, y_proba, k):
+            """
+            Calculates the top-k accuracy score.
+            """
+            return top_k_accuracy_score(y_test, y_proba, k=k, normalize=True)
+        
+        # Predict probabilities
+        y_proba = self.linear_model.predict_proba(test_input)
+                
+        # Get top-k predictions
+        top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
+            
+        # Compute top-k accuracy
+        top_k_score = top_k_accuracy(test_input, y_proba, top_k)
