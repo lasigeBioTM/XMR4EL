@@ -23,7 +23,7 @@ class KMeansGPU(Clustering):
         )
 
     def fit(self, X_train):
-        self.model = self.model.fit(X_train.toarray())
+        self.model = self.model.fit(X_train)
         return self.model
     
 class LogisticRegressionGPU(Classifier):
@@ -38,7 +38,7 @@ class LogisticRegressionGPU(Classifier):
     }
 
     @classmethod
-    def create_model(cls, kwargs):
+    def create_model(cls, kwargs={}):
         params = {**cls.DEFAULTS, **kwargs}
         params['max_inter'] *= 10
         return cls(
@@ -47,6 +47,6 @@ class LogisticRegressionGPU(Classifier):
         )
 
     def fit(self, X_train, Y_train):
-        self.model = self.model.fit(X_train.toarray(), Y_train)
+        self.model = self.model.fit(X_train, Y_train)
         return self.model   
     
