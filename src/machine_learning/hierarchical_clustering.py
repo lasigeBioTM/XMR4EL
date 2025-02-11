@@ -124,6 +124,9 @@ class DivisiveHierarchicalClustering():
             """
             Recursively perform the clustering process
             """
+            
+            print(type(X))
+            
             if X.shape[0] < max_leaf_size or depth == 0:
                 return {i: prefix for i in range(X.shape[0])}
             
