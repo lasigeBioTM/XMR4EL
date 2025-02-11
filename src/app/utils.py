@@ -2,6 +2,7 @@ import subprocess
 import shutil
 import os
 
+from src.machine_learning.classifier import Classifier
 from src.machine_learning.hierarchical_clustering import DivisiveHierarchicalClustering
 from src.featurization.preprocessor import Preprocessor
 from src.featurization.vectorizer import BioBertVectorizer, TfidfVectorizer
@@ -116,6 +117,8 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
             CLUSTERING_MODEL=KMeansCPU.create_model(), 
             top_k=k
         )
+        
+        hierarchical_linear_model.save("data/processed/regression")
 
     return hierarchical_linear_model.top_k, hierarchical_linear_model.top_k_score
 
