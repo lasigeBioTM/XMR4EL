@@ -90,7 +90,7 @@ class DivisiveHierarchicalClustering():
             unique_labels = np.unique(labels)
             valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
             centroids = np.array([
-                X[labels == label].mean(axis=0).A.flatten()
+                X[labels == label].mean(axis=0)
                 for label in unique_labels
             ])
             
