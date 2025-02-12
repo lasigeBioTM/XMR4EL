@@ -224,7 +224,7 @@ class HierarchicalLinearModel:
             """
             filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
             top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
-            return top_k_indices.tolist()
+            return top_k_indices
         
         # Predict probabilities
         y_proba = self.linear_model.predict_proba(test_input)
