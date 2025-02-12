@@ -75,7 +75,7 @@ def load_tdidf_vectorizer(directory):
     model = Preprocessor.load(directory)
     return model
 
-def create_hierarchical_clustering(X_train_feat):
+def create_hierarchical_clustering(X_train_feat, save_directory):
     if GPU_AVAILABLE:
         print("Processing Hierarchical Clustering Algorithm with GPU SUPPORT")
         
@@ -87,7 +87,7 @@ def create_hierarchical_clustering(X_train_feat):
             gpu_usage=True
         )
         
-        divisive_hierarchical_clustering.save("data/processed/clustering")
+        divisive_hierarchical_clustering.save(save_directory)
         
     else:
         print("Processing Hierarchical Clustering Algorithm with CPU SUPPORT")
@@ -100,11 +100,11 @@ def create_hierarchical_clustering(X_train_feat):
             gpu_usage=False
         )
         
-        divisive_hierarchical_clustering.save("data/processed/clustering")
+        divisive_hierarchical_clustering.save(save_directory)
         
     return divisive_hierarchical_clustering.labels
 
-def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
+def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k, save_directory):
     
     if GPU_AVAILABLE:
         
@@ -120,7 +120,7 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
             gpu_usage=True
         )
         
-        hierarchical_linear_model.save("data/processed/regression")
+        hierarchical_linear_model.save(save_directory)
         
     else:
         
@@ -136,10 +136,37 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k):
             gpu_usage=False
         )
         
-        hierarchical_linear_model.save("data/processed/regression")
+        hierarchical_linear_model.save(save_directory)
 
     return hierarchical_linear_model.top_k, hierarchical_linear_model.top_k_score
 
 def load_hierarchical_linear_model(directory):
     return HierarchicalLinearModel.load(directory)
+
+def load_hierarchical_clustering_model(directory):
+    return DivisiveHierarchicalClustering.load(directory)
+
+def predict_labels_hierarchical_clustering_model(hierarchical_clustering_model, test_input):
+    
+    if GPU_AVAILABLE:
+        print("Predicting Labels with GPU SUPPORT")
+        
+        from src.machine_learning.gpu.ml import KMeansGPU
+        
+        predict_labels = hierarchical_clustering_model.predict(KMeansGPU.create_model(), test_input)
+    
+    else:
+        print("Predict Labels with CPU SUPPORT")
+        
+        from src.machine_learning.cpu.ml import KMeansCPU
+        
+        predict_labels = hierarchical_clustering_model.predict(KMeansCPU.create_model(), test_input)
+        
+    return predict_labels
+
+def predict_labels_hierarchical_linear_model(hierarchical_linear_model, predicted_labels, k):
+    
+    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = hierarchical_linear_model.predict(predicted_labels, k)
+    
+    return predictions, per_sample_mean_topk_scores, overall_mean_topk_score
 

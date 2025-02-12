@@ -49,7 +49,7 @@ class HierarchicalLinearModel:
             'top_k': self.top_k,
             'gpu_usage': self.gpu_usage
         }
-        with open(os.path.join(directory, 'hierarchical_linear_model.pkl'), 'wb') as fout:
+        with open(directory, 'wb') as fout:
             pickle.dump(model_data, fout)
 
     @classmethod
@@ -216,7 +216,7 @@ class HierarchicalLinearModel:
             gpu_usage=gpu_usage
         )
     
-    def predict(self, test_input, top_k, top_k_threshold=0.9):
+    def predict(self, predicted_labels, top_k, top_k_threshold=0.9):
         
         def get_top_k_indices(y_proba, k, top_k_threshold):
             """
@@ -243,7 +243,7 @@ class HierarchicalLinearModel:
             return sum(top_k_scores) / len(top_k_scores) if top_k_scores else 0.0
         
         # Predict probabilities
-        y_proba = self.linear_model.predict_proba(test_input)
+        y_proba = self.linear_model.predict_proba(predicted_labels)
                 
         # Get top-k predictions
         top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)

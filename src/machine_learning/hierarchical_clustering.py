@@ -31,7 +31,7 @@ class DivisiveHierarchicalClustering():
             'centroids': self.centroids,
             'gpu_usage': self.gpu_usage
         }
-        with open(os.path.join(directory, 'hierarchical_clustering_model.pkl'), 'wb') as fout:
+        with open(directory, 'wb') as fout:
             pickle.dump(model_data, fout)
 
     @classmethod
@@ -178,4 +178,8 @@ class DivisiveHierarchicalClustering():
             gpu_usage=gpu_usage
         )
         
+    def predict(self, CLUSTERING_MODEL, test_input):
+        clustering_model = CLUSTERING_MODEL.create_model({'n_clusters': len(self.centroids), 'init': self.centroids, 'n_init': 1})
+        clustering_model.fit(test_input)
+        return clustering_model.predict(test_input)
                     

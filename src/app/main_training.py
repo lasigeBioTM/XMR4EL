@@ -53,10 +53,11 @@ def main():
                                                     output_embeddings_file=onnx_gpu_prefix_filepath,
                                                     directory_onnx_model=onnx_directory)
  
-        
-    Y_train_feat = create_hierarchical_clustering(X_train_feat)
     
-    top_k, top_k_score = create_hierarchical_linear_model(X_train_feat, Y_train_feat, 3)
+    "Get directorys"
+    Y_train_feat = create_hierarchical_clustering(X_train_feat, save_directory="")
+    
+    top_k, top_k_score = create_hierarchical_linear_model(X_train_feat, Y_train_feat, 3, save_directory="")
     
     print(f"Top-{top_k} Score {top_k_score}")
     
