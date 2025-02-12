@@ -53,7 +53,9 @@ def main():
     
     predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = hierarchical_linear_model.predict(test_input, k)
     
-    for i, sample in enumerate(per_sample_mean_topk_scores.tolist):
+    type(per_sample_mean_topk_scores)
+    
+    for i, sample in enumerate(per_sample_mean_topk_scores):
         print(f"Sample {i}: Top-{k} Mean Predictions: {sample}") 
     
     print("Overall Mean Top-k Score", overall_mean_topk_score)
