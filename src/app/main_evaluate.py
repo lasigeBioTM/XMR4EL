@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 from src.app.commandhelper import MainCommand
-from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_clustering, create_hierarchical_linear_model, load_bio_bert_vectorizer, load_hierarchical_linear_model, load_train_and_labels_file
+from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_clustering, create_hierarchical_linear_model, load_bio_bert_vectorizer, load_hierarchical_clustering_model, load_hierarchical_linear_model, load_train_and_labels_file, predict_labels_hierarchical_clustering_model, predict_labels_hierarchical_linear_model
 
 """
 
@@ -32,6 +32,7 @@ def main():
     
     test_input_embeddings_filepath = "data/processed/vectorizer/text_input_embeddings.npy"
 
+    hierarchical_clustering_model_filepath = "data/processed/clustering/hierarchical_clustering_model.pkl"
     hierarchical_linear_model_filepath = "data/processed/regression/hierarchical_linear_model.pkl"
     
     test_input_filepath = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
@@ -45,14 +46,17 @@ def main():
                                                     output_embeddings_file=test_input_embeddings_filepath,
                                                     directory_onnx_model=onnx_directory)
     
-    # X_train_feat = load_bio_bert_vectorizer(test_input_filepath)
+    hierarchical_clustering_model = load_hierarchical_clustering_model(hierarchical_clustering_model)
+    
+    predicted_labels = predict_labels_hierarchical_clustering_model(hierarchical_clustering_model, test_input)
+    
+    print(predicted_labels)
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
     k = 1
     
-    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = hierarchical_linear_model.predict(test_input, k)
-    
+    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = predict_labels_hierarchical_linear_model(hierarchical_linear_model, predicted_labels, k)
     type(per_sample_mean_topk_scores)
     
     for i, sample in enumerate(per_sample_mean_topk_scores):
@@ -63,6 +67,7 @@ def main():
     end = time.time()
     
     print(f"{end - start} secs of running")
+    
 
 if __name__ == "__main__":
     main()
