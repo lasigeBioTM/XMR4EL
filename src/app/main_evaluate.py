@@ -46,7 +46,7 @@ def main():
                                                     output_embeddings_file=test_input_embeddings_filepath,
                                                     directory_onnx_model=onnx_directory)
     
-    hierarchical_clustering_model = load_hierarchical_clustering_model(hierarchical_clustering_model)
+    hierarchical_clustering_model = load_hierarchical_clustering_model(hierarchical_clustering_model_filepath)
     
     predicted_labels = predict_labels_hierarchical_clustering_model(hierarchical_clustering_model, test_input)
     
