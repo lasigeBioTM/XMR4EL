@@ -51,13 +51,12 @@ def main():
     
     k = 3
     
-    top_k_predictions = hierarchical_linear_model.predict(test_input, k)
+    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = hierarchical_linear_model.predict(test_input, k)
     
-    # Display predictions
-    for i, (indices, scores) in enumerate(top_k_predictions):
-        print(f"Sample {i}:")
-        print(f"  Top-{k} indices: {indices}")
-        print(f"  Top-{k} scores: {scores}")
+    for i, sample in enumerate(per_sample_mean_topk_scores.tolist):
+        print(f"Sample {i}: Top-{k} Mean Predictions: {sample}") 
+    
+    print("Overall Mean Top-k Score", overall_mean_topk_score)
     
     end = time.time()
     

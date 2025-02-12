@@ -226,6 +226,22 @@ class HierarchicalLinearModel:
             top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
             return top_k_indices
         
+        def calculate_mean_topk_score(top_k_scores):
+            """
+            Calculate the mean of the top-k scores for a single sample.
+
+            Parameters
+            ----------
+            top_k_scores : list of float
+                List of scores for the top-k predictions.
+
+            Returns
+            -------
+            float
+                Mean of the top-k scores.
+            """
+            return sum(top_k_scores) / len(top_k_scores) if top_k_scores else 0.0
+        
         # Predict probabilities
         y_proba = self.linear_model.predict_proba(test_input)
                 
@@ -233,12 +249,18 @@ class HierarchicalLinearModel:
         top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
             
         # Get top-k scores (probabilities)
-        top_k_scores = np.take_along_axis(y_proba, top_k_indices, axis=1)
+        top_k_scores = np.take_along_axis(y_proba, top_k_indices, axis=1)        
+
+        # Calculate mean of top-k scores for each sample
+        per_sample_mean_topk_scores = np.mean(top_k_scores, axis=1)
+            
+        # Calculate the overall mean top-k score across all samples
+        overall_mean_topk_score = np.mean(per_sample_mean_topk_scores)
     
         # Combine indices and scores
         predictions = [
             (indices.tolist(), scores.tolist()) for indices, scores in zip(top_k_indices, top_k_scores)
         ]
     
-        return predictions
+        return predictions, per_sample_mean_topk_scores, overall_mean_topk_score
         
