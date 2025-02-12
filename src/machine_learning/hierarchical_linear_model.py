@@ -3,7 +3,7 @@ import pickle
 
 import numpy as np
 
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import top_k_accuracy_score, pairwise_distances_argmin_min
 
@@ -77,6 +77,11 @@ class HierarchicalLinearModel:
         """
         Fits the model using clustering and logistic regression, and iteratively refines the cluster labels.
         """
+        
+         # Initialize one-hot encoder
+        one_hot_encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
+        Y_one_hot = one_hot_encoder.fit_transform(Y.reshape(-1, 1))  # Convert to one-hot encoding
+        
         def merge_small_clusters(X, labels, min_cluster_size=10):
             """
             Merges small clusters with larger clusters.
@@ -216,54 +221,6 @@ class HierarchicalLinearModel:
             top_k=top_k,
             gpu_usage=gpu_usage
         )
-    
-    def _predict(self, predicted_labels, top_k, top_k_threshold=0.9):
-        
-        def get_top_k_indices(y_proba, k, top_k_threshold):
-            """
-            Returns the top-k indices for each sample based on predicted probabilities.
-            """
-            filtered_proba = np.where(y_proba >= top_k_threshold, y_proba, -np.inf)
-            top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
-            return top_k_indices
-        
-        def calculate_mean_topk_score(top_k_scores):
-            """
-            Calculate the mean of the top-k scores for a single sample.
-
-            Parameters
-            ----------
-            top_k_scores : list of float
-                List of scores for the top-k predictions.
-
-            Returns
-            -------
-            float
-                Mean of the top-k scores.
-            """
-            return sum(top_k_scores) / len(top_k_scores) if top_k_scores else 0.0
-        
-        # Predict probabilities
-        y_proba = self.linear_model.predict_proba(predicted_labels)
-                
-        # Get top-k predictions
-        top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
-            
-        # Get top-k scores (probabilities)
-        top_k_scores = np.take_along_axis(y_proba, top_k_indices, axis=1)        
-
-        # Calculate mean of top-k scores for each sample
-        per_sample_mean_topk_scores = np.mean(top_k_scores, axis=1)
-            
-        # Calculate the overall mean top-k score across all samples
-        overall_mean_topk_score = np.mean(per_sample_mean_topk_scores)
-    
-        # Combine indices and scores
-        predictions = [
-            (indices.tolist(), scores.tolist()) for indices, scores in zip(top_k_indices, top_k_scores)
-        ]
-    
-        return predictions, per_sample_mean_topk_scores, overall_mean_topk_score
     
     def predict(self, embeddings, labels, top_k):
         
