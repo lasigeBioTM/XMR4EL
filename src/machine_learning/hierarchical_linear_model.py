@@ -7,6 +7,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import top_k_accuracy_score, pairwise_distances_argmin_min
 
+# ONE HOT ENCODINGS
 
 class HierarchicalLinearModel:
     """
@@ -216,7 +217,7 @@ class HierarchicalLinearModel:
             gpu_usage=gpu_usage
         )
     
-    def predict(self, predicted_labels, top_k, top_k_threshold=0.9):
+    def _predict(self, predicted_labels, top_k, top_k_threshold=0.9):
         
         def get_top_k_indices(y_proba, k, top_k_threshold):
             """
@@ -263,4 +264,56 @@ class HierarchicalLinearModel:
         ]
     
         return predictions, per_sample_mean_topk_scores, overall_mean_topk_score
+    
+    def predict(self, embeddings, labels, top_k):
         
+        def calculate_top_k_accuracy(predictions, true_labels, top_k):
+            # This function checks if the true label is in the top-k predictions
+            correct = 0
+            for i in range(len(true_labels)):
+                top_k_preds = predictions[i].argsort()[-top_k:][::-1]  # Get top-k predicted class indices
+                true_label = true_labels[i]
+                
+                if true_label in top_k_preds:  # If true label is in top-k predictions
+                    correct += 1
+            
+            top_k_accuracy = correct / len(true_labels)
+            return top_k_accuracy
+        
+        def top_k_score(pred_probs, true_labels, k=3):
+            """
+            Calculate top-k score for each instance in the dataset.
+            
+            Parameters:
+            - pred_probs: Numpy array of predicted probabilities, shape (n_samples, n_classes)
+            - true_labels: Array of true labels, shape (n_samples,)
+            - k: Top-k predictions to consider for scoring
+            
+            Returns:
+            - average_top_k_score: The average top-k score across all instances
+            """
+            top_k_scores = []
+            
+            for i in range(len(true_labels)):
+                # Get the predicted probabilities for the current instance
+                probs = pred_probs[i]
+                
+                # Sort the probabilities in descending order and get the top-k indices
+                top_k_indices = np.argsort(probs)[::-1][:k]
+                
+                # Get the top-k probabilities
+                top_k_probs = probs[top_k_indices]
+                
+                # Calculate the top-k score (sum of top-k probabilities)
+                top_k_score = np.sum(top_k_probs)
+                
+                top_k_scores.append(top_k_score)
+            
+            # Calculate the average top-k score across all instances
+            average_top_k_score = np.mean(top_k_scores)
+            
+            return average_top_k_score
+        
+        preds = self.linear_model.predict_proba(embeddings)
+        
+        return top_k_score(preds, labels, top_k)

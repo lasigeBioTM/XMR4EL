@@ -164,9 +164,9 @@ def predict_labels_hierarchical_clustering_model(hierarchical_clustering_model, 
         
     return predict_labels
 
-def predict_labels_hierarchical_linear_model(hierarchical_linear_model, predicted_labels, k):
+def predict_labels_hierarchical_linear_model(hierarchical_linear_model, embeddings, predicted_labels, k):
     
-    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = hierarchical_linear_model.predict(predicted_labels, k)
+    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = hierarchical_linear_model.predict(embeddings, predicted_labels, k)
     
     return predictions, per_sample_mean_topk_scores, overall_mean_topk_score
 
