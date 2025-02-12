@@ -49,9 +49,9 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    top_k_indices, top_k_scores = hierarchical_linear_model.predict(test_input, 3)
+    predictions = hierarchical_linear_model.predict(test_input, 3)
     
-    print(top_k_indices, top_k_scores)
+    print(predictions)
     
     end = time.time()
     
