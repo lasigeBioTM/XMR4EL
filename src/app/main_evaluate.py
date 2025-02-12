@@ -41,7 +41,7 @@ def main():
     with open(test_input_filepath, 'r') as test_input_file:
         test_input = [line.strip() for line in test_input_file]
     
-    X_train_feat = create_bio_bert_vectorizer(corpus=test_input, 
+    test_input = create_bio_bert_vectorizer(corpus=test_input, 
                                                     output_embeddings_file=test_input_embeddings_filepath,
                                                     directory_onnx_model=onnx_directory)
     
@@ -49,7 +49,9 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    print(hierarchical_linear_model.linear_model)
+    top_k_indices, top_k_scores = hierarchical_linear_model.predict(test_input, 3)
+    
+    print(top_k_indices, top_k_scores)
     
     end = time.time()
     

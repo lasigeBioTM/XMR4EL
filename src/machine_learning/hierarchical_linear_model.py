@@ -14,7 +14,7 @@ class HierarchicalLinearModel:
     It iteratively refines clusters and predicts probabilities with a logistic model.
     """
 
-    def __init__(self, linear_model=None, linear_model_type=None, labels=None, top_k_score=None, top_k=None, gpu_usage=False):
+    def __init__(self, linear_model=None, linear_model_type=None, X_test=None, y_test=None, labels=None, top_k_score=None, top_k=None, gpu_usage=False):
         """
         Initializes the hierarchical model with clustering, logistic regression, and top-k accuracy score.
 
@@ -27,6 +27,8 @@ class HierarchicalLinearModel:
         """
         self.linear_model = linear_model
         self.linear_model_type = linear_model_type
+        self.X_test = X_test
+        self.y_test = y_test
         self.labels = labels
         self.top_k_score = top_k_score
         self.top_k = top_k
@@ -40,6 +42,8 @@ class HierarchicalLinearModel:
         model_data = {
             'linear_model': self.linear_model,
             'linear_model_type': self.linear_model_type,
+            'X_test': self.X_test,
+            'y_test': self.y_test,
             'labels': self.labels,
             'top_k_score': self.top_k_score,
             'top_k': self.top_k,
@@ -59,6 +63,8 @@ class HierarchicalLinearModel:
         return cls(
             linear_model=data['linear_model'],
             linear_model_type=data['linear_model_type'],
+            X_test=data['X_test'],
+            y_test=data['y_test'],
             labels=data['labels'],
             top_k_score=data['top_k_score'],
             top_k=data['top_k'],
@@ -151,7 +157,7 @@ class HierarchicalLinearModel:
             # Compute top-k accuracy
             top_k_score = top_k_accuracy(y_test, y_proba, top_k)
             
-            return linear_model, Y, top_k_indices, top_k_score
+            return linear_model, Y, X_test, y_test, top_k_indices, top_k_score
             
         def clustering_model_refining(X, Y, top_k_indices):
             # Update cluster labels
@@ -179,19 +185,21 @@ class HierarchicalLinearModel:
             return merged_labels
         
         # Initial training
-        linear_model, labels, top_k_indices, top_k_score = linear_model_training(X, Y)
+        linear_model, labels, X_test, y_test, top_k_indices, top_k_score = linear_model_training(X, Y)
 
         # Refine labels and improve top-k score        
-        best_linear_model, best_labels, best_top_k_indices, best_top_k_score = linear_model, labels, top_k_indices, top_k_score
+        best_linear_model, best_labels, best_X_test, best_y_test, best_top_k_indices, best_top_k_score = linear_model, labels, X_test, y_test, top_k_indices, top_k_score
         
         while True:
             new_labels_encoded = clustering_model_refining(X, best_labels, best_top_k_indices)
             
-            new_linear_model, new_labels, new_top_k_indices, new_top_k_score = linear_model_training(X, new_labels_encoded)
+            new_linear_model, new_labels, new_X_test, new_y_test, new_top_k_indices, new_top_k_score = linear_model_training(X, new_labels_encoded)
             
             if new_top_k_score > best_top_k_score:
                 best_linear_model = new_linear_model
                 best_labels = new_labels
+                best_X_test = new_X_test
+                best_y_test = new_y_test
                 best_top_k_indices = new_top_k_indices
                 best_top_k_score = new_top_k_score
             else:
@@ -201,12 +209,14 @@ class HierarchicalLinearModel:
             linear_model=best_linear_model, 
             linear_model_type=LINEAR_MODEL.model_type, 
             labels=best_labels, 
+            X_test=best_X_test,
+            y_test=best_y_test,
             top_k_score=best_top_k_score, 
             top_k=top_k,
             gpu_usage=gpu_usage
         )
     
-    def predict(self, test_input, top_k, top_k_threshold):
+    def predict(self, test_input, top_k, top_k_threshold=0.9):
         
         def get_top_k_indices(y_proba, k, top_k_threshold):
             """
@@ -222,6 +232,8 @@ class HierarchicalLinearModel:
             """
             return top_k_accuracy_score(y_test, y_proba, k=k, normalize=True)
         
+        y_test = self.y_test
+        
         # Predict probabilities
         y_proba = self.linear_model.predict_proba(test_input)
                 
@@ -229,4 +241,6 @@ class HierarchicalLinearModel:
         top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
             
         # Compute top-k accuracy
-        top_k_score = top_k_accuracy(test_input, y_proba, top_k)
+        top_k_score = top_k_accuracy(y_test, y_proba, k=top_k)
+        
+        return top_k_indices, top_k_score
