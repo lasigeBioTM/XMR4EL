@@ -49,9 +49,15 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    predictions = hierarchical_linear_model.predict(test_input, 3)
+    k = 3
     
-    print(predictions)
+    top_k_predictions = hierarchical_linear_model.predict(test_input, k)
+    
+    # Display predictions
+    for i, (indices, scores) in enumerate(top_k_predictions):
+        print(f"Sample {i}:")
+        print(f"  Top-{k} indices: {indices}")
+        print(f"  Top-{k} scores: {scores}")
     
     end = time.time()
     
