@@ -52,10 +52,11 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    k = 1
+    k = 3
     
     top_k_score  = predict_labels_hierarchical_linear_model(hierarchical_linear_model, test_input, predicted_labels, k)
     
+    # Overall Mean Top-1 Score: 0.6162762641906738
     print(f"Overall Mean Top-{k} Score: {top_k_score}")
     
     end = time.time()
