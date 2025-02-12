@@ -314,6 +314,32 @@ class HierarchicalLinearModel:
             
             return average_top_k_score
         
+        def top_k_score_sklearn(pred_probs, true_labels, k=3):
+            """
+            Calculate top-k score using sklearn's top_k_accuracy_score as a helper.
+            
+            Parameters:
+            - pred_probs: Numpy array of predicted probabilities, shape (n_samples, n_classes)
+            - true_labels: Array of true labels, shape (n_samples,)
+            - k: Top-k predictions to consider for scoring
+            
+            Returns:
+            - top_k_accuracy: The top-k accuracy using sklearn
+            - average_top_k_score: The average sum of the top-k probabilities across all instances
+            """
+            # Calculate sklearn's top-k accuracy score
+            top_k_accuracy = top_k_accuracy_score(true_labels, pred_probs, k=k, labels=np.arange(pred_probs.shape[1]))
+            
+            # Calculate the average top-k score (sum of probabilities for the top-k predictions)
+            top_k_scores = []
+            for probs in pred_probs:
+                # Sort probabilities in descending order and sum the top-k
+                top_k_scores.append(np.sum(np.sort(probs)[::-1][:k]))
+            
+            average_top_k_score = np.mean(top_k_scores)
+            
+            return top_k_accuracy, average_top_k_score
+        
         preds = self.linear_model.predict_proba(embeddings)
         
-        return top_k_score(preds, labels, top_k)
+        return top_k_score_sklearn(preds, labels, top_k)
