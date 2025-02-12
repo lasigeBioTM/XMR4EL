@@ -52,11 +52,15 @@ def main():
     
     print(predicted_labels)
     
+    # Add the cluster labels as a new feature to the test data
+    test_input_with_cluster_labels = np.hstack((test_input, predicted_labels.reshape(-1, 1)))  # Add cluster labels as a new feature
+    
+    
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
     k = 1
     
-    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = predict_labels_hierarchical_linear_model(hierarchical_linear_model, predicted_labels, k)
+    predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = predict_labels_hierarchical_linear_model(hierarchical_linear_model, test_input_with_cluster_labels, k)
     type(per_sample_mean_topk_scores)
     
     for i, sample in enumerate(per_sample_mean_topk_scores):
