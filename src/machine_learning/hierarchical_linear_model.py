@@ -226,21 +226,19 @@ class HierarchicalLinearModel:
             top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
             return top_k_indices.tolist()
         
-        def top_k_accuracy(y_test, y_proba, k):
-            """
-            Calculates the top-k accuracy score.
-            """
-            return top_k_accuracy_score(y_test, y_proba, k=k, normalize=True)
-        
-        y_test = self.y_test
-        
         # Predict probabilities
         y_proba = self.linear_model.predict_proba(test_input)
                 
         # Get top-k predictions
         top_k_indices = get_top_k_indices(y_proba, top_k, top_k_threshold)
             
-        # Compute top-k accuracy
-        top_k_score = top_k_accuracy(y_test, y_proba, k=top_k)
+        # Get top-k scores (probabilities)
+        top_k_scores = np.take_along_axis(y_proba, top_k_indices, axis=1)
+    
+        # Combine indices and scores
+        predictions = [
+            (indices.tolist(), scores.tolist()) for indices, scores in zip(top_k_indices, top_k_scores)
+        ]
+    
+        return predictions
         
-        return top_k_indices, top_k_score
