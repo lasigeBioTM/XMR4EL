@@ -49,7 +49,7 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    k = 3
+    k = 5
     
     predictions, per_sample_mean_topk_scores, overall_mean_topk_score  = hierarchical_linear_model.predict(test_input, k)
     
