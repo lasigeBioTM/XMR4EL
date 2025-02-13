@@ -6,6 +6,8 @@ import numpy as np
 from src.app.commandhelper import MainCommand
 from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_clustering, create_hierarchical_linear_model, load_bio_bert_vectorizer, load_hierarchical_clustering_model, load_hierarchical_linear_model, load_train_and_labels_file, predict_labels_hierarchical_clustering_model, predict_labels_hierarchical_linear_model
 
+from sklearn.metrics import pairwise_distances_argmin_min
+
 """
 
     Depending on the train file, different number of labels, 
@@ -49,6 +51,12 @@ def main():
     hierarchical_clustering_model = load_hierarchical_clustering_model(hierarchical_clustering_model_filepath)
     
     predicted_labels = predict_labels_hierarchical_clustering_model(hierarchical_clustering_model, test_input)
+    
+    print(predicted_labels)
+    
+    labels = pairwise_distances_argmin_min(test_input, hierarchical_clustering_model.centroids)
+    
+    print(labels)
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
