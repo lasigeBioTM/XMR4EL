@@ -60,9 +60,7 @@ def main():
     "Get directorys"
     Y_train_feat = create_hierarchical_clustering(X_train_feat, save_directory=hierarchical_clustering_model_filepath)
     
-    top_k, top_k_score = create_hierarchical_linear_model(X_train_feat, Y_train_feat, 1, save_directory=hierarchical_linear_model_filepath)
-    
-    print(f"Top-{top_k} Score {top_k_score}")
+    create_hierarchical_linear_model(X_train_feat, Y_train_feat, 1, save_directory=hierarchical_linear_model_filepath)
     
     end = time.time()
     

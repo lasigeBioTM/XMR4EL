@@ -88,7 +88,7 @@ class HierarchicalLinearModel:
             
         # Need find a way to calculate interactions, test "saga" and "newton-cg", get rid of lbfgs
         if gpu_usage:
-            linear_model = linear_model_factory.create_model({'max_iter': 100}).fit(X_train, y_train)
+            linear_model = linear_model_factory.create_model({'max_iter': 1000}).fit(X_train, y_train)
         else:
             linear_model = linear_model_factory.create_model({'max_iter': 100, 'solver':'saga', 'penalty': 'l2'}).fit(X_train, y_train)
             

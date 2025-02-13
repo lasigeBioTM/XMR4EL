@@ -39,7 +39,6 @@ class LogisticRegressionGPU(Classifier):
     @classmethod
     def create_model(cls, kwargs={}):
         params = {**cls.DEFAULTS, **kwargs}
-        params['max_iter'] *= 10
         return cls(
             model = LogisticRegression(**params), 
             model_type = 'LogisticRegressionGPU'
