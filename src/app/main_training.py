@@ -33,7 +33,7 @@ def main():
     vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
     
     hierarchical_clustering_model_filepath = "data/processed/clustering/hierarchical_clustering_model.pkl"
-    hierarchical_linear_model_filepath = "data/processed/regression/hierarchical_linear_model.pkl"
+    hierarchical_linear_model_filepath = "data/processed/regression_dup/hierarchical_linear_model.pkl"
 
     start = time.time()
 
