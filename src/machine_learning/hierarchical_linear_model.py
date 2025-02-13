@@ -11,11 +11,12 @@ class HierarchicalLinearModel:
     Iteratively refines clusters and predicts probabilities using a linear model.
     """
 
-    def __init__(self, linear_model=None, linear_model_type=None, 
+    def __init__(self, linear_model=None, linear_model_type=None, labels=None,
                  top_k_score=None, top_k=3, gpu_usage=False):
         """Initialization"""
         self.linear_model = linear_model
         self.linear_model_type = linear_model_type
+        self.labels = labels
         self.top_k_score = top_k_score
         self.top_k = top_k
         self.gpu_usage = gpu_usage
