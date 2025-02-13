@@ -20,34 +20,23 @@ class DivisiveHierarchicalClustering():
         self.centroids = centroids
         self.gpu_usage = gpu_usage
         
-    def save(self, directory):
-        """
-        Saves the trained model (clustering and linear models) to the specified directory.
-        """
-        os.makedirs(directory, exist_ok=True)
-        model_data = {
-            'clustering_model_type': self.clustering_model_type,
-            'labels': self.labels,
-            'centroids': self.centroids,
-            'gpu_usage': self.gpu_usage
-        }
-        with open(directory, 'wb') as fout:
-            pickle.dump(model_data, fout)
+    def save(self, hierarchical_folder):
+        """Save the model and its parameters to a file """
+        os.makedirs(os.path.dirname(hierarchical_folder), exist_ok=True)
+        with open(hierarchical_folder, 'wb') as fout:
+            pickle.dump(self.__dict__, fout)
 
     @classmethod
-    def load(cls, model_path):
-        """
-        Loads a previously saved model from the specified path.
-        """
-        assert os.path.exists(model_path), f"{model_path} does not exist"
-        with open(model_path, 'rb') as fclu:
-            data = pickle.load(fclu)
-        return cls(
-            clustering_model_type=data['clustering_model_type'], 
-            labels=data['labels'],
-            centroids=data['centroids'],
-            gpu_usage=data['gpu_usage']
-        )
+    def load(cls, hierarchical_folder):
+        """Load a saved model from a file."""
+        if not os.path.exists(hierarchical_folder):
+            raise FileNotFoundError(f"Hierarchical folder {hierarchical_folder} does not exist.")
+        
+        with open(hierarchical_folder, 'rb') as fin:
+            model_data = pickle.load(fin)
+        model = cls()
+        model.__dict__.update(model_data)
+        return model
     
     @classmethod
     def fit(cls, X, CLUSTERING_MODEL, depth=3, max_leaf_size=100, prefix="", random_state=0, spherical=True, gpu_usage=False):
