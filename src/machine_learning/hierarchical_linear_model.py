@@ -148,9 +148,10 @@ class HierarchicalLinearModel:
             if len(cluster_indices) <= min_cluster_size:
                 cluster_points = X[cluster_indices]
                 _, closest_centroid_idx = pairwise_distances_argmin_min(cluster_points, centroids)
-                updated_labels[labels == label] = valid_labels[closest_centroid_idx[0]]
                 
-            return updated_labels
+                updated_labels[labels == label] = valid_labels[int(closest_centroid_idx[0])]
+                
+        return updated_labels
         
     @staticmethod    
     def __encode_labels(labels_list):

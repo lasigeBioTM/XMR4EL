@@ -62,7 +62,7 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    top_k = 5
+    top_k = 10
     
     class_labels = hierarchical_clustering_model.labels
     
