@@ -149,7 +149,7 @@ class BioBertVectorizer(Preprocessor):
         print(f"Total batches: {num_batches}")
 
         for batch_idx in range(num_batches):
-            print(f"Processing batch {batch_idx}")
+            print(f"Processing batch -> {batch_idx}")
 
             start = batch_idx * batch_size
             end = min((batch_idx + 1) * batch_size, len(corpus))
@@ -172,9 +172,9 @@ class BioBertVectorizer(Preprocessor):
         # Clean up batch files
         for f in batch_files:
             os.remove(f)
-            print(f"Deleted: {f}")
+            # print(f"Deleted: {f}")
 
-        print(all_embeddings)
+        # print(all_embeddings)
 
         return all_embeddings
 
