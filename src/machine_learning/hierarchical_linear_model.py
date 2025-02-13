@@ -179,6 +179,11 @@ class HierarchicalLinearModel:
         - top_k_accuracy: The top-k accuracy using sklearn
         - average_top_k_score: The average sum of the top-k probabilities across all instances
         """
+        
+        print(true_labels)
+        
+        print(pred_probs)
+        
         # Calculate sklearn's top-k accuracy score
         top_k_accuracy = top_k_accuracy_score(true_labels, pred_probs, k=k, labels=np.arange(pred_probs.shape[1]))
             
