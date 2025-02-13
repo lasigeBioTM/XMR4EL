@@ -185,10 +185,27 @@ class HierarchicalLinearModel:
             
         # Calculate the average top-k score (sum of probabilities for the top-k predictions)
         top_k_scores = []
+        
         for probs in pred_probs:
             # Sort probabilities in descending order and sum the top-k
             top_k_scores.append(np.sum(np.sort(probs)[::-1][:k]))
                 
+        for i in range(pred_probs.shape[0]):
+            # Get the probabilities for the current sample
+            probs = pred_probs[i]
+            
+            # Sort the probabilities in descending order and get the top-k indices
+            top_k_indices = np.argsort(probs)[::-1][:k]
+            
+            # Check if the true label is in the top-k
+            true_label = true_labels[i]
+            
+            # Print whether the true label is in the top-k predictions
+            if true_label in top_k_indices:
+                print(f"Sample {i} - True Label {true_label} is in the top-k")
+            else:
+                print(f"Sample {i} - True Label {true_label} is NOT in the top-k")
+            
         
         print(len(top_k_scores))
         
