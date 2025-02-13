@@ -98,7 +98,7 @@ class HierarchicalLinearModel:
         top_k_indices = cls.__get_top_k_indices(y_proba, top_k, top_k_threshold)
             
         # Compute top-k accuracy
-        top_k_score = top_k_accuracy_score(y_test, y_proba, top_k, normalize=True)
+        top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True)
             
         return linear_model, Y, top_k_indices, top_k_score
     
