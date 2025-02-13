@@ -52,7 +52,7 @@ class HierarchicalLinearModel:
         best_linear_model, best_labels, best_top_k_indices, best_top_k_score = linear_model, labels, top_k_indices, top_k_score
         
         while True:
-            new_labels_encoded = cls.__refine_clusters(X, best_labels, best_top_k_indices,
+            new_labels_encoded = cls.__refine_clusters(X, best_labels, clustering_model_factory, best_top_k_indices,
                                                        min_cluster_size, max_cluster_size, gpu_usage=gpu_usage)
             
             new_linear_model, new_labels, new_top_k_indices, new_top_k_score = cls.__train_linear_model(X, new_labels_encoded, linear_model_factory, 
