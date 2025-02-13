@@ -166,7 +166,7 @@ class HierarchicalLinearModel:
         return top_k_indices.tolist()
     
     @staticmethod
-    def __top_k_score_sklearn(pred_probs, true_labels, k=3):
+    def __top_k_score_sklearn(pred_probs, true_labels, class_labels, k=3):
         """
         Calculate top-k score using sklearn's top_k_accuracy_score as a helper.
             
@@ -200,11 +200,13 @@ class HierarchicalLinearModel:
             # Check if the true label is in the top-k
             true_label = true_labels[i]
             
+            top_k = [class_labels[idx] for idx in top_k_indices]
+            
             # Print whether the true label is in the top-k predictions
             if true_label in top_k_indices:
-                print(f"Sample {i} - True Label {true_label} is in the top-k")
+                print(f"Sample {i} - True Label {true_label} is in the top-k indices -> {top_k}")
             else:
-                print(f"Sample {i} - True Label {true_label} is NOT in the top-k")
+                print(f"Sample {i} - True Label {true_label} is NOT in the top-k indices -> {top_k}")
             
         
         print(len(top_k_scores))
