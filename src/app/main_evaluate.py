@@ -52,7 +52,7 @@ def main():
     
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    top_k = 5
+    top_k = 1
     
     top_k_acc, avg_top_k_score = predict_labels_hierarchical_linear_model(hierarchical_linear_model, test_input, predicted_labels, top_k)
     
