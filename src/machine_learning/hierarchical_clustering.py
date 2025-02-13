@@ -99,7 +99,7 @@ class DivisiveHierarchicalClustering():
         
     def predict(self, clustering_model_factory, test_input):
         
-        print(self.__count_label_occurrences(self.labels))
+        # print(self.__count_label_occurrences(self.labels))
         
         clustering_model = clustering_model_factory.create_model({'n_clusters': len(self.centroids), 'init': self.centroids, 'n_init': 1}).fit(test_input)
         return clustering_model.predict(test_input)
