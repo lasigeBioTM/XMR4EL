@@ -54,7 +54,9 @@ def main():
     
     top_k = 5
     
-    top_k_acc, avg_top_k_score = predict_labels_hierarchical_linear_model(hierarchical_linear_model, test_input, predicted_labels, top_k)
+    class_labels = hierarchical_clustering_model.labels
+    
+    top_k_acc, avg_top_k_score = predict_labels_hierarchical_linear_model(hierarchical_linear_model, test_input, predicted_labels, class_labels, top_k)
     
     # Overall Mean Top-1 Score: 0.6162762641906738
     # Overall Mean Top-3 Score: 0.8822723031044006
