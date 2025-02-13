@@ -31,6 +31,9 @@ def main():
     onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_gpu.npy"
     onnx_gpu_prefix_filepath = "data/processed/vectorizer/biobert_onnx_dense.npz"
     vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
+    
+    hierarchical_clustering_model_filepath = "data/processed/clustering/hierarchical_clustering_model.pkl"
+    hierarchical_linear_model_filepath = "data/processed/regression/hierarchical_linear_model.pkl"
 
     start = time.time()
 
@@ -55,9 +58,9 @@ def main():
  
     
     "Get directorys"
-    Y_train_feat = create_hierarchical_clustering(X_train_feat, save_directory="")
+    Y_train_feat = create_hierarchical_clustering(X_train_feat, save_directory=hierarchical_clustering_model_filepath)
     
-    top_k, top_k_score = create_hierarchical_linear_model(X_train_feat, Y_train_feat, 3, save_directory="")
+    top_k, top_k_score = create_hierarchical_linear_model(X_train_feat, Y_train_feat, 1, save_directory=hierarchical_linear_model_filepath)
     
     print(f"Top-{top_k} Score {top_k_score}")
     
