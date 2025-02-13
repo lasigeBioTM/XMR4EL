@@ -2,7 +2,6 @@ import subprocess
 import shutil
 import os
 
-from src.machine_learning.classifier import Classifier
 from src.machine_learning.hierarchical_clustering import DivisiveHierarchicalClustering
 from src.featurization.preprocessor import Preprocessor
 from src.featurization.vectorizer import BioBertVectorizer, TfidfVectorizer
