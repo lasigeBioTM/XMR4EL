@@ -113,7 +113,6 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k, save_directo
         hierarchical_linear_model = HierarchicalLinearModel.fit(
             X_train_feat, 
             Y_train_feat, 
-            top_k_threshold=0.15,
             linear_model_factory=LogisticRegressionGPU.create_model(), 
             clustering_model_factory=KMeansGPU.create_model(), 
             top_k=k,
@@ -130,8 +129,8 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k, save_directo
         hierarchical_linear_model = HierarchicalLinearModel.fit(
             X_train_feat, 
             Y_train_feat, 
-            LINEAR_MODEL=LogisticRegressionCPU.create_model(), 
-            CLUSTERING_MODEL=KMeansCPU.create_model(), 
+            linear_model_factory=LogisticRegressionCPU.create_model(), 
+            clustering_model_factory=KMeansCPU.create_model(), 
             top_k=k,
             gpu_usage=False
         )
