@@ -190,7 +190,7 @@ class HierarchicalLinearModel:
             top_k_scores.append(np.sum(np.sort(probs)[::-1][:k]))
                 
         
-        print(top_k_scores)
+        print(len(top_k_scores))
         
         average_top_k_score = np.mean(top_k_scores)
             
