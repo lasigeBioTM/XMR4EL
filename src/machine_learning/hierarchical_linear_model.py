@@ -76,9 +76,9 @@ class HierarchicalLinearModel:
             gpu_usage=gpu_usage
         )
     
-    def predict(self, embeddings, labels, top_k):        
+    def predict(self, embeddings, predicted_labels, class_labels, top_k):        
         preds = self.linear_model.predict_proba(embeddings)
-        return self.__top_k_score_sklearn(preds, labels, top_k)
+        return self.__top_k_score_sklearn(preds, predicted_labels, class_labels, top_k)
 
     # Embeddings, Labels
     @classmethod
