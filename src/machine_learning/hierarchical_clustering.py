@@ -119,7 +119,7 @@ class DivisiveHierarchicalClustering():
                 _, closest_centroid_idx = pairwise_distances_argmin_min(cluster_points, centroids)
                 updated_labels[labels == label] = valid_labels[closest_centroid_idx[0]]
                 
-            return updated_labels
+        return updated_labels
     
     @staticmethod
     def __compute_branching_factor(num_samples, min_clusters=2, max_clusters=16):
