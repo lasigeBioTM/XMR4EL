@@ -82,7 +82,7 @@ def create_hierarchical_clustering(X_train_feat, save_directory):
         
         divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(
             X_train_feat, 
-            CLUSTERING_MODEL=KMeansGPU.create_model(),
+            clustering_model_factory=KMeansGPU.create_model(),
             gpu_usage=True
         )
         
@@ -95,7 +95,7 @@ def create_hierarchical_clustering(X_train_feat, save_directory):
         
         divisive_hierarchical_clustering = DivisiveHierarchicalClustering.fit(
             X_train_feat, 
-            CLUSTERING_MODEL=KMeansCPU.create_model(),
+            clustering_model_factory=KMeansCPU.create_model(),
             gpu_usage=False
         )
         
@@ -113,6 +113,7 @@ def create_hierarchical_linear_model(X_train_feat, Y_train_feat, k, save_directo
         hierarchical_linear_model = HierarchicalLinearModel.fit(
             X_train_feat, 
             Y_train_feat, 
+            top_k_threshold=0.15,
             linear_model_factory=LogisticRegressionGPU.create_model(), 
             clustering_model_factory=KMeansGPU.create_model(), 
             top_k=k,
