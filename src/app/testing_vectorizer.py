@@ -32,7 +32,7 @@ def main():
                                                     output_embeddings_file=onnx_gpu_prefix_filepath,
                                                     directory_onnx_model=onnx_directory)
 
-    print(X_train_feat)
+    print(X_train_feat.shape)
 
 if __name__ == "__main__":
     main()
