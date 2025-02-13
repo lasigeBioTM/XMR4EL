@@ -33,7 +33,7 @@ def main():
     test_input_embeddings_filepath = "data/processed/vectorizer/text_input_embeddings.npy"
 
     hierarchical_clustering_model_filepath = "data/processed/clustering/hierarchical_clustering_model.pkl"
-    hierarchical_linear_model_filepath = "data/processed/regression/hierarchical_linear_model.pkl"
+    hierarchical_linear_model_filepath = "data/processed/regression_dup/hierarchical_linear_model.pkl"
     
     test_input_filepath = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
     
