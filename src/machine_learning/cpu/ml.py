@@ -52,7 +52,6 @@ class KMeansCPU(Clustering):
         'n_clusters': 16,
         'max_iter': 20,
         'random_state': 0,
-        'n_init': 10
     }
 
     @classmethod

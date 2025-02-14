@@ -12,13 +12,15 @@ class HierarchicalLinearModel:
     """
 
     def __init__(self, linear_model=None, linear_model_type=None, labels=None,
-                 top_k_score=None, top_k=3, gpu_usage=False):
+                 top_k_score=None, top_k=3, x_test=None, y_test=None, gpu_usage=False):
         """Initialization"""
         self.linear_model = linear_model
         self.linear_model_type = linear_model_type
         self.labels = labels
         self.top_k_score = top_k_score
         self.top_k = top_k
+        self.x_test = x_test
+        self.y_test = y_test
         self.gpu_usage = gpu_usage
 
     def save(self, hierarchical_folder):
@@ -40,30 +42,74 @@ class HierarchicalLinearModel:
         return model
     
     @classmethod
-    def fit(cls, X, Y, linear_model_factory, clustering_model_factory, 
-            top_k=3, top_k_threshold=0.9, min_cluster_size=10, max_cluster_size=50, gpu_usage=False):
+    def fit(cls, X, Y, linear_model_factory, clustering_model_factory, config={}):
         """
         Train the model using clustering and logistic regression with iterative label refinement.
         """
+        
+        DEFAULTS = {
+            'max_iter': 100,
+            'min_leaf_size': 10,
+            'max_leaf_size': 20,
+            'random_state': 0,
+            'top_k': 3,
+            'top_k_threshold': 0.9,
+            'gpu_usage': False,
+        }
+        
+                
+        config = {**DEFAULTS, **config}
+        
+        max_iter = config['max_iter']
+        min_leaf_size = config['min_leaf_size']
+        max_leaf_size = config['max_leaf_size']
+        random_state = config['random_state']
+        top_k = config['top_k']
+        top_k_threshold = config['top_k_threshold']
+        gpu_usage = config['gpu_usage']
+        
+        
         # Initial training
-        linear_model, labels, top_k_indices, top_k_score = cls.__train_linear_model(X, Y, linear_model_factory,
-                                                                                    top_k, top_k_threshold, gpu_usage=gpu_usage)
+        linear_model, labels, top_k_indices, top_k_score, x_test, y_test = cls.__train_linear_model(
+            X, 
+            Y, 
+            linear_model_factory, 
+            max_iter, 
+            random_state,
+            top_k, 
+            top_k_threshold, 
+            gpu_usage=gpu_usage
+        )
 
         # Refine labels and improve top-k score        
-        best_linear_model, best_labels, best_top_k_indices, best_top_k_score = linear_model, labels, top_k_indices, top_k_score
+        best_linear_model, best_labels, best_top_k_indices, best_top_k_score, best_x_test, best_y_test = linear_model, labels, top_k_indices, top_k_score, x_test, y_test
+        
+        print(f"BEST LABELS: {best_labels}, LEN: {len(np.unique(best_labels))}")
         
         while True:
             new_labels_encoded = cls.__refine_clusters(X, best_labels, clustering_model_factory, best_top_k_indices,
-                                                       min_cluster_size, max_cluster_size, gpu_usage=gpu_usage)
+                                                       min_leaf_size, max_leaf_size, random_state, gpu_usage=gpu_usage)
             
-            new_linear_model, new_labels, new_top_k_indices, new_top_k_score = cls.__train_linear_model(X, new_labels_encoded, linear_model_factory, 
-                                                                                                        top_k, top_k_threshold, gpu_usage=gpu_usage)
+            print(f"LABELS ENCODED: {new_labels_encoded}, LEN: {len(np.unique(new_labels_encoded))}")
+            
+            new_linear_model, new_labels, new_top_k_indices, new_top_k_score, new_x_test, new_y_test = cls.__train_linear_model(
+                X, 
+                new_labels_encoded, 
+                linear_model_factory, 
+                max_iter,
+                random_state,
+                top_k, 
+                top_k_threshold, 
+                gpu_usage=gpu_usage
+            )
             
             if new_top_k_score > best_top_k_score:
                 best_linear_model = new_linear_model
                 best_labels = new_labels
                 best_top_k_indices = new_top_k_indices
                 best_top_k_score = new_top_k_score
+                best_x_test = new_x_test
+                best_y_test = new_y_test
             else:
                 break
 
@@ -73,6 +119,8 @@ class HierarchicalLinearModel:
             labels=best_labels, 
             top_k_score=best_top_k_score, 
             top_k=top_k,
+            x_test = best_x_test,
+            y_test = best_y_test,
             gpu_usage=gpu_usage
         )
     
@@ -82,57 +130,66 @@ class HierarchicalLinearModel:
 
     # Embeddings, Labels
     @classmethod
-    def __train_linear_model(cls, X, Y, linear_model_factory, top_k, top_k_threshold, gpu_usage=False):
+    def __train_linear_model(cls, X, Y, linear_model_factory, max_iter, random_state, top_k, top_k_threshold, gpu_usage):
         # Train-test split
         X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42, stratify=Y)
             
+        print("Inside trainign linear model")
+        print(Y, np.unique(Y))    
+            
         # Need find a way to calculate interactions, test "saga" and "newton-cg", get rid of lbfgs
         if gpu_usage:
-            linear_model = linear_model_factory.create_model({'max_iter': 1000}).fit(X_train, y_train)
+            linear_model = linear_model_factory.create_model({'max_iter': max_iter, 'random_state': random_state}).fit(X_train, y_train)
         else:
-            linear_model = linear_model_factory.create_model({'max_iter': 100, 'solver':'saga', 'penalty': 'l2'}).fit(X_train, y_train)
+            linear_model = linear_model_factory.create_model({'max_iter': max_iter, 'solver':'newton-cg', 'penalty': 'l2', 'random_state': random_state}).fit(X_train, y_train)
             
         # Predict probabilities
         y_proba = linear_model.predict_proba(X_test)
-                
+        
+        # Compute top-k accuracy
+        top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True)       
+
         # Get top-k predictions
         top_k_indices = cls.__get_top_k_indices(y_proba, top_k, top_k_threshold)
+        
             
-        # Compute top-k accuracy
-        top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True)
-            
-        return linear_model, Y, top_k_indices, top_k_score
+        return linear_model, Y, top_k_indices, top_k_score, X_test, y_test
     
     @classmethod
     def __refine_clusters(cls, X, labels, clustering_model_factory, 
-                                    top_k_indices, min_cluster_size, max_cluster_size, 
-                                    gpu_usage=False):
-        # Update cluster labels
-        new_labels = np.empty_like(labels, dtype=object)
-            
+                      top_k_indices, min_cluster_size, max_cluster_size, 
+                      random_state, gpu_usage=False):
+        # Initialize new labels with the original labels
+        new_labels = np.array(labels, dtype=object)
+        
         for label in np.unique(labels):
-                
-            embeddings =  X[labels == label]
-            n_emb = embeddings.shape[0]
+            # print("LABEL:", label)
+            
             indices = np.where(labels == label)[0]
-
+            embeddings = X[indices]
+            n_emb = embeddings.shape[0]
+            # print(f"Number of embeddings for label {label}: {n_emb}")
+            
             if ((n_emb >= min_cluster_size and n_emb <= max_cluster_size) or n_emb >= max_cluster_size) and label in np.unique(top_k_indices):
-                    
+                # print("INSIDE CLUSTERING LOGIC")
+                
                 n_iter = 100 + (10 * n_emb)
-                clustering_model = clustering_model_factory.create_model({'n_clusters': 2, 'max_iter': n_iter, 'random_state': 0}).fit(embeddings)
+                n_clusters = min(2, n_emb)  # Ensure at least 1 cluster
+                clustering_model = clustering_model_factory.create_model({'n_clusters': n_clusters, 'max_iter': n_iter, 'random_state': random_state}).fit(embeddings)
                 
                 kmeans_labels = clustering_model.labels_
-
-                for idx, label in zip(indices, kmeans_labels):
-                    new_labels[idx] = f"{label}{chr(65 + int(label))}"
-                else:
-                    for i in indices:
-                        new_labels[i] = f"{label}"
-            
+                for idx, cluster_label in zip(indices, kmeans_labels):
+                    new_labels[idx] = f"{label}{chr(65 + cluster_label)}"
+            else:
+                for idx in indices:
+                    new_labels[idx] = f"{label}"
+        
+        # print(f"LABELS ENCODED: {new_labels[:10]}... (showing 10 out of {len(new_labels)})")  
+        
         new_labels_encoded = np.array(cls.__encode_labels(new_labels))
-            
+        # print(f"LABELS ENCODED: {new_labels_encoded[:10]}... (showing 10 out of {len(new_labels_encoded)})")
+        
         merged_labels = cls.__merge_small_clusters(X, new_labels_encoded, min_cluster_size)
-            
         return merged_labels
 
     @staticmethod
@@ -190,26 +247,7 @@ class HierarchicalLinearModel:
         for probs in pred_probs:
             # Sort probabilities in descending order and sum the top-k
             top_k_scores.append(np.sum(np.sort(probs)[::-1][:k]))
-                
-        for i in range(pred_probs.shape[0]):
-            # Get the probabilities for the current sample
-            probs = pred_probs[i]
             
-            # Sort the probabilities in descending order and get the top-k indices
-            top_k_indices = np.argsort(probs)[::-1][:k]
-            
-            # Check if the true label is in the top-k
-            true_label = true_labels[i]
-            
-            top_k = [class_labels[idx] for idx in top_k_indices]
-            
-            # Print whether the true label is in the top-k predictions
-            if true_label in top_k_indices:
-                print(f"Sample {i} - True Label {true_label} is in the top-k indices -> {top_k}")
-            else:
-                print(f"Sample {i} - True Label {true_label} is NOT in the top-k indices -> {top_k}")
-            
-        
         print(len(top_k_scores))
         
         average_top_k_score = np.mean(top_k_scores)
