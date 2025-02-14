@@ -6,7 +6,7 @@ from src.app.utils import create_bio_bert_vectorizer, load_bio_bert_vectorizer, 
 def main():
     
     label_filepath = "data/raw/mesh_data/medic/labels.txt"
-    training_filepath = "data/train/disease/train_Disease_500.txt"
+    training_filepath = "data/train/disease/train_Disease_1000.txt"
     
     parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
 
