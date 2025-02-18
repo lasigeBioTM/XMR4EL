@@ -37,14 +37,23 @@ class LogisticRegressionCPU(Classifier):
 
     @classmethod
     def create_model(cls, kwargs={}):
+        # Merge default parameters with any user-specified ones
         params = {**cls.DEFAULTS, **kwargs}
+        
+        # Return a new instance with the model initialized
         return cls(
-            model = LogisticRegression(**params), 
-            model_type = 'LogisticRegressionCPU'
+            model=None,  # Model is initially None
+            model_type='LogisticRegressionCPU',
+            params=params
         )
 
     def fit(self, X_train, Y_train):
+        # Recreate the model each time fit is called with the parameters
+        self.model = LogisticRegression(**self.params)
+        
+        # Fit the model to the training data
         return self.model.fit(X_train, Y_train)
+        
   
     
 class KMeansCPU(Clustering):
@@ -58,13 +67,14 @@ class KMeansCPU(Clustering):
     def create_model(cls, kwargs={}):
         params = {**cls.DEFAULTS, **kwargs}
         return cls(
-            model = KMeans(**params),
-            model_type = 'KMeansCPU'
+            model=None,
+            model_type='KMeansCPU',
+            params=params
         )
 
     def fit(self, X_train):
-        self.model = force_multi_core_processing_clustering_models(self.model, X_train)
-        return self.model
+        self.model = KMeans(**self.params)
+        return force_multi_core_processing_clustering_models(self.model, X_train)
 
 class MiniBatchKMeansCPU(Clustering):
     DEFAULTS = {

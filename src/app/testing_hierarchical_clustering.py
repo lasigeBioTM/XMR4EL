@@ -2,6 +2,9 @@ from sklearn.decomposition import PCA
 
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+from matplotlib.colors import ListedColormap
+import seaborn as sns
+import numpy as np
 
 from src.app.utils import load_bio_bert_vectorizer
 from src.machine_learning.cpu.ml import KMeansCPU
@@ -24,16 +27,37 @@ def main():
     
     print("Shape of the embeddings:", X_train_feat.shape)
     
-    # Depth: 1 -> 7 clusters: 0.5758, 16 clusters: 0.5403 
+    # Depth: 1 -> 7 clusters: 0.5758, 16 clusters: 0.5403, 
+    
+    # 16 splits, disease100, Top-1 Accuracy (sklearn): 0.4586397058823529
+    # 16 splits, disease500, Top-1 Accuracy (sklearn): 0.40487132352941174 
+    # 16 splits, disease1000, Top-1 Accuracy (sklearn): 0.3766084558823529
+    
+
+    """
+    k_range = range(2, 15)
+    wcss = [KMeansCPU.create_model({'n_clusters': k, 'random_state':0}).fit(X_train_feat).inertia_ for k in k_range]
+
+    knee = KneeLocator(k_range, wcss, curve='convex', direction='decreasing')
+    optimal_clusters = knee.knee
+    print(f"Optimal number of clusters: {optimal_clusters}")
+
+    exit()
+    """
+    
+    # 4 splits init, depth2, diease100, Top-1 Accuracy (sklearn): 0.31893382352941174
+    # 4 splits, depth1, disease100, Top-1 Accuracy (sklearn): 0.6617647058823529
+    
+    """n_splits = 0 <- splits will be formed in an dynamic way"""
     divisiveModel = DivisiveHierarchicalClustering.fit(
         X=X_train_feat,
         clustering_model_factory=KMeansCPU.create_model(),
         config={
-            'n_splits': 7,
+            'n_splits': 0,
             'max_iter': 500,
-            'depth': 1,
-            'min_leaf_size':10,
-            'max_leaf_size': 20,
+            'depth': 2,
+            'min_leaf_size':20,
+            'max_leaf_size': 40,
             'init': 'k-means++',
             'random_state': 0,
             'spherical': True,
@@ -41,27 +65,25 @@ def main():
             }
     )
     
-    labels = divisiveModel.labels
+    # labels = divisiveModel.labels
     
-    # print(labels)
+    # print(np.unique(labels))
     
     divisiveModel.save("data/processed/clustering/test_hierarchical_clustering_model.pkl")
     
-    """
     # Dimensionality reduction (t-SNE)
-    tsne = TSNE(n_components=2, random_state=42)
-    data_2d = tsne.fit_transform(X_train_feat)
 
-    # Plot results
-    plt.figure(figsize=(8, 6))
-    scatter = plt.scatter(data_2d[:, 0], data_2d[:, 1], c=labels, cmap='tab10', alpha=0.6)
-    plt.colorbar(scatter, label='Cluster')
-    plt.title("Clustering Results (2D t-SNE Visualization)")
-    plt.xlabel("Dimension 1")
-    plt.ylabel("Dimension 2")
+    """
+    # Generate a custom color palette for up to 100 clusters
+    custom_colors = sns.color_palette('husl', 100)  # Up to 100 unique colors
+    cmap = ListedColormap(custom_colors)
 
+    # Plot with the custom colormap
+    plt.scatter(X_train_feat[:, 0], X_train_feat[:, 1], c=labels, cmap=cmap)
+    plt.colorbar()
+    
     # Save the plot to a file
-    plt.savefig("y_plots/plot.png")
+    plt.savefig("y_plots/disease100_depth2_dynamic_clusters.png")
     """
     
 if __name__ == "__main__":
