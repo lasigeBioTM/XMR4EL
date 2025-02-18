@@ -70,18 +70,20 @@ class HierarchicalLinearModel:
         gpu_usage = config['gpu_usage']
         
         
-        # Initial training
-        linear_model, labels, top_k_indices, top_k_score, x_test, y_test = cls.__train_linear_model(
+        linear_model_dict = cls.__train_linear_model(
             X, 
             Y, 
             linear_model_factory, 
             top_k, 
             top_k_threshold
         )
-
-        # Refine labels and improve top-k score        
-        best_linear_model, best_labels, best_top_k_indices, best_top_k_score, best_x_test, best_y_test = linear_model, labels, top_k_indices, top_k_score, x_test, y_test
         
+        best_linear_model = linear_model_dict['linear_model']
+        best_labels = linear_model_dict['labels']
+        best_top_k_indices = linear_model_dict['top_k_indices']
+        best_top_k_score = linear_model_dict['top_k_score']
+        best_X_test = linear_model_dict['X_test']
+        best_y_test = linear_model_dict['y_test'] 
         
         # ok
         while True:
@@ -89,14 +91,21 @@ class HierarchicalLinearModel:
                                                        min_leaf_size, random_state)
             
             
-            new_linear_model, new_labels, new_top_k_indices, new_top_k_score, new_x_test, new_y_test = cls.__train_linear_model(
-                X, 
-                new_labels_encoded, 
-                linear_model_factory, 
-                top_k, 
-                top_k_threshold
+            new_linear_model_dict = cls.__train_linear_model(
+            X, 
+            new_labels_encoded, 
+            linear_model_factory, 
+            top_k, 
+            top_k_threshold
             )
-                  
+            
+            new_linear_model = new_linear_model_dict['linear_model']
+            new_labels = new_linear_model_dict['labels']
+            new_top_k_indices = new_linear_model_dict['top_k_indices']
+            new_top_k_score = new_linear_model_dict['top_k_score']
+            new_X_test = new_linear_model_dict['X_test']
+            new_y_test = new_linear_model_dict['y_test'] 
+            
             print(f"Best top-k score: {best_top_k_score} - New top-k score: {new_top_k_score}")
             
             if new_top_k_score > best_top_k_score:
@@ -104,7 +113,7 @@ class HierarchicalLinearModel:
                 best_labels = new_labels
                 best_top_k_indices = new_top_k_indices
                 best_top_k_score = new_top_k_score
-                best_x_test = new_x_test
+                best_X_test = new_X_test
                 best_y_test = new_y_test
             else:
                 break
@@ -115,7 +124,7 @@ class HierarchicalLinearModel:
             labels=best_labels, 
             top_k_score=best_top_k_score, 
             top_k=top_k,
-            x_test = best_x_test,
+            x_test = best_X_test,
             y_test = best_y_test,
             gpu_usage=gpu_usage
         )
@@ -141,9 +150,14 @@ class HierarchicalLinearModel:
         # Get top-k predictions
         top_k_indices = cls.__get_top_k_indices(y_proba, top_k, top_k_threshold)
         
-        print(np.unique(top_k_indices))
+        print(f"__train_linear_model Labels: {np.unique(top_k_indices)}")
         
-        return linear_model, Y, top_k_indices, top_k_score, X_test, y_test
+        return {'linear_model': linear_model, 
+                'labels': Y, 
+                'top_k_indices': top_k_indices, 
+                'top_k_score': top_k_score, 
+                'X_test': X_test, 
+                'y_test': y_test}
     
     @classmethod
     def __refine_clusters(cls, X, labels, clustering_model_factory, 
@@ -175,6 +189,26 @@ class HierarchicalLinearModel:
         merged_labels = new_labels_encoded
         
         return merged_labels
+    
+    @staticmethod
+    def __calculate_top_k_accuracy(X, y, cluster_labels, model, k=3):
+        """Calculate the top-k accuracy for each cluster."""
+        clusters = np.unique(cluster_labels)
+        top_k_scores = []
+        
+        for cluster in clusters:
+            # Filter data points in this cluster
+            indices = (cluster_labels == cluster)
+            
+            cluster_points = X[indices]
+            cluster_labels_subset = y[indices]
+            
+            # Predict probabilities for cluster points
+            y_proba = model.predict_proba(cluster_points)
+            
+            top_k_score = top_k_accuracy_score(cluster_labels_subset, y_proba, k=k)
+            top_k_scores.append((cluster, top_k_score))
+        return top_k_scores    
     
     @staticmethod
     def __calculate_optimal_clusters(X, clustering_model_factory, cluster_range, random_state=0):
@@ -231,9 +265,7 @@ class HierarchicalLinearModel:
     
     @staticmethod    
     def __count_label_occurrences(labels_list):
-        """
-        Count occurrences of each label in the list
-        """
+        """Count occurrences of each label in the list"""
         labels_list = list(Counter(labels_list).items())
         sorted_data = sorted(labels_list, key=lambda x: x[1], reverse=True)
         out = ""
@@ -243,31 +275,14 @@ class HierarchicalLinearModel:
     
     @staticmethod
     def __top_k_score_sklearn(pred_probs, true_labels, k=3):
-        """
-        Calculate top-k score using sklearn's top_k_accuracy_score as a helper.
-            
-        Parameters:
-        - pred_probs: Numpy array of predicted probabilities, shape (n_samples, n_classes)
-        - true_labels: Array of true labels, shape (n_samples,)
-        - k: Top-k predictions to consider for scoring
-            
-        Returns:
-        - top_k_accuracy: The top-k accuracy using sklearn
-        - average_top_k_score: The average sum of the top-k probabilities across all instances
-        """
-        
-        # Calculate sklearn's top-k accuracy score
+        """Calculate top-k score using sklearn's top_k_accuracy_score as a helper."""
         top_k_accuracy = top_k_accuracy_score(true_labels, pred_probs, k=k, labels=np.arange(pred_probs.shape[1]))
             
         # Calculate the average top-k score (sum of probabilities for the top-k predictions)
         top_k_scores = []
-        
         for probs in pred_probs:
             # Sort probabilities in descending order and sum the top-k
             top_k_scores.append(np.sum(np.sort(probs)[::-1][:k]))
-            
-        # print(len(top_k_scores))
         
         average_top_k_score = np.mean(top_k_scores)
-            
         return top_k_accuracy, average_top_k_score
