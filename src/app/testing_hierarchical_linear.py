@@ -24,37 +24,42 @@ def main():
     
     y_train_feat = divisiveModel.labels
     
-    print(y_train_feat.shape)
-    
     top_k = 1
     
     hierarchical_linear_model = HierarchicalLinearModel.fit(
         X=X_train_feat,
         Y=y_train_feat,
-        linear_model_factory=LogisticRegressionCPU.create_model(),
-        clustering_model_factory=KMeansCPU.create_model(),
+        linear_model_factory=LogisticRegressionCPU.create_model(
+            {'max_iter': 1000,
+             'solver': 'newton-cg',
+             'penalty': 'l2',
+             'random_state': 0
+             }),
+        clustering_model_factory=KMeansCPU.create_model(
+            {'max_iter': 500,
+             'random_state': 0
+            }),
         config= {
-            'max_iter': 1000,
-            'min_leaf_size': 10,
-            'max_leaf_size': 20,
-            'random_state': 0,
+            'min_leaf_size': 20,
+            'max_leaf_size': 40,
             'top_k': top_k,
-            'top_k_threshold': 0.9,
+            'top_k_threshold': 0.15,
             'gpu_usage': False,
         }
     )
     
     hierarchical_linear_model.save("data/processed/regression/test_hierarchical_linear_model.pkl")
     
-    X_test = hierarchical_linear_model.x_test
-    y_test = hierarchical_linear_model.y_test
-    
     linear_model = hierarchical_linear_model.linear_model
+    
+    x_test = hierarchical_linear_model.x_test
+    y_test = hierarchical_linear_model.y_test
     
     # Step 5: Predict on the test set
     # cluster_labels_test = divisiveModel.predict(KMeansCPU.create_model(), X_test)  # Cluster test data
     # X_test_augmented = np.hstack((X_test, cluster_labels_test.reshape(-1, 1)))  # Combine cluster labels with features
-    y_pred = linear_model.predict(X_test)
+    
+    y_pred = linear_model.predict(x_test)
 
     # Step 6: Evaluate the model
     accuracy = accuracy_score(y_test, y_pred)

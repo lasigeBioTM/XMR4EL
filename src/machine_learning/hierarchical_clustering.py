@@ -2,6 +2,7 @@ import os
 import pickle
 import numpy as np
 from collections import Counter
+from kneed import KneeLocator
 
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, pairwise_distances_argmin_min, davies_bouldin_score, silhouette_samples
@@ -90,6 +91,9 @@ class DivisiveHierarchicalClustering():
             if X.shape[0] < max_leaf_size or depth == 0:
                 return {i: prefix for i in range(X.shape[0])}   
             
+            if n_splits == 0:            
+                n_splits = cls.__calculate_optimal_clusters(X, clustering_model_factory, 16, random_state)
+            
             # Fiting Clustering Model
             kmeans_model = clustering_model_factory.create_model(
                 {
@@ -102,6 +106,13 @@ class DivisiveHierarchicalClustering():
                 
             cluster_labels = kmeans_model.labels_
             
+            # Get the clusters to refine
+            
+            """Metrics"""
+            # print("Intercalar Cluster")
+            # cls.__metrics(X, cluster_labels, n_splits)
+            # print(cls.__count_label_occurrences(cluster_labels))
+            
             labels_dict = {}
             for i, cluster_id in enumerate(np.unique(cluster_labels)):
                 cluster_indices = np.where(cluster_labels == cluster_id)[0]
@@ -111,7 +122,7 @@ class DivisiveHierarchicalClustering():
                 # Recursively cluster each subset of data
                 sub_labels = recursive_clustering(
                     X[cluster_indices], 
-                    n_splits, 
+                    0, 
                     max_iter, 
                     depth - 1, 
                     min_leaf_size, 
@@ -154,14 +165,20 @@ class DivisiveHierarchicalClustering():
         
         final_labels = cls.__encode_labels(final_labels)
         
+        # print(cls.__count_label_occurrences(final_labels))    
+    
         # Merge small clusters and update the labels
-        # merged_labels = cls.__merge_small_clusters(X, np.array(final_labels), min_cluster_size=10)
-        merged_labels = final_labels    
+        merged_labels = cls.__merge_small_clusters(X, np.array(final_labels), min_cluster_size=min_leaf_size)
+        # merged_labels = final_labels    
         
-        n_splits = np.unique(final_labels).shape[0]
+        # print(cls.__count_label_occurrences(merged_labels))
+        
+        n_splits = np.unique(merged_labels).shape[0]
         
         """Metrics"""
-        cls.__metrics(X, final_labels, n_splits)
+        cls.__metrics(X, merged_labels, n_splits)
+        
+        print(cls.__count_label_occurrences(merged_labels))
         
         return cls(
             clustering_model_type=clustering_model_factory.model_type, 
@@ -213,6 +230,18 @@ class DivisiveHierarchicalClustering():
         
         print(f"\nSilhouette Score: {silhouette_score(X, cluster_labels)}")
 
+    @staticmethod
+    def __calculate_optimal_clusters(X, clustering_model_factory, cluster_range, random_state=0):
+        k_range = range(2, cluster_range)
+        wcss = [clustering_model_factory.create_model(
+            {'n_clusters': k, 
+            'random_state':random_state}
+            ).fit(X).inertia_ for k in k_range]
+
+        knee = KneeLocator(k_range, wcss, curve='convex', direction='decreasing')
+        optimal_clusters = knee.knee
+        # print(f"Optimal number of clusters: {optimal_clusters}")
+        return optimal_clusters
     
     @staticmethod
     def __mean_silhouette_for_splits(X, cluster_labels):    
@@ -281,21 +310,33 @@ class DivisiveHierarchicalClustering():
     
     @staticmethod
     def __merge_small_clusters(X, labels, min_cluster_size=10):
-        """Merges small clusters with larger clusters."""
+        """
+        Merges small clusters with larger clusters based on proximity to valid clusters.
+        Ensures that all small clusters are merged.
+        """
         unique_labels = np.unique(labels)
+        
+        # Find valid clusters and their centroids
         valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
-        centroids = np.array([X[labels == label].mean(axis=0) for label in unique_labels])
-            
+        valid_centroids = np.array([X[labels == label].mean(axis=0) for label in valid_labels])
+        
         updated_labels = labels.copy()
-        for label in unique_labels:                
+        
+        # Process small clusters
+        for label in unique_labels:
             cluster_indices = np.where(labels == label)[0]
-            if len(cluster_indices) <= min_cluster_size:
+            if len(cluster_indices) < min_cluster_size:
                 cluster_points = X[cluster_indices]
-                _, closest_centroid_idx = pairwise_distances_argmin_min(cluster_points, centroids)
                 
-                updated_labels[labels == label] = valid_labels[int(closest_centroid_idx[0])]
+                # Find the closest valid centroid
+                closest_valid_idx, _ = pairwise_distances_argmin_min(cluster_points, valid_centroids)
                 
+                # Assign all points in the small cluster to the closest valid cluster
+                closest_label = valid_labels[int(closest_valid_idx[0])]
+                updated_labels[cluster_indices] = closest_label
+        
         return updated_labels
+
 
     @staticmethod
     def __encode_labels(labels_list):
@@ -308,7 +349,12 @@ class DivisiveHierarchicalClustering():
         """
         Count occurrences of each label in the list
         """
-        return list(Counter(labels_list).items())
+        labels_list = list(Counter(labels_list).items())
+        sorted_data = sorted(labels_list, key=lambda x: x[1], reverse=True)
+        out = ""
+        for label, n_values in sorted_data:
+            out += f"Cluster: {label} -> {n_values}\n"
+        return out
         
     @staticmethod   
     def __calculate_centroids(X, labels):

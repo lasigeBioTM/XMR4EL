@@ -3,19 +3,25 @@ import pickle
 
 class Classifier():
 
-    def __init__(self, model=None, model_type=None):
+    def __init__(self, model=None, model_type=None, params=None):
         self.model = model
         self.model_type = model_type
+        self.params = params
 
     def save(self, classifier_folder):
-        os.makedirs(classifier_folder, exist_ok=True)
-        with open(os.path.join(classifier_folder, 'classifier.pkl'), 'wb') as fout:
-            pickle.dump({'model': self.model, 'model_type': self.model_type}, fout)
-    
+        """Save the model and its parameters to a file """
+        os.makedirs(os.path.dirname(classifier_folder), exist_ok=True)
+        with open(classifier_folder, 'wb') as fout:
+            pickle.dump(self.__dict__, fout)
+
     @classmethod
     def load(cls, classifier_folder):
-        classifier_path = os.path.join(classifier_folder, 'classifier.pkl')
-        assert os.path.exists(classifier_path), f"{classifier_path} does not exist"
-        with open(classifier_path, 'rb') as fclu:
-            data = pickle.load(fclu)
-        return cls(model=data['model'], model_type=data['model_type'])  
+        """Load a saved model from a file."""
+        if not os.path.exists(classifier_folder):
+            raise FileNotFoundError(f"Classifier folder {classifier_folder} does not exist.")
+        
+        with open(classifier_folder, 'rb') as fin:
+            model_data = pickle.load(fin)
+        model = cls()
+        model.__dict__.update(model_data)
+        return model
