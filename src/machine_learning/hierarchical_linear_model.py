@@ -5,8 +5,7 @@ import numpy as np
 from collections import Counter
 from kneed import KneeLocator
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import top_k_accuracy_score, pairwise_distances_argmin_min
-from sklearn.base import clone
+from sklearn.metrics import top_k_accuracy_score, pairwise_distances_argmin_min, silhouette_score
 
 class HierarchicalLinearModel:
     """
@@ -99,6 +98,11 @@ class HierarchicalLinearModel:
                 threshold=0.8
             )
             
+            print(f"\nOld Silhouette Score: {silhouette_score(X, best_labels)}")
+            print(f"New Silhouette Score: {silhouette_score(X, new_labels_encoded)}")
+            
+            # print(f"__fit, new_labels_encoded, Clusters: {np.unique(new_labels_encoded)}, Number of Clusters: {np.unique(new_labels_encoded).shape}")
+            
             new_linear_model_dict = cls.__train_linear_model(
             X, 
             new_labels_encoded, 
@@ -115,7 +119,7 @@ class HierarchicalLinearModel:
             new_y_test = new_linear_model_dict['y_test'] 
             
             print(f"Best top-k score: {best_top_k_score} - New top-k score: {new_top_k_score}")
-            
+              
             if new_top_k_score > best_top_k_score:
                 best_linear_model = new_linear_model
                 best_labels = new_labels
@@ -125,6 +129,16 @@ class HierarchicalLinearModel:
                 best_y_test = new_y_test
             else:
                 break
+            
+            """
+            best_linear_model = new_linear_model
+            best_labels = new_labels
+            best_top_k_indices = new_top_k_indices
+            best_top_k_score = new_top_k_score
+            best_X_test = new_X_test
+            best_y_test = new_y_test
+            break
+            """
             
         return cls(
             linear_model=best_linear_model, 
@@ -158,7 +172,7 @@ class HierarchicalLinearModel:
         # Compute top-k accuracy
         top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True)       
         
-        print(f"__train_linear_model Labels: {np.unique(top_k_indices)}")
+        # print(f"__train_linear_model Labels: {np.unique(top_k_indices)}")
         
         return {'linear_model': linear_model, 
                 'labels': Y, 
@@ -205,12 +219,7 @@ class HierarchicalLinearModel:
             
             # print(f"Top Probability: {sorted_probs[:, 0]}, Top-kth Probability: {sorted_probs[:, k-1]}")
             
-            # Compute the margin: difference between the top probability and the kth probability
-            if sorted_probs.shape[1] >= k:
-                margins = sorted_probs[:, 0] - sorted_probs[:, k-1]
-            else:
-                # If the number of classes is less than k, use the top-probability as the margin
-                margins = sorted_probs[:, 0]
+            margins = sorted_probs[:, k-1]
             
             # Average the margin across all samples in the cluster 
             avg_margin = np.mean(margins)
@@ -224,7 +233,7 @@ class HierarchicalLinearModel:
         refinements = 0
         while refinements < max_refinement:
             # Calculate the margins for earch cluster
-            top_k_margins = cls.__calculate_cluster_margin(X, cluster_labels, linear_model, k=5).items()
+            top_k_margins = cls.__calculate_cluster_margin(X, cluster_labels, linear_model, k=k).items()
             
             """
             print("__refine_top_k_clusters")
@@ -243,7 +252,7 @@ class HierarchicalLinearModel:
                 print("All clusters meet the top-k accuracy threshold")
                 break
                 
-            print(f"Clusters to refine {clusters_to_refine}")
+            # print(f"Clusters to refine {clusters_to_refine}")
             
             # Refine each low-performing cluster
             for cluster in clusters_to_refine:
@@ -268,6 +277,8 @@ class HierarchicalLinearModel:
                     clustering_model = clustering_model_factory.create_model({'n_clusters': n_splits}).fit(cluster_points)
                     sub_cluster_labels = clustering_model.labels_
                     
+                    print(f"Sub cluster labels: {sub_cluster_labels}, Length: {sub_cluster_labels.shape[0]}")        
+                    
                     # Reassign sub-cluster labels to the original cluster
                     unique_label = np.max(cluster_labels) + 1
                     
@@ -276,7 +287,7 @@ class HierarchicalLinearModel:
                     # print(f"Cluster n: {cluster}")
                     
                     # Recalculate the margins after refinement
-                    new_top_k_margin = cls.__calculate_cluster_margin(X, cluster_labels, linear_model, k=5).items()
+                    new_top_k_margin = cls.__calculate_cluster_margin(X, cluster_labels, linear_model, k=k).items()
                     
                     new_mean_top_k_margin = np.mean([margin_score for _, margin_score in new_top_k_margin])
                     
@@ -293,12 +304,19 @@ class HierarchicalLinearModel:
                         cluster_labels = previous_cluster_labels  # Revert to previous state
                     else:
                         print(f"New score for cluster {cluster} is better. Keeping changes.")
+                        mean_top_k_margin = new_mean_top_k_margin
                 
                 else:
                     print(f"Cluster {cluster} has too few points for further refinement.")
 
             refinements += 1
             print(f"Refinement {refinements} completed.")
+        
+        cluster_labels = cls.__merge_small_clusters(X, cluster_labels, min_leaf_size)
+        
+        cluster_labels = cls.__encode_labels(cluster_labels)
+        
+        print(f"Count Label Occurrences: \n{cls.__print_count_label_occurrences(cluster_labels)}")
         
         return cluster_labels
     
@@ -320,8 +338,14 @@ class HierarchicalLinearModel:
         top_k_indices = np.argsort(filtered_proba, axis=1)[:, -k:][:, ::-1]
         return top_k_indices.tolist()
     
+    @staticmethod
+    def __encode_labels(labels_list):
+        """Convert string labels into numeric labels"""
+        label_to_idx = {}
+        return np.array([label_to_idx.setdefault(label, len(label_to_idx)) for label in labels_list])
+    
     @staticmethod    
-    def __count_label_occurrences(labels_list):
+    def __print_count_label_occurrences(labels_list):
         """Count occurrences of each label in the list"""
         labels_list = list(Counter(labels_list).items())
         sorted_data = sorted(labels_list, key=lambda x: x[1], reverse=True)
@@ -330,7 +354,48 @@ class HierarchicalLinearModel:
             out += f"Cluster: {label} -> {n_values}\n"
         return out
     
+    @staticmethod    
+    def __count_label_occurrences(labels_list):
+        """Count occurrences of each label in the list"""
+        labels_list = list(Counter(labels_list).items())
+        sorted_data = sorted(labels_list, key=lambda x: x[1], reverse=True)
+        
+        labels_occurrences = {} 
+        for label, n_values in sorted_data:
+            labels_occurrences[label] = n_values
+            
+        return labels_occurrences
+    
     @staticmethod
     def __top_k_score_sklearn(pred_probs, true_labels, k=3):
         """Calculate top-k score using sklearn's top_k_accuracy_score as a helper."""
         return top_k_accuracy_score(true_labels, pred_probs, k=k, labels=np.arange(pred_probs.shape[1]))
+    
+    @staticmethod
+    def __merge_small_clusters(X, labels, min_cluster_size=10):
+        """
+        Merges small clusters with larger clusters based on proximity to valid clusters.
+        Ensures that all small clusters are merged.
+        """
+        unique_labels = np.unique(labels)
+        
+        # Find valid clusters and their centroids
+        valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
+        valid_centroids = np.array([X[labels == label].mean(axis=0) for label in valid_labels])
+        
+        updated_labels = labels.copy()
+        
+        # Process small clusters
+        for label in unique_labels:
+            cluster_indices = np.where(labels == label)[0]
+            if len(cluster_indices) < min_cluster_size:
+                cluster_points = X[cluster_indices]
+                
+                # Find the closest valid centroid
+                closest_valid_idx, _ = pairwise_distances_argmin_min(cluster_points, valid_centroids)
+                
+                # Assign all points in the small cluster to the closest valid cluster
+                closest_label = valid_labels[int(closest_valid_idx[0])]
+                updated_labels[cluster_indices] = closest_label
+        
+        return updated_labels
