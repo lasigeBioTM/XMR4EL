@@ -50,7 +50,6 @@ class LogisticRegressionCPU(Classifier):
     def fit(self, X_train, Y_train):
         # Recreate the model each time fit is called with the parameters
         self.model = LogisticRegression(**self.params)
-        
         # Fit the model to the training data
         return self.model.fit(X_train, Y_train)
         

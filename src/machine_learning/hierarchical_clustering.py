@@ -238,7 +238,7 @@ class DivisiveHierarchicalClustering():
             'random_state':random_state}
             ).fit(X).inertia_ for k in k_range]
 
-        knee = KneeLocator(k_range, wcss, curve='convex', direction='decreasing')
+        knee = KneeLocator(k_range, wcss, curve='convex', direction='decreasing', online=True)
         optimal_clusters = knee.knee
         # print(f"Optimal number of clusters: {optimal_clusters}")
         return optimal_clusters
