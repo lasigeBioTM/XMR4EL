@@ -87,9 +87,17 @@ class HierarchicalLinearModel:
         
         # ok
         while True:
-            new_labels_encoded = cls.__refine_clusters(X, best_labels, clustering_model_factory, best_top_k_indices,
-                                                       min_leaf_size, random_state)
             
+            new_labels_encoded = cls.__refine_top_k_clusters(
+                X, 
+                best_labels, 
+                best_linear_model, 
+                clustering_model_factory, 
+                min_leaf_size, 
+                random_state=random_state,
+                k=top_k, 
+                threshold=0.8
+            )
             
             new_linear_model_dict = cls.__train_linear_model(
             X, 
@@ -129,7 +137,7 @@ class HierarchicalLinearModel:
             gpu_usage=gpu_usage
         )
     
-    def predict(self, embeddings, predicted_labels, class_labels, top_k):        
+    def predict(self, embeddings, predicted_labels, top_k):        
         preds = self.linear_model.predict_proba(embeddings)
         return self.__top_k_score_sklearn(preds, predicted_labels, top_k)
 
@@ -144,11 +152,11 @@ class HierarchicalLinearModel:
         # Predict probabilities
         y_proba = linear_model.predict_proba(X_test)
         
-        # Compute top-k accuracy
-        top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True)       
-
         # Get top-k predictions
         top_k_indices = cls.__get_top_k_indices(y_proba, top_k, top_k_threshold)
+        
+        # Compute top-k accuracy
+        top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True)       
         
         print(f"__train_linear_model Labels: {np.unique(top_k_indices)}")
         
@@ -159,102 +167,151 @@ class HierarchicalLinearModel:
                 'X_test': X_test, 
                 'y_test': y_test}
     
-    @classmethod
-    def __refine_clusters(cls, X, labels, clustering_model_factory, 
-                      top_k_indices, min_leaf_size,
-                      random_state=0):
-        # Initialize new labels with the original labels
-        new_labels = np.array(labels, dtype=object)
         
-        for label in np.unique(labels):
-            
-            indices = np.where(labels == label)[0]
-            embeddings = X[indices]
-            n_emb = embeddings.shape[0]
-            
-            if (n_emb > min_leaf_size) and label in np.unique(top_k_indices):
-                n_splits = cls.__calculate_optimal_clusters(X, clustering_model_factory, 16, random_state)
-                
-                clustering_model = clustering_model_factory.create_model({'n_clusters': n_splits}).fit(embeddings)
-                
-                kmeans_labels = clustering_model.labels_
-                for idx, cluster_label in zip(indices, kmeans_labels):
-                    new_labels[idx] = f"{label}{chr(65 + cluster_label)}"
-            else:
-                for idx in indices:
-                    new_labels[idx] = f"{label}"
-        
-        new_labels_encoded = np.array(cls.__encode_labels(new_labels))
-        # merged_labels = cls.__merge_small_clusters(X, new_labels_encoded, min_leaf_size)
-        merged_labels = new_labels_encoded
-        
-        return merged_labels
-    
     @staticmethod
-    def __calculate_top_k_accuracy(X, y, cluster_labels, model, k=3):
-        """Calculate the top-k accuracy for each cluster."""
+    def __calculate_cluster_margin(X, cluster_labels, linear_model, k=3):
+        """
+        For each cluster in `cluster_labels`, compute the average margin between 
+        the highest predicted probability and the kth highest predicted probability.
+        
+        Parameters:
+        - X: Input features (numpy array).
+        - cluster_labels: Array of cluster assignments for each data point.
+        - model: A trained classifier with a predict_proba method.
+        - k: The top-k value (default is 3).
+        
+        Returns:
+        A dictionary mapping cluster IDs to the average margin.
+        """
         clusters = np.unique(cluster_labels)
-        top_k_scores = []
+        cluster_margins = {}
         
         for cluster in clusters:
-            # Filter data points in this cluster
+            # Select the data points for the current cluster
             indices = (cluster_labels == cluster)
-            
             cluster_points = X[indices]
-            cluster_labels_subset = y[indices]
             
-            # Predict probabilities for cluster points
-            y_proba = model.predict_proba(cluster_points)
+            # print(cluster_points.shape)
             
-            top_k_score = top_k_accuracy_score(cluster_labels_subset, y_proba, k=k)
-            top_k_scores.append((cluster, top_k_score))
-        return top_k_scores    
+            if cluster_points.shape[0] == 0:
+                cluster_margins[cluster] = None
+                continue
+            
+            # Get predicted probabilities for these points
+            y_proba = linear_model.predict_proba(cluster_points)
+            
+            # Sort the probabilities for each sample in descending order
+            sorted_probs = np.sort(y_proba, axis=1)[:, ::-1]
+            
+            # print(f"Top Probability: {sorted_probs[:, 0]}, Top-kth Probability: {sorted_probs[:, k-1]}")
+            
+            # Compute the margin: difference between the top probability and the kth probability
+            if sorted_probs.shape[1] >= k:
+                margins = sorted_probs[:, 0] - sorted_probs[:, k-1]
+            else:
+                # If the number of classes is less than k, use the top-probability as the margin
+                margins = sorted_probs[:, 0]
+            
+            # Average the margin across all samples in the cluster 
+            avg_margin = np.mean(margins)
+            cluster_margins[int(cluster)] = avg_margin
+        
+        return cluster_margins
+    
+    @classmethod
+    def __refine_top_k_clusters(cls, X, cluster_labels, linear_model, clustering_model_factory, min_leaf_size, random_state=0, k=3, threshold=0.7, max_refinement=1):
+        """Dynamically refine clusters based on top-k accuracy"""
+        refinements = 0
+        while refinements < max_refinement:
+            # Calculate the margins for earch cluster
+            top_k_margins = cls.__calculate_cluster_margin(X, cluster_labels, linear_model, k=5).items()
+            
+            """
+            print("__refine_top_k_clusters")
+            for cluster, margin_score in top_k_margins:
+                print(f"Cluster: {cluster}, Margin Score: {margin_score}")
+            """
+                        
+            mean_top_k_margin = np.mean([margin_score for _, margin_score in top_k_margins])
+            
+            # Find clusters with top-k accuracy below the threshold
+            clusters_to_refine = [cluster for cluster, margin_score in top_k_margins if margin_score < threshold]
+            
+            print(clusters_to_refine)
+            
+            if not clusters_to_refine:
+                print("All clusters meet the top-k accuracy threshold")
+                break
+                
+            print(f"Clusters to refine {clusters_to_refine}")
+            
+            # Refine each low-performing cluster
+            for cluster in clusters_to_refine:
+                print(f"Cluster: {cluster}")
+                
+                # Save the state of cluster_labels before refinement
+                previous_cluster_labels = cluster_labels.copy()
+                previous_mean_top_k_margin = mean_top_k_margin
+            
+                indices = (cluster_labels == cluster)
+                cluster_points = X[indices]
+                
+                n_clusters_points = cluster_points.shape[0]
+                
+                if n_clusters_points > min_leaf_size:
+                    # Calculate optimal number of clusters
+                    n_splits = cls.__calculate_optimal_clusters(cluster_points, clustering_model_factory, 16, random_state=random_state)
+                    
+                    # print(f"Number of splits: {n_splits}")
+                    
+                    # Apply KMeans to further refine this cluster 
+                    clustering_model = clustering_model_factory.create_model({'n_clusters': n_splits}).fit(cluster_points)
+                    sub_cluster_labels = clustering_model.labels_
+                    
+                    # Reassign sub-cluster labels to the original cluster
+                    unique_label = np.max(cluster_labels) + 1
+                    
+                    cluster_labels[indices] = unique_label + sub_cluster_labels
+                    
+                    # print(f"Cluster n: {cluster}")
+                    
+                    # Recalculate the margins after refinement
+                    new_top_k_margin = cls.__calculate_cluster_margin(X, cluster_labels, linear_model, k=5).items()
+                    
+                    new_mean_top_k_margin = np.mean([margin_score for _, margin_score in new_top_k_margin])
+                    
+                    """
+                    print("__refine_top_k_clusters")
+                    for cluster, margin_score in new_margins:
+                        print(f"Cluster: {cluster}, Margin Score: {margin_score}")
+                    """
+
+                    print(f"Old score: {previous_mean_top_k_margin}, New score: {new_mean_top_k_margin}")
+                    # Check if the new top_k margin score is better
+                    if new_mean_top_k_margin < previous_mean_top_k_margin:
+                        print(f"New score for cluster {cluster} is worse. Reverting changes.")
+                        cluster_labels = previous_cluster_labels  # Revert to previous state
+                    else:
+                        print(f"New score for cluster {cluster} is better. Keeping changes.")
+                
+                else:
+                    print(f"Cluster {cluster} has too few points for further refinement.")
+
+            refinements += 1
+            print(f"Refinement {refinements} completed.")
+        
+        return cluster_labels
     
     @staticmethod
-    def __calculate_optimal_clusters(X, clustering_model_factory, cluster_range, random_state=0):
+    def __calculate_optimal_clusters(X, clustering_model_factory, cluster_range=16, random_state=0):
         k_range = range(2, cluster_range)
         wcss = [clustering_model_factory.create_model(
             {'n_clusters': k, 
             'random_state':random_state}
             ).fit(X).inertia_ for k in k_range]
 
-        knee = KneeLocator(k_range, wcss, curve='convex', direction='decreasing')
+        knee = KneeLocator(k_range, wcss, curve='convex', direction='decreasing', online=True)
         return knee.knee
-    
-    @staticmethod
-    def __merge_small_clusters(X, labels, min_cluster_size=10):
-        """
-        Merges small clusters with larger clusters based on proximity to valid clusters.
-        Ensures that all small clusters are merged.
-        """
-        unique_labels = np.unique(labels)
-        
-        # Find valid clusters and their centroids
-        valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
-        valid_centroids = np.array([X[labels == label].mean(axis=0) for label in valid_labels])
-        
-        updated_labels = labels.copy()
-        
-        # Process small clusters
-        for label in unique_labels:
-            cluster_indices = np.where(labels == label)[0]
-            if len(cluster_indices) < min_cluster_size:
-                cluster_points = X[cluster_indices]
-                
-                # Find the closest valid centroid
-                closest_valid_idx, _ = pairwise_distances_argmin_min(cluster_points, valid_centroids)
-                
-                # Assign all points in the small cluster to the closest valid cluster
-                closest_label = valid_labels[int(closest_valid_idx[0])]
-                updated_labels[cluster_indices] = closest_label
-        
-        return updated_labels
-        
-    @staticmethod    
-    def __encode_labels(labels_list):
-        """Convert string labels into numeric labels."""
-        label_to_idx = {}
-        return np.array([label_to_idx.setdefault(label, len(label_to_idx)) for label in labels_list])
     
     @staticmethod
     def __get_top_k_indices(y_proba, k, top_k_threshold):
@@ -276,13 +333,4 @@ class HierarchicalLinearModel:
     @staticmethod
     def __top_k_score_sklearn(pred_probs, true_labels, k=3):
         """Calculate top-k score using sklearn's top_k_accuracy_score as a helper."""
-        top_k_accuracy = top_k_accuracy_score(true_labels, pred_probs, k=k, labels=np.arange(pred_probs.shape[1]))
-            
-        # Calculate the average top-k score (sum of probabilities for the top-k predictions)
-        top_k_scores = []
-        for probs in pred_probs:
-            # Sort probabilities in descending order and sum the top-k
-            top_k_scores.append(np.sum(np.sort(probs)[::-1][:k]))
-        
-        average_top_k_score = np.mean(top_k_scores)
-        return top_k_accuracy, average_top_k_score
+        return top_k_accuracy_score(true_labels, pred_probs, k=k, labels=np.arange(pred_probs.shape[1]))

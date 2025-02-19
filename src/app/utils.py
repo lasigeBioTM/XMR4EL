@@ -163,7 +163,7 @@ def predict_labels_hierarchical_clustering_model(hierarchical_clustering_model, 
         
     return predict_labels
 
-def predict_labels_hierarchical_linear_model(hierarchical_linear_model, embeddings, predicted_labels, class_labels, k):
+def predict_labels_hierarchical_linear_model(hierarchical_linear_model, embeddings, predicted_labels, k):
     
-    return hierarchical_linear_model.predict(embeddings, predicted_labels, class_labels, k)
+    return hierarchical_linear_model.predict(embeddings, predicted_labels, k)
 

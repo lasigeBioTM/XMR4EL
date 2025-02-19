@@ -44,14 +44,12 @@ def main():
     
     class_labels = hierarchical_clustering_model.labels
     
-    top_k_acc, avg_top_k_score = predict_labels_hierarchical_linear_model(hierarchical_linear_model, test_input, predicted_labels, class_labels, top_k)
+    top_k_acc = predict_labels_hierarchical_linear_model(hierarchical_linear_model, test_input, predicted_labels, top_k)
     
     # Overall Mean Top-1 Score: 0.6162762641906738
     # Overall Mean Top-3 Score: 0.8822723031044006
     # Overall Mean Top-5 Score: 0.9555599093437195
-    # print(f"Overall Mean Top-{k} Score: {top_k_score}")
-    print(f"Top-{top_k} Accuracy (sklearn): {top_k_acc}")
-    print(f"Average Top-{top_k} Score: {avg_top_k_score}")  
+    print(f"Top-{top_k} Accuracy (sklearn): {top_k_acc}") 
     
     end = time.time()
     
