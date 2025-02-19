@@ -164,8 +164,6 @@ class DivisiveHierarchicalClustering():
             final_labels[int(idx)] = label
         
         final_labels = cls.__encode_labels(final_labels)
-        
-        # print(cls.__count_label_occurrences(final_labels))    
     
         # Merge small clusters and update the labels
         merged_labels = cls.__merge_small_clusters(X, np.array(final_labels), min_cluster_size=min_leaf_size)
@@ -188,9 +186,6 @@ class DivisiveHierarchicalClustering():
         )
         
     def predict(self, clustering_model_factory, test_input):
-        
-        # print(self.__count_label_occurrences(self.labels))
-        
         clustering_model = clustering_model_factory.create_model(
             {
                 'n_clusters': len(self.centroids), 
@@ -223,6 +218,7 @@ class DivisiveHierarchicalClustering():
         davies_bouldin_score = cls.__davies_bouldin(X, cluster_labels)            
         print(f"\nDavies Bouldin Score: {davies_bouldin_score}")
         """
+        
         mean_silhouette_scores = cls.__mean_silhouette_for_splits(X, cluster_labels)
         print("\nMean Silhouette Score:")
         for idx in range(n_splits):

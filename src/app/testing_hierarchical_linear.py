@@ -63,7 +63,7 @@ def main():
 
     # Step 6: Evaluate the model
     accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred, average='micro')
+    precision = precision_score(y_test, y_pred, average='micro', zero_division=True)
     f1 = f1_score(y_test, y_pred, average='micro')    
     
     print(f"Accuracy: {accuracy}")
