@@ -8,7 +8,7 @@ import numpy as np
 
 from src.app.utils import load_bio_bert_vectorizer
 from src.machine_learning.cpu.ml import KMeansCPU
-from src.machine_learning.hierarchical_clustering import DivisiveHierarchicalClustering
+from src.machine_learning.divisive_hierarchical_clustering import DivisiveHierarchicalClustering
 
 
 def main():
