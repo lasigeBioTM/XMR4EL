@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score, precision_score, f1_score, classific
 
 from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
 from src.machine_learning.hierarchical_linear_model import HierarchicalLinearModel
-from src.machine_learning.hierarchical_clustering import DivisiveHierarchicalClustering
+from machine_learning.divisive_hierarchical_clustering import DivisiveHierarchicalClustering
 from src.app.utils import load_bio_bert_vectorizer
 
 
