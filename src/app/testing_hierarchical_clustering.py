@@ -55,13 +55,11 @@ def main():
         config={
             'n_splits': 0,
             'max_iter': 500,
-            'depth': 2,
+            'depth': 3,
             'min_leaf_size':20,
-            'max_leaf_size': 40,
             'init': 'k-means++',
             'random_state': 0,
             'spherical': True,
-            'prefix': ''
             }
     )
     

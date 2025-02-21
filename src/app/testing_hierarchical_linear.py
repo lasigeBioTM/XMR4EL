@@ -1,11 +1,10 @@
 import numpy as np
 
 from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score, precision_score, f1_score, classification_report
 
 from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
 from src.machine_learning.hierarchical_linear_model import HierarchicalLinearModel
-from machine_learning.divisive_hierarchical_clustering import DivisiveHierarchicalClustering
+from src.machine_learning.divisive_hierarchical_clustering import DivisiveHierarchicalClustering
 from src.app.utils import load_bio_bert_vectorizer
 
 
@@ -22,23 +21,18 @@ def main():
     
     divisiveModel = DivisiveHierarchicalClustering.load(divisive_model_filepath)
     
-    y_train_feat = divisiveModel.labels
+    tree_node = divisiveModel.tree_node
     
     top_k = 1
     
     hierarchical_linear_model = HierarchicalLinearModel.fit(
-        X=X_train_feat,
-        Y=y_train_feat,
+        tree_node=tree_node,
         linear_model_factory=LogisticRegressionCPU.create_model(
             {'max_iter': 1000,
              'solver': 'newton-cg',
              'penalty': 'l2',
              'random_state': 0
              }),
-        clustering_model_factory=KMeansCPU.create_model(
-            {'max_iter': 500,
-             'random_state': 0
-            }),
         config= {
             'min_leaf_size': 20,
             'max_leaf_size': 40,
@@ -50,29 +44,7 @@ def main():
     
     hierarchical_linear_model.save("data/processed/regression/test_hierarchical_linear_model.pkl")
     
-    linear_model = hierarchical_linear_model.linear_model
-    
-    x_test = hierarchical_linear_model.x_test
-    y_test = hierarchical_linear_model.y_test
-    
-    # Step 5: Predict on the test set
-    # cluster_labels_test = divisiveModel.predict(KMeansCPU.create_model(), X_test)  # Cluster test data
-    # X_test_augmented = np.hstack((X_test, cluster_labels_test.reshape(-1, 1)))  # Combine cluster labels with features
-    
-    y_pred = linear_model.predict(x_test)
-
-    # Step 6: Evaluate the model
-    accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred, average='micro', zero_division=True)
-    f1 = f1_score(y_test, y_pred, average='micro')    
-    
-    print(f"Accuracy: {accuracy}")
-    print(f"Precision: {precision}")
-    print(f"F1-Score: {f1}")
-    print("Classification Report:")
-    print(classification_report(y_test, y_pred))
-    
-    
+    print(hierarchical_linear_model.tree_node.print_tree(cluster=False))
     
 if __name__ == "__main__":
     main()

@@ -7,7 +7,7 @@ from kneed import KneeLocator
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, pairwise_distances_argmin_min, silhouette_samples
 
-from src.machine_learning.tree_node import Node, TreeNode
+from node_logic.tree_node import TreeNode
      
      
 class DivisiveHierarchicalClustering():
@@ -49,12 +49,9 @@ class DivisiveHierarchicalClustering():
             'max_iter': 100,
             'depth': 1,
             'min_leaf_size':10,
-            'max_leaf_size': 20,
-            'variance': 0.1,
             'init': 'k-means++',
             'random_state': 0,
             'spherical': True,
-            'prefix': ''
         }
         
         config = {**DEFAULTS, **config}
@@ -63,12 +60,9 @@ class DivisiveHierarchicalClustering():
         max_iter = config['max_iter']
         depth = config['depth']
         min_leaf_size = config['min_leaf_size']
-        max_leaf_size = config['max_leaf_size']
-        variance = config['variance']
         init = config['init']
         random_state = config['random_state']
         spherical = config['spherical']
-        prefix = config['prefix']
 
         @staticmethod
         def recursive_clustering(X, tree_node, n_splits, max_iter, depth, min_leaf_size, random_state, clustering_model_factory, init):
@@ -101,11 +95,8 @@ class DivisiveHierarchicalClustering():
             if cluster_labels is None:
                 raise ValueError("Clustering model did not generate any labels.")
             
-            # Create a Node with the model and labels
-            current_node = Node(model=clustering_model, labels=cluster_labels)
-            
             # Insert the Node into the TreeNode
-            tree_node.insert_node(current_node)
+            tree_node.insert_cluster_node(clustering_model, cluster_labels, X)
             
             # Calculate silhouette_scores
             overall_silhouette_score, silhouette_scores = cls.__compute_silhouette_scores(X, cluster_labels)
@@ -154,11 +145,11 @@ class DivisiveHierarchicalClustering():
         final_tree = recursive_clustering(
             X=X, 
             tree_node=root_tree_node,
-            n_splits=0,
-            max_iter=300,
-            depth=3,
-            min_leaf_size=20,
-            random_state=0,
+            n_splits=n_splits,
+            max_iter=max_iter,
+            depth=depth,
+            min_leaf_size=min_leaf_size,
+            random_state=random_state,
             clustering_model_factory=clustering_model_factory,
             init=init
         )
