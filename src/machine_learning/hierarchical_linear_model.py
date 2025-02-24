@@ -118,13 +118,13 @@ class HierarchicalLinearModel:
         # Train model for the current node
         linear_model_data = cls.__train_linear_model(X, Y, linear_model_factory, top_k)
         
-        tree_node.insert_linear_node(linear_model_data['linear_model'],
+        tree_node.set_linear_node(linear_model_data['linear_model'],
                                      linear_model_data['top_k_score'],
                                      linear_model_data['X_test'],
                                      linear_model_data['y_test'])
 
         # Apply to child nodes recursively
-        for child in tree_node.child:
+        for child in tree_node.children.values():
             cls.__train_all_tree_nodes(child, linear_model_factory, top_k)
     
     @staticmethod

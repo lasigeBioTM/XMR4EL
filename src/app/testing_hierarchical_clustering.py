@@ -67,6 +67,8 @@ def main():
     
     # print(np.unique(labels))
     
+    print(divisiveModel.tree_node)
+    
     divisiveModel.save("data/processed/clustering/test_hierarchical_clustering_model.pkl")
     
     # Dimensionality reduction (t-SNE)

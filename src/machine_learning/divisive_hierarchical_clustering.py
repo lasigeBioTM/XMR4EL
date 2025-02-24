@@ -64,7 +64,6 @@ class DivisiveHierarchicalClustering():
         random_state = config['random_state']
         spherical = config['spherical']
 
-        @staticmethod
         def recursive_clustering(X, tree_node, n_splits, max_iter, depth, min_leaf_size, random_state, clustering_model_factory, init):
             # Base case: Stop recursion if depth reaches 0
             if depth == 0 or X.shape[0] <= min_leaf_size:
@@ -96,14 +95,13 @@ class DivisiveHierarchicalClustering():
                 raise ValueError("Clustering model did not generate any labels.")
             
             # Insert the Node into the TreeNode
-            tree_node.insert_cluster_node(clustering_model, cluster_labels, X)
+            tree_node.set_cluster_node(clustering_model, cluster_labels, X)
             
             # Calculate silhouette_scores
             overall_silhouette_score, silhouette_scores = cls.__compute_silhouette_scores(X, cluster_labels)
             
             # Insert values in the tree_node
-            tree_node.insert_overall_silhouette_scores(overall_silhouette_score)
-            tree_node.insert_silhouette_scores_dict(silhouette_scores)
+            tree_node.cluster_node.set_silhouette_scores(overall_silhouette_score, silhouette_scores)
             
             # Recursively process each cluster
             for cluster_label in np.unique(cluster_labels):
@@ -114,7 +112,9 @@ class DivisiveHierarchicalClustering():
                 
                 if n_cluster_points > min_leaf_size:
                     # Create a new TreeNode for the sub-cluster, Parent Node
-                    child_tree_node = TreeNode(parent_cluster_label=cluster_label, depth=tree_node.depth + 1)
+                    child_tree_node = TreeNode(depth=tree_node.depth + 1)
+                    
+                    tree_node.add_child(cluster_label, child_tree_node)
                     
                     # Recur for the sub-cluster
                     recursive_clustering(
@@ -128,11 +128,6 @@ class DivisiveHierarchicalClustering():
                         clustering_model_factory=clustering_model_factory,
                         init=init
                     )
-                    
-                    # Insert the child TreeNode into the current TreeNode
-                    if tree_node.child is None:
-                        tree_node.child = []
-                    tree_node.insert_child(child_tree_node)
             
             return tree_node
                     

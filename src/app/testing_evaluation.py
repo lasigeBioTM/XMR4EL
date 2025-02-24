@@ -41,31 +41,39 @@ def main():
     
     # print(tree_node.print_tree())
     
-    top_k = 3
+    top_k = 5
     
-    # Infernce
-    # top_k_labels, top_k_confidence = PredictTopK.predict(tree_node, test_input, k=top_k)
+    # Inferncenp.array([input_embedding])
+    # predictions = PredictTopK.predict(tree_node, test_input, k=top_k)
+    
+    # print(tree_node.print_tree())
     
     # Batch
-    top_k_predictions = PredictTopK.predict_batch(tree_node, test_input, k=top_k)
+    top_k_predictions = PredictTopK.predict_batch(tree_node, test_input, k=top_k, max_depth=2)
     ece = PredictTopK.compute_ece(top_k_predictions)
     # print(top_k_results)
+    
+    # print(top_k_predictions)
+    
+    # exit()
     
     correct_count = 0
     total = len(top_k_predictions)
     top_k_confidence_list = []
 
+    # print(top_k_predictions)
+
     for pred in top_k_predictions:
         true_label = pred['true_label']
         top_k_labels = pred['top_k_labels']
-        top_k_confidence = pred['top_k_confidences'][0]
+        top_k_confidence = pred['top_k_confidence']
         
-        print(f"True Label: {pred['true_label']}")
-        print(f"Top-K Labels: {pred['top_k_labels']}")
-        print(f"Confidence Scores: {pred['top_k_confidences']}")
+        print(f"True Label: {true_label}")
+        print(f"Top-K Labels: {top_k_labels}")
+        print(f"Confidence Scores: {top_k_confidence}")
         print("-" * 50)
         
-        top_k_confidence_list.append(top_k_confidence)
+        # top_k_confidence_list.append(top_k_confidence)
         
         if true_label in top_k_labels:
             correct_count += 1
@@ -80,13 +88,14 @@ def main():
     # 0.2 with label smoothing
     # 0.3 with label smoothing and temperature 
     print(f"Expected Calibration Error (ECE): {ece:.4f}")
-    print(f"\nTop-1 Confidence: {np.mean(top_k_confidence_list)}")
+    # print(f"\nTop-1 Confidence: {np.mean(top_k_confidence_list)}")
     print(f"\nTop-{top_k} Accuracy: {round(correct_count / total if total > 0 else 0, 6)}")
+    
+    # print(tree_node.print_tree())
     
     end = time.time()
     
     print(f"{end - start} secs of running")
-    
     
 if __name__ == "__main__":
     main()
