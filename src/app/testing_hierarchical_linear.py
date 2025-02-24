@@ -44,7 +44,7 @@ def main():
     
     hierarchical_linear_model.save("data/processed/regression/test_hierarchical_linear_model.pkl")
     
-    print(hierarchical_linear_model.tree_node.print_tree(cluster=False))
+    # print(hierarchical_linear_model.tree_node.print_tree(cluster=False))
     
 if __name__ == "__main__":
     main()

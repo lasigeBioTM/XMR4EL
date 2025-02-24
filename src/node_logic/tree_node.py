@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class ClusterNode:
     def __init__(self, model=None, labels=None, cluster_points=None):
         self.model = model
@@ -10,7 +13,7 @@ class ClusterNode:
         Includes information about the clustering model and labels.
         """
         n_clusters = len(set(self.labels)) if self.labels is not None else 0
-        return f"Model: {type(self.model).__name__}, Clusters: {n_clusters}"
+        return f"Model: {type(self.model).__name__}, Clusters: {n_clusters}, Unique Labels: {np.unique(self.labels)}"
 
 class LinearNode:
     
@@ -28,10 +31,11 @@ class LinearNode:
         
     
 class TreeNode:
-    def __init__(self, depth=0, cluster_node=None, linear_node=None, child=None):
+    def __init__(self, depth=0, cluster_node=None, linear_node=None, parent_cluster_label=None, child=None):
         self.depth = depth
         self.cluster_node = cluster_node
         self.child = child if child is not None else []
+        self.parent_cluster_label = parent_cluster_label
         self.overall_silhouette_score = None
         self.silhouette_scores = {}
         self.linear_node = linear_node
@@ -65,7 +69,7 @@ class TreeNode:
             for idx, score in self.silhouette_scores.items():
                 silhouette_score_out += f"{output}{int(idx)}: {float(score)}\n"
                 
-            out += f"{output}Model: {self.cluster_node.print_out()}, \n"
+            out += f"{output}Model: {self.cluster_node.print_out()}, Parent Node: {self.parent_cluster_label} \n"
             out += f"{output}Overall Silhouette Score: {self.overall_silhouette_score}\n"
             out += f"{output}Samples Silhouette Scores: {silhouette_score_out}\n"
             
