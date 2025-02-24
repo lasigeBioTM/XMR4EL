@@ -1,92 +1,102 @@
 import numpy as np
+from typing import Optional, Dict, Any
 
 
 class ClusterNode:
-    def __init__(self, model=None, labels=None, cluster_points=None):
+    """ Represents a clustering node within the hierarchical tree. """
+        
+    def __init__(self, model: Optional[Any] = None, 
+                 labels: Optional[np.ndarray] = None, 
+                 cluster_points: Optional[np.ndarray] = None):
+        
         self.model = model
         self.labels = labels
         self.cluster_points = cluster_points
+        self.overall_silhouette_score: Optional[float] = None
+        self.silhouette_scores: Dict[int, float] = {}
+        
+    def set_silhouette_scores(self, overall_score: float, score_dict: Dict[int, float]):
+        """ Sets silhouette scores for the node. """
+        self.overall_silhouette_score = overall_score
+        self.silhouette_scores = score_dict
 
-    def print_out(self, output=""):
-        """
-        Returns a string representation of the Node object.
-        Includes information about the clustering model and labels.
-        """
-        n_clusters = len(set(self.labels)) if self.labels is not None else 0
-        return f"Model: {type(self.model).__name__}, Clusters: {n_clusters}, Unique Labels: {np.unique(self.labels)}"
+    def __str__(self) -> str:
+        """ Returns a string representation of the ClusterNode. """
+        num_clusters = len(set(self.labels)) if self.labels is not None else 0
+        unique_labels = np.unique(self.labels) if self.labels is not None else []
+        
+        silhouette_scores = ""
+        if self.silhouette_scores:
+            for idx, score in self.silhouette_scores.items():
+                silhouette_scores += f"{int(idx)}: {float(score)}\n"
+        
+        return f"Model: {type(self.model).__name__}, Clusters: {num_clusters}, Unique Labels: {unique_labels}, \nOverall Silhouette Score: {self.overall_silhouette_score}, \nSilhouette Scores:\n{silhouette_scores}"
 
 class LinearNode:
+    """ Represents a classification model at a specific tree node. """
     
-    def __init__(self, model=None, top_k_score=None, X_test=None, y_test=None):
+    def __init__(self, model: Optional[Any] = None, 
+                 top_k_score: Optional[float] = None, 
+                 X_test: Optional[np.ndarray] = None, 
+                 y_test: Optional[np.ndarray] = None):
+        
         self.model = model
         self.top_k_score = top_k_score
         self.X_test = X_test
         self.y_test = y_test
         
-    def print_out(self, output=""):
-        out = f"{output}Linear Model: {type(self.model).__name__}\n"
-        out += f"{output}Top-K Score: {self.top_k_score}\n"
-        out += f"{output}X_test Shape: {self.X_test.shape}\n"
-        return out
+    def __str__(self) -> str:
+        """ Returns a string representation of the LinearNode. """
+        shape_info = f"X_test Shape: {self.X_test.shape}" if self.X_test is not None else "No test data"
+        return f"Linear Model: {type(self.model).__name__}\nTop-K Score: {self.top_k_score}\n{shape_info}"
         
     
 class TreeNode:
-    def __init__(self, depth=0, cluster_node=None, linear_node=None, parent_cluster_label=None, child=None):
-        self.depth = depth
-        self.cluster_node = cluster_node
-        self.child = child if child is not None else []
-        self.parent_cluster_label = parent_cluster_label
-        self.overall_silhouette_score = None
-        self.silhouette_scores = {}
-        self.linear_node = linear_node
+    """ Represents a hierarchical node in the classification tree. """
     
-    def insert_child(self, child):
-        self.child.append(child)
+    def __init__(self, depth: int = 0, parent: Optional['TreeNode'] = None):
+        self.depth = depth
+        self.cluster_node: Optional[ClusterNode] = None
+        self.linear_node: Optional[LinearNode] = None
+        self.parent = parent
+        self.children: Dict[int, 'TreeNode'] = {}
         
-    def insert_cluster_node(self, clustering_model, cluster_labels, cluster_points):
+    
+    def add_child(self, cluster_label: int, child_node: "TreeNode"):
+        """ Adds a child node under the current tree node. """
+        if cluster_label in self.children:
+            raise ValueError(f"Cluster label {cluster_label} already exists as a child.")
+        
+        child_node.parent = self
+        child_node.parent_cluster_label = cluster_label
+        self.children[cluster_label] = child_node
+    
+    def set_cluster_node(self, clustering_model: Any, cluster_labels: np.ndarray, cluster_points: np.ndarray):
+        """ Assigns a clustering model to this node. """
         self.cluster_node = ClusterNode(model=clustering_model, labels=cluster_labels, cluster_points=cluster_points)
-        
-    def insert_linear_node(self, linear_model, top_k_score, X_test, y_test):
+
+    def set_linear_node(self, linear_model: Any, top_k_score: float, X_test: np.ndarray, y_test: np.ndarray):
+        """ Assigns a classification model to this node. """
         self.linear_node = LinearNode(model=linear_model, top_k_score=top_k_score, X_test=X_test, y_test=y_test)
     
-    def insert_overall_silhouette_scores(self, overall_silhouette_score):
-        self.overall_silhouette_score = overall_silhouette_score
-        
-    def insert_silhouette_scores_dict(self, silhouette_scores):
-        self.silhouette_scores = silhouette_scores
+    def insert_parent(self, parent):
+        self.parent = parent
     
-    def print_tree(self, level=0, linear=True, cluster=True):
-        """
-        Recursively prints the tree structure.
-        Each node calls its `print_out` method for its representation.
-        """
-        output = "  " * level  # Indentation for current level
-        out = "" if self.cluster_node is None else f"{output}Depth: {self.depth}\n"
-        
-        if self.cluster_node is not None and cluster:
-            silhouette_score_out = "\n"
-                
-            for idx, score in self.silhouette_scores.items():
-                silhouette_score_out += f"{output}{int(idx)}: {float(score)}\n"
-                
-            out += f"{output}Model: {self.cluster_node.print_out()}, Parent Node: {self.parent_cluster_label} \n"
-            out += f"{output}Overall Silhouette Score: {self.overall_silhouette_score}\n"
-            out += f"{output}Samples Silhouette Scores: {silhouette_score_out}\n"
-            
-        if self.linear_node is not None and linear:
-            out += f"{self.linear_node.print_out(output=output)}\n"            
+    def __str__(self) -> str:
+        """ Returns a string representation of the TreeNode. """
+        indent = "  " * self.depth * 2
+        info = f"{indent}Depth: {self.depth}\n" if self.cluster_node else ""
 
-        # Recursively print child nodes
-        for child in self.child:
-            out += child.print_tree(level + 5, linear=linear, cluster=cluster)
+        if self.cluster_node:
+            info += f"{indent}Cluster Info: {self.cluster_node}\n"
 
-        return out
+        if self.linear_node:
+            info += f"{indent}Classifier Info: {self.linear_node}\n"
 
+        for child in self.children.values():
+            info += str(child)  # Recursively print children
 
-            
-        
-    
-        
+        return info
         
         
     
