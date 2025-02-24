@@ -7,7 +7,7 @@ from kneed import KneeLocator
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, pairwise_distances_argmin_min, silhouette_samples
 
-from node_logic.tree_node import TreeNode
+from src.node_logic.tree_node import TreeNode
      
      
 class DivisiveHierarchicalClustering():
@@ -113,8 +113,8 @@ class DivisiveHierarchicalClustering():
                 n_cluster_points = cluster_points.shape[0]
                 
                 if n_cluster_points > min_leaf_size:
-                    # Create a new TreeNode for the sub-cluster
-                    child_tree_node = TreeNode(depth=tree_node.depth + 1)
+                    # Create a new TreeNode for the sub-cluster, Parent Node
+                    child_tree_node = TreeNode(parent_cluster_label=cluster_label, depth=tree_node.depth + 1)
                     
                     # Recur for the sub-cluster
                     recursive_clustering(
@@ -154,7 +154,7 @@ class DivisiveHierarchicalClustering():
             init=init
         )
 
-        print(final_tree.print_tree())
+        # print(final_tree.print_tree())
         
         return cls(
             clustering_model_type=clustering_model_factory.model_type, 
