@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 from src.predicter.predict import PredictTopK
-from src.app.utils import create_bio_bert_vectorizer, load_bio_bert_vectorizer, load_hierarchical_linear_model
+from src.app.utils import create_bio_bert_vectorizer, load_bio_bert_vectorizer, load_hierarchical_clustering_model, load_hierarchical_linear_model
 
 def main():
     
@@ -14,6 +14,7 @@ def main():
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"    
     test_input_embeddings_filepath = "data/processed/vectorizer/test_input_embeddings.npy"
     
+    hierarchical_clustering_model_filepath = "data/processed/clustering/test_hierarchical_clustering_model.pkl"
     hierarchical_linear_model_filepath = "data/processed/regression/test_hierarchical_linear_model.pkl"
     
     start = time.time()
@@ -32,54 +33,60 @@ def main():
     
     # Assuming test_input has shape (n_samples, 768) and the model was trained on 140 features
     
-    pca = PCA(n_components=2)
-    test_input = pca.fit_transform(test_input)  # Reduce to 140 features
+    # pca = PCA(n_components=2)
+    # test_input = pca.fit_transform(test_input)  # Reduce to 140 features
     
+    hierarchical_clustering_model = load_hierarchical_clustering_model(hierarchical_clustering_model_filepath)
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    tree_node = hierarchical_linear_model.tree_node
+    # tree_node = hierarchical_linear_model.tree_node
     
     # print(tree_node.print_tree())
     
-    top_k = 5
+    # Top-1 -> 0.201057
+    # Top-2 -> 0.411075
+    # Top-3 -> 0.696691
+    top_k = 3
     
-    # Inferncenp.array([input_embedding])
+    # Infernce np.array([input_embedding])
     # predictions = PredictTopK.predict(tree_node, test_input, k=top_k)
     
     # print(tree_node.print_tree())
     
+    # normalize the data to predict
+    
+    root_node = hierarchical_linear_model.tree_node
+    cluster_predictions = hierarchical_clustering_model.predict(test_input)
+    
     # Batch
-    top_k_predictions = PredictTopK.predict_batch(tree_node, test_input, k=top_k, max_depth=2)
-    ece = PredictTopK.compute_ece(top_k_predictions)
+    predictions = PredictTopK.predict(cluster_predictions, root_node, test_input, k=top_k)
+    # ece = PredictTopK.compute_ece(top_k_predictions)
     # print(top_k_results)
     
     # print(top_k_predictions)
     
-    # exit()
+    exit()
     
     correct_count = 0
-    total = len(top_k_predictions)
+    total = len(predictions)
     top_k_confidence_list = []
 
-    # print(top_k_predictions)
-
-    for pred in top_k_predictions:
-        true_label = pred['true_label']
-        top_k_labels = pred['top_k_labels']
-        top_k_confidence = pred['top_k_confidence']
+    for idx in range(total):
+        cluster_pred = cluster_predictions[idx]
+        predicted_labels = predictions[idx]['predicted_labels']
+        top_k_confidences = predictions[idx]['top_k_confidences']
+        true_label = predictions[idx]['true_label']
         
+        print(f"Cluster Predictions: {cluster_pred}")
         print(f"True Label: {true_label}")
-        print(f"Top-K Labels: {top_k_labels}")
-        print(f"Confidence Scores: {top_k_confidence}")
+        print(f"Predicted Labels: {predicted_labels}")
+        print(f"Confidence Scores: {top_k_confidences}")
         print("-" * 50)
         
-        # top_k_confidence_list.append(top_k_confidence)
+        top_k_confidence_list.append(top_k_confidences)
         
-        if true_label in top_k_labels:
+        if true_label in predicted_labels:
             correct_count += 1
-        else:
-            print("")
-            #print(f"True Label: {true_label} -> Predicted Labels: {top_k_labels}")
             
     # print(f"Tree Structure:\n{tree_node.print_tree}")
     
@@ -87,8 +94,8 @@ def main():
     # 0.26 with temperature scaling
     # 0.2 with label smoothing
     # 0.3 with label smoothing and temperature 
-    print(f"Expected Calibration Error (ECE): {ece:.4f}")
-    # print(f"\nTop-1 Confidence: {np.mean(top_k_confidence_list)}")
+    # print(f"Expected Calibration Error (ECE): {ece:.4f}")
+    print(f"\nTop-1 Confidence: {np.mean(top_k_confidence_list)}")
     print(f"\nTop-{top_k} Accuracy: {round(correct_count / total if total > 0 else 0, 6)}")
     
     # print(tree_node.print_tree())

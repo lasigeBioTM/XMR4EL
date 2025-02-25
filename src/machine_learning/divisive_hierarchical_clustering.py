@@ -65,9 +65,6 @@ class DivisiveHierarchicalClustering():
         spherical = config['spherical']
 
         def recursive_clustering(X, tree_node, n_splits, max_iter, depth, min_leaf_size, random_state, clustering_model_factory, init):
-            # Base case: Stop recursion if depth reaches 0
-            if depth == 0 or X.shape[0] <= min_leaf_size:
-                return tree_node
 
             # Determine the number of splits if not provided
             if n_splits == 0:
@@ -77,17 +74,42 @@ class DivisiveHierarchicalClustering():
                     cluster_range=16,
                     random_state=random_state
                 )
-                
-            # Fit the clustering model
+            
             clustering_model = clustering_model_factory.create_model(
                 {
                     'n_clusters': n_splits,
                     'max_iter': max_iter,
                     'random_state': random_state,
-                    'init': init
+                    'init': init   
                 }
             ).fit(X)
-                    
+            
+            """
+            merge_loop = True
+            while merge_loop:
+                # Fit the clustering model
+                clustering_model = clustering_model_factory.create_model(
+                    {
+                        'n_clusters': n_splits,
+                        'max_iter': max_iter,
+                        'random_state': random_state,
+                        'init': init   
+                    }
+                ).fit(X)
+
+                # Merge small clusters
+                merged_labels = cls.__merge_small_clusters(X, clustering_model.labels_, min_leaf_size=min_leaf_size)
+
+                new_n_splits = len(np.unique(merged_labels))
+                
+                if new_n_splits == n_splits:
+                    merge_loop = False
+                else:
+                    n_splits = new_n_splits 
+            """
+            
+            print(cls.__count_label_occurrences(clustering_model.labels_))
+            
             cluster_labels = clustering_model.labels_
             
             # Check if clustering_model.labels_ is valid
@@ -111,6 +133,10 @@ class DivisiveHierarchicalClustering():
                 n_cluster_points = cluster_points.shape[0]
                 
                 if n_cluster_points > min_leaf_size:
+                    
+                    if depth - 1 == 0 or cluster_points.shape[0] <= min_leaf_size:
+                        return tree_node
+                    
                     # Create a new TreeNode for the sub-cluster, Parent Node
                     child_tree_node = TreeNode(depth=tree_node.depth + 1)
                     
@@ -142,14 +168,12 @@ class DivisiveHierarchicalClustering():
             tree_node=root_tree_node,
             n_splits=n_splits,
             max_iter=max_iter,
-            depth=depth,
+            depth=depth + 1,
             min_leaf_size=min_leaf_size,
             random_state=random_state,
             clustering_model_factory=clustering_model_factory,
             init=init
         )
-
-        # print(final_tree.print_tree())
         
         return cls(
             clustering_model_type=clustering_model_factory.model_type, 
@@ -180,16 +204,30 @@ class DivisiveHierarchicalClustering():
                 
         return overall_silhouette_score, silhouette_scores
         
-    def predict(self, clustering_model_factory, test_input):
-        clustering_model = clustering_model_factory.create_model(
-            {
-                'n_clusters': len(self.centroids), 
-                'init': self.centroids, 
-                'n_init': 1
-            }
-            ).fit(test_input)
-        
-        return clustering_model.predict(test_input)
+    def predict(self, batch_embeddings):
+        """ Predicts the cluster for input data X by traversing the hierarchical tree. """
+        predictions = []
+        for input_embedding in batch_embeddings:
+            
+            print(f"Input Embedding: {input_embedding}")
+            
+            current_node = self.tree_node  # Start at the root
+            pred = []
+             
+            while not current_node.is_leaf():
+                if current_node.cluster_node is None or current_node.cluster_node.model is None:
+                    break
+                
+                input_embedding = input_embedding.reshape(1, -1)
+                cluster_predictions = current_node.cluster_node.model.predict(input_embedding)[0]
+                
+                pred.append(int(cluster_predictions))
+                current_node = current_node.children[int(cluster_predictions)]
+            
+            print(f"Cluster Predictions: {pred}")
+            predictions.append(pred)
+        return predictions
+    
 
     @staticmethod
     def __calculate_optimal_clusters(X, clustering_model_factory, cluster_range, random_state=0):
@@ -205,33 +243,43 @@ class DivisiveHierarchicalClustering():
         return optimal_clusters
     
     @staticmethod
-    def __merge_small_clusters(X, labels, min_cluster_size=10):
-        """
-        Merges small clusters with larger clusters based on proximity to valid clusters.
-        Ensures that all small clusters are merged.
-        """
-        unique_labels = np.unique(labels)
+    def __merge_small_clusters(X, labels, min_leaf_size):
+        unique, counts = np.unique(labels, return_counts=True)
+        cluster_sizes = dict(zip(unique, counts))
+
+        # Identify small clusters
+        small_clusters = {c for c, size in cluster_sizes.items() if size < min_leaf_size}
         
-        # Find valid clusters and their centroids
-        valid_labels = [label for label in unique_labels if np.sum(labels == label) >= min_cluster_size]
-        valid_centroids = np.array([X[labels == label].mean(axis=0) for label in valid_labels])
+        if len(small_clusters) == 0:
+            return labels  #  No small clusters, return original labels
         
+        print(f"Detected {len(small_clusters)} small clusters (<{min_leaf_size})")
+
         updated_labels = labels.copy()
+
+        # Compute centroids of non-small clusters
+        large_clusters = [c for c in np.unique(updated_labels) if c not in small_clusters]
         
-        # Process small clusters
-        for label in unique_labels:
-            cluster_indices = np.where(labels == label)[0]
-            if len(cluster_indices) < min_cluster_size:
-                cluster_points = X[cluster_indices]
-                
-                # Find the closest valid centroid
-                closest_valid_idx, _ = pairwise_distances_argmin_min(cluster_points, valid_centroids)
-                
-                # Assign all points in the small cluster to the closest valid cluster
-                closest_label = valid_labels[int(closest_valid_idx[0])]
-                updated_labels[cluster_indices] = closest_label
+        if len(large_clusters) == 0:
+            print("⚠ Warning: No large clusters to merge into. Returning labels unchanged.")
+            return labels  #  Avoid breaking if no valid clusters remain
         
-        return updated_labels
+        centroids = np.array([X[updated_labels == c].mean(axis=0) for c in large_clusters])
+
+        for cluster in small_clusters:
+            indices = np.where(updated_labels == cluster)[0]  # Points in the small cluster
+            
+            if len(indices) == 0:
+                continue  # Skip empty clusters
+            
+            # Compute distances from each point to large cluster centroids
+            distances = np.linalg.norm(X[indices, None, :] - centroids, axis=2)  
+
+            # Assign each point to the nearest large cluster
+            nearest_cluster = np.argmin(distances, axis=1)
+            updated_labels[indices] = np.array(large_clusters)[nearest_cluster]  # Correct reassignment
+
+        return updated_labels  # Always return modified labels
 
 
     @staticmethod
@@ -251,6 +299,7 @@ class DivisiveHierarchicalClustering():
         for label, n_values in sorted_data:
             out += f"Cluster: {label} -> {n_values}\n"
         return out
+        # return [n_values for _, n_values in sorted_data]
         
         
                     

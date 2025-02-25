@@ -73,8 +73,9 @@ class KMeansCPU(Clustering):
 
     def fit(self, X_train):
         self.model = KMeans(**self.params)
+        # Returns the model
         return force_multi_core_processing_clustering_models(self.model, X_train)
-
+    
 class MiniBatchKMeansCPU(Clustering):
     DEFAULTS = {
         'n_clusters': 16,

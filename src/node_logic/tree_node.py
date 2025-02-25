@@ -20,7 +20,7 @@ class ClusterNode:
         self.overall_silhouette_score = overall_score
         self.silhouette_scores = score_dict
 
-    def __str__(self) -> str:
+    def __str__(self, indent=None) -> str:
         """ Returns a string representation of the ClusterNode. """
         num_clusters = len(set(self.labels)) if self.labels is not None else 0
         unique_labels = np.unique(self.labels) if self.labels is not None else []
@@ -30,7 +30,8 @@ class ClusterNode:
             for idx, score in self.silhouette_scores.items():
                 silhouette_scores += f"{int(idx)}: {float(score)}\n"
         
-        return f"Model: {type(self.model).__name__}, Clusters: {num_clusters}, Unique Labels: {unique_labels}, \nOverall Silhouette Score: {self.overall_silhouette_score}, \nSilhouette Scores:\n{silhouette_scores}"
+        # , \nOverall Silhouette Score: {self.overall_silhouette_score}, \nSilhouette Scores:\n{silhouette_scores}
+        return f"Model: {type(self.model).__name__}, Clusters: {num_clusters}, Unique Labels: {unique_labels}"
 
 class LinearNode:
     """ Represents a classification model at a specific tree node. """
@@ -45,10 +46,10 @@ class LinearNode:
         self.X_test = X_test
         self.y_test = y_test
         
-    def __str__(self) -> str:
+    def __str__(self, indent=None) -> str:
         """ Returns a string representation of the LinearNode. """
         shape_info = f"X_test Shape: {self.X_test.shape}" if self.X_test is not None else "No test data"
-        return f"Linear Model: {type(self.model).__name__}\nTop-K Score: {self.top_k_score}\n{shape_info}"
+        return f"Linear Model: {type(self.model).__name__}\n{indent}Top-K Score: {self.top_k_score}\n{indent}{shape_info}\n"
         
     
 class TreeNode:
@@ -61,6 +62,9 @@ class TreeNode:
         self.parent = parent
         self.children: Dict[int, 'TreeNode'] = {}
         
+    def is_leaf(self) -> bool:
+        """ Returns True if the node has no children, meaning it's a leaf. """
+        return len(self.children) == 0
     
     def add_child(self, cluster_label: int, child_node: "TreeNode"):
         """ Adds a child node under the current tree node. """
@@ -91,7 +95,7 @@ class TreeNode:
             info += f"{indent}Cluster Info: {self.cluster_node}\n"
 
         if self.linear_node:
-            info += f"{indent}Classifier Info: {self.linear_node}\n"
+            info += f"{indent}Classifier Info: {self.linear_node.__str__(indent)}\n"
 
         for child in self.children.values():
             info += str(child)  # Recursively print children
