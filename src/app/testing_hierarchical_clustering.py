@@ -22,8 +22,8 @@ def main():
     # 4 clusters, 0.85, Silhouette Score: 0.17800777, (13240, 85)
     # 4 clusters, 0.90, Silhouette Score: 0.16433217, (13240, 140)
     # 4 clusters, 0.95, Silhouette Score: 0.15200047, (13240, 252)
-    pca = PCA(n_components=2)
-    X_train_feat = pca.fit_transform(X_train_feat)
+    # pca = PCA(n_components=2)
+    # X_train_feat = pca.fit_transform(X_train_feat)
     
     print("Shape of the embeddings:", X_train_feat.shape)
     
@@ -55,7 +55,7 @@ def main():
         config={
             'n_splits': 0,
             'max_iter': 500,
-            'depth': 3,
+            'depth': 2,
             'min_leaf_size':20,
             'init': 'k-means++',
             'random_state': 0,

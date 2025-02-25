@@ -42,6 +42,8 @@ def main():
         }
     )
     
+    print(hierarchical_linear_model.tree_node)
+    
     hierarchical_linear_model.save("data/processed/regression/test_hierarchical_linear_model.pkl")
     
     # print(hierarchical_linear_model.tree_node.print_tree(cluster=False))
