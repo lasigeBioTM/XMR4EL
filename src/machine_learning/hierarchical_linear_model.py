@@ -88,8 +88,8 @@ class HierarchicalLinearModel:
         # Predict probabilities
         y_proba = linear_model.predict_proba(X_test)
         
-        print(f"y_test labels: {np.unique(y_test)}, Y labels: {np.unique(Y)}")
-        print(y_proba)
+        # print(f"y_test labels: {np.unique(y_test)}, Y labels: {np.unique(Y)}")
+        # print(y_proba)
         
         all_labels = np.unique(Y)
         

@@ -64,7 +64,7 @@ class TreeNode:
         
     def is_leaf(self) -> bool:
         """ Returns True if the node has no children, meaning it's a leaf. """
-        return len(self.children) == 0
+        return self.cluster_node == None
     
     def add_child(self, cluster_label: int, child_node: "TreeNode"):
         """ Adds a child node under the current tree node. """
