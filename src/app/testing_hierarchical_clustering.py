@@ -56,7 +56,7 @@ def main():
             'n_splits': 0,
             'max_iter': 500,
             'depth': 2,
-            'min_leaf_size':20,
+            'min_leaf_size':10,
             'init': 'k-means++',
             'random_state': 0,
             'spherical': True,

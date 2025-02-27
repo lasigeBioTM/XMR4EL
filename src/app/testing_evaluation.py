@@ -1,8 +1,10 @@
 import os
 import time
+import unicodedata
 import numpy as np
 
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import normalize
 
 from src.predicter.predict import PredictTopK
 from src.app.utils import create_bio_bert_vectorizer, load_bio_bert_vectorizer, load_hierarchical_clustering_model, load_hierarchical_linear_model
@@ -19,14 +21,17 @@ def main():
     
     start = time.time()
     
+    def normalize_text(text):
+        return unicodedata.normalize("NFKC", text).strip()
+    
     with open(test_input_filepath, 'r') as test_input_file:
-        test_input = [line.strip() for line in test_input_file]
+        test_input = [normalize_text(line) for line in test_input_file]
     
     
-    if os.path.exists(test_input_embeddings_filepath):
-        test_input = load_bio_bert_vectorizer(test_input_embeddings_filepath)
-    else:
-        test_input = create_bio_bert_vectorizer(corpus=test_input, 
+    # if os.path.exists(test_input_embeddings_filepath):
+        # test_input = load_bio_bert_vectorizer(test_input_embeddings_filepath)
+    # else:
+    test_input = create_bio_bert_vectorizer(corpus=test_input, 
                                                         output_embeddings_file=test_input_embeddings_filepath,
                                                         directory_onnx_model=onnx_directory)
     
@@ -39,14 +44,12 @@ def main():
     hierarchical_clustering_model = load_hierarchical_clustering_model(hierarchical_clustering_model_filepath)
     hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
     
-    # tree_node = hierarchical_linear_model.tree_node
-    
-    # print(tree_node.print_tree())
-    
     # Top-1 -> 0.201057
     # Top-2 -> 0.411075
     # Top-3 -> 0.696691
-    top_k = 3
+    
+    # top-1 -> 0.54, now
+    top_k = 1
     
     # Infernce np.array([input_embedding])
     # predictions = PredictTopK.predict(tree_node, test_input, k=top_k)
@@ -55,7 +58,26 @@ def main():
     
     # normalize the data to predict
     
+    """
+    Without normalizing:
+        Top-1 Confidence: 0.9714009761810303
+        Top-1 Accuracy: 0.383691
+    Normalizing:
+        Top-1 Confidence: 0.18224984407424927
+        Top-1 Accuracy: 0.54
+    """
+    
+    test_input = normalize(test_input, norm='l2', axis=1)
+    
+    # Se normalizar     
     root_node = hierarchical_linear_model.tree_node
+    
+    # print(root_node)
+    
+    # exit()
+    
+    # print(root_node)
+    
     cluster_predictions = hierarchical_clustering_model.predict(test_input)
     
     # Batch
@@ -64,8 +86,6 @@ def main():
     # print(top_k_results)
     
     # print(top_k_predictions)
-    
-    exit()
     
     correct_count = 0
     total = len(predictions)

@@ -13,9 +13,14 @@ class PredictTopK():
         predictions = []
         for cluster_pred in cluster_predictions:
             current_node = root_node
+
+            # print(f"Cluster Prediction: {cluster_pred}")
             
-            for idx in range(len(cluster_pred) + 1):
-                if not current_node.is_leaf():
+            pred_len = len(cluster_pred)
+            
+            for idx in range(pred_len):
+                # print(cluster_pred[idx])
+                if cluster_pred[idx] in current_node.children:
                     current_node = current_node.children[cluster_pred[idx]]
                 else:
                     top_k_label, top_k_confidences = cls.classify(current_node.linear_node.model, X_input, k=k)
