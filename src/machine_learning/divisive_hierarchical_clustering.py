@@ -64,27 +64,23 @@ class DivisiveHierarchicalClustering():
         random_state = config['random_state']
         spherical = config['spherical']
 
-        def recursive_clustering(X, tree_node, n_splits, max_iter, depth, min_leaf_size, random_state, clustering_model_factory, init):
-
+        def recursive_clustering(X, tree_node, n_splits, max_iter, 
+                                 depth, min_leaf_size, random_state, clustering_model_factory, init):
+            """
+            Recursively applies divisive clustering while handling cases where only one cluster remains.
+            """
+            # **Fix: Stop if all data points belong to one cluster**
+            if X.shape[0] <= min_leaf_size:
+                print("Stopping: Only one cluster exists or too few points to split further.")
+                tree_node.set_cluster_node(None, np.zeros(X.shape[0]), X)  # Assign all points to cluster 0
+                return tree_node
+            
             # Determine the number of splits if not provided
             if n_splits == 0:
                 n_splits = cls.__calculate_optimal_clusters(
-                    X,
-                    clustering_model_factory,
-                    cluster_range=16,
-                    random_state=random_state
+                    X, clustering_model_factory, cluster_range=16, random_state=random_state
                 )
-            
-            clustering_model = clustering_model_factory.create_model(
-                {
-                    'n_clusters': n_splits,
-                    'max_iter': max_iter,
-                    'random_state': random_state,
-                    'init': init   
-                }
-            ).fit(X)
-            
-            """
+
             merge_loop = True
             while merge_loop:
                 # Fit the clustering model
@@ -97,64 +93,60 @@ class DivisiveHierarchicalClustering():
                     }
                 ).fit(X)
 
+                cluster_labels = clustering_model.labels_
+
+                # **Fix: Stop merging if only one cluster remains**
+                if len(np.unique(cluster_labels)) <= 5:
+                    print("Stopping: Minimun number of cluster detected after merging.")
+                    return None
+
                 # Merge small clusters
-                merged_labels = cls.__merge_small_clusters(X, clustering_model.labels_, min_leaf_size=min_leaf_size)
+                merged_labels = cls.__merge_small_clusters(X, cluster_labels, min_leaf_size=min_leaf_size)
 
                 new_n_splits = len(np.unique(merged_labels))
-                
                 if new_n_splits == n_splits:
                     merge_loop = False
                 else:
-                    n_splits = new_n_splits 
-            """
-            
-            print(cls.__count_label_occurrences(clustering_model.labels_))
-            
-            cluster_labels = clustering_model.labels_
-            
-            # Check if clustering_model.labels_ is valid
-            if cluster_labels is None:
-                raise ValueError("Clustering model did not generate any labels.")
-            
-            # Insert the Node into the TreeNode
+                    n_splits = new_n_splits  
+
+            print(cls.__count_label_occurrences(cluster_labels))
+
+            # Insert the Node into the Tree
             tree_node.set_cluster_node(clustering_model, cluster_labels, X)
-            
+
             # Calculate silhouette_scores
             overall_silhouette_score, silhouette_scores = cls.__compute_silhouette_scores(X, cluster_labels)
             
-            # Insert values in the tree_node
+            # Store silhouette scores in tree_node
             tree_node.cluster_node.set_silhouette_scores(overall_silhouette_score, silhouette_scores)
-            
+
             # Recursively process each cluster
             for cluster_label in np.unique(cluster_labels):
-                # Get points belonging to the current cluster
                 indices = cluster_labels == cluster_label
                 cluster_points = X[indices]
-                n_cluster_points = cluster_points.shape[0]
+
+                # **Fix: Stop clustering at leaf nodes**
+                if cluster_points.shape[0] <= min_leaf_size:
+                    print(f"Stopping: Cluster {cluster_label} is a leaf node.")
+                    continue  # Don't apply further clustering
                 
-                if n_cluster_points > min_leaf_size:
-                    
-                    if depth - 1 == 0 or cluster_points.shape[0] <= min_leaf_size:
-                        return tree_node
-                    
-                    # Create a new TreeNode for the sub-cluster, Parent Node
-                    child_tree_node = TreeNode(depth=tree_node.depth + 1)
-                    
-                    tree_node.add_child(cluster_label, child_tree_node)
-                    
-                    # Recur for the sub-cluster
-                    recursive_clustering(
-                        cluster_points,
-                        child_tree_node,
-                        n_splits=0,  # Let the method recalculate optimal clusters
-                        max_iter=max_iter,
-                        depth=depth - 1,
-                        min_leaf_size=min_leaf_size,
-                        random_state=random_state,
-                        clustering_model_factory=clustering_model_factory,
-                        init=init
-                    )
-            
+                if depth - 1 == 0:
+                    return tree_node
+                
+                # Create a new child node and recurse
+                child_tree_node = TreeNode(depth=tree_node.depth + 1)
+                
+                new_child = recursive_clustering(
+                    cluster_points, child_tree_node,
+                    n_splits=0, max_iter=max_iter, depth=depth - 1,
+                    min_leaf_size=min_leaf_size, random_state=random_state,
+                    clustering_model_factory=clustering_model_factory, init=init
+                )
+                
+                if new_child:  # Only add if valid
+                    tree_node.add_child(cluster_label, new_child)
+
+
             return tree_node
                     
         """Started the fit"""
@@ -203,29 +195,45 @@ class DivisiveHierarchicalClustering():
                 silhouette_scores[cluster_idx] = 0.0
                 
         return overall_silhouette_score, silhouette_scores
-        
+    
+    # Look to this method
     def predict(self, batch_embeddings):
         """ Predicts the cluster for input data X by traversing the hierarchical tree. """
         predictions = []
+        
         for input_embedding in batch_embeddings:
             
-            print(f"Input Embedding: {input_embedding}")
+            # print(f"Input Embedding: {input_embedding}")
             
             current_node = self.tree_node  # Start at the root
             pred = []
-             
+            
+            # print("Entered While Loop")
             while not current_node.is_leaf():
                 if current_node.cluster_node is None or current_node.cluster_node.model is None:
                     break
                 
                 input_embedding = input_embedding.reshape(1, -1)
+                # Predicts the label
                 cluster_predictions = current_node.cluster_node.model.predict(input_embedding)[0]
                 
+                # print(f"Cluster Predictions: {cluster_predictions}")
+                
+                # print(f"Predicted Cluster: {cluster_predictions}")
+                # print(f"Children Keys: {list(current_node.children.keys())}")
+                
                 pred.append(int(cluster_predictions))
+                
+                if cluster_predictions not in current_node.children:
+                    # print("Prediction not in children, stopping here.")
+                    break
+                
                 current_node = current_node.children[int(cluster_predictions)]
             
-            print(f"Cluster Predictions: {pred}")
+            # print(f"Exiting Loop with predictions: {pred}")
+            # print(f"Cluster Predictions: {pred}")
             predictions.append(pred)
+            
         return predictions
     
 
@@ -261,8 +269,13 @@ class DivisiveHierarchicalClustering():
         large_clusters = [c for c in np.unique(updated_labels) if c not in small_clusters]
         
         if len(large_clusters) == 0:
-            print("⚠ Warning: No large clusters to merge into. Returning labels unchanged.")
-            return labels  #  Avoid breaking if no valid clusters remain
+            print("Warning: No large clusters to merge into. Returning labels unchanged.")
+            return np.zeros_like(labels)  # Assign all points to cluster 0  #  Avoid breaking if no valid clusters remain
+        
+        # Fix: If only one cluster exists, return it unchanged
+        if len(unique) <= 5:
+            print("Warning: Cluster does not have the minimum of clusters. Returning labels unchanged.")
+            return labels
         
         centroids = np.array([X[updated_labels == c].mean(axis=0) for c in large_clusters])
 

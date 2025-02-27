@@ -88,8 +88,14 @@ class HierarchicalLinearModel:
         # Predict probabilities
         y_proba = linear_model.predict_proba(X_test)
         
+        print(f"y_test labels: {np.unique(y_test)}, Y labels: {np.unique(Y)}")
+        print(y_proba)
+        
+        all_labels = np.unique(Y)
+        
+        # Y_test doesnt have all the labels, have to fix
         # Compute top-k accuracy
-        top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True)       
+        top_k_score = top_k_accuracy_score(y_test, y_proba, k=top_k, normalize=True, labels=all_labels)       
         
         return {'linear_model': linear_model, 
                 'top_k_score': top_k_score, 

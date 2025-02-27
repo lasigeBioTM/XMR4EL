@@ -92,7 +92,14 @@ class TreeNode:
         info = f"{indent}Depth: {self.depth}\n" if self.cluster_node else ""
 
         if self.cluster_node:
-            info += f"{indent}Cluster Info: {self.cluster_node}\n"
+            if len(self.children.values()) == 0:
+                info += f"{indent}Cluster Info: {self.cluster_node}, No Child Clusters\n"
+            else:
+                n_cluster = ""
+                for child_cluster in self.children.keys():
+                    n_cluster += str(child_cluster) + " "
+                    
+                info += f"{indent}Cluster Info: {self.cluster_node}, Child Clusters: {n_cluster}\n"
 
         if self.linear_node:
             info += f"{indent}Classifier Info: {self.linear_node.__str__(indent)}\n"

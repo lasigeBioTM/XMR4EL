@@ -142,8 +142,9 @@ class BioBertVectorizer(Preprocessor):
     @classmethod
     def predict_gpu(cls, corpus, batch_size=400, output_prefix="gpu_embeddings"):
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        model = AutoModel.from_pretrained(cls.model_name).to("cuda")  # Load model to GPU
+        model = AutoModel.from_pretrained(cls.model_name)  
         model.eval()  # Set to inference mode
+        model.to("cuda")
         
         num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
         print(f"Total batches: {num_batches}")
@@ -156,7 +157,7 @@ class BioBertVectorizer(Preprocessor):
             batch = corpus[start:end]
 
             # Tokenize & move input tensors to GPU
-            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512).to("cuda")
+            inputs = tokenizer(batch, return_tensors="pt", padding="max_length", truncation=True, max_length=512).to("cuda")
 
             with torch.no_grad():
                 outputs = model(**inputs)  # Forward pass on GPU
@@ -173,8 +174,6 @@ class BioBertVectorizer(Preprocessor):
         for f in batch_files:
             os.remove(f)
             # print(f"Deleted: {f}")
-
-        # print(all_embeddings)
 
         return all_embeddings
 

@@ -80,18 +80,21 @@ class Preprocessor():
     
     @staticmethod 
     def load_data_from_file(train_filepath, labels_filepath):
-        assert os.path.exists(train_filepath), f"{train_filepath} does not exist"
-        assert os.path.exists(labels_filepath), f"{labels_filepath} does not exist"
+        if not os.path.exists(train_filepath) or not os.path.exists(labels_filepath):
+            raise FileNotFoundError("One or both input files do not exist.")
 
-        train_df = pd.read_csv(train_filepath, header=None, names=['id', 'corpus_name'], delimiter="\t")
+        # Load training corpus
+        train_df = pd.read_csv(train_filepath, header=None, names=['id', 'corpus_name'], sep="\t")
+        
+        # Group by 'id' and create lists of corpus entries
+        corpus_dict = train_df.groupby('id')['corpus_name'].agg(list)
 
-        grouped_train_df = train_df.groupby('id')['corpus_name'].apply(list).reset_index()
-
-        labels_df = pd.read_csv(labels_filepath, header=None, names=['id'], delimiter="\t")
-
+        # Load labels
+        labels_df = pd.read_csv(labels_filepath, header=None, names=['id'], sep="\t")
+        
         return {
             "labels": labels_df['id'].tolist(),
-            "corpus": grouped_train_df['corpus_name'].tolist()
+            "corpus": [corpus_dict.get(i, []) for i in labels_df['id']]
         }
     
         
