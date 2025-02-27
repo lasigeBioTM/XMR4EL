@@ -10,14 +10,7 @@ from src.app.utils import load_bio_bert_vectorizer
 
 def main():
     
-    onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_disease100_gpu.npy"
     divisive_model_filepath = "data/processed/clustering/test_hierarchical_clustering_model.pkl"
-    
-    # numpy.array (13240, 768)
-    X_train_feat = load_bio_bert_vectorizer(onnx_gpu_embeddigns_filepath)
-    
-    pca = PCA(n_components=2)
-    X_train_feat = pca.fit_transform(X_train_feat)
     
     divisiveModel = DivisiveHierarchicalClustering.load(divisive_model_filepath)
     

@@ -49,6 +49,7 @@ class DivisiveHierarchicalClustering():
             'max_iter': 100,
             'depth': 1,
             'min_leaf_size':10,
+            'min_clusters': 3,
             'init': 'k-means++',
             'random_state': 0,
             'spherical': True,
@@ -60,12 +61,13 @@ class DivisiveHierarchicalClustering():
         max_iter = config['max_iter']
         depth = config['depth']
         min_leaf_size = config['min_leaf_size']
+        min_clusters = config['min_clusters']
         init = config['init']
         random_state = config['random_state']
         spherical = config['spherical']
 
         def recursive_clustering(X, tree_node, n_splits, max_iter, 
-                                 depth, min_leaf_size, random_state, clustering_model_factory, init):
+                                 depth, min_leaf_size, min_clusters, random_state, clustering_model_factory, init):
             """
             Recursively applies divisive clustering while handling cases where only one cluster remains.
             """
@@ -96,12 +98,12 @@ class DivisiveHierarchicalClustering():
                 cluster_labels = clustering_model.labels_
 
                 # **Fix: Stop merging if only one cluster remains**
-                if len(np.unique(cluster_labels)) <= 5:
+                if len(np.unique(cluster_labels)) <= min_clusters:
                     print("Stopping: Minimun number of cluster detected after merging.")
                     return None
 
                 # Merge small clusters
-                merged_labels = cls.__merge_small_clusters(X, cluster_labels, min_leaf_size=min_leaf_size)
+                merged_labels = cls.__merge_small_clusters(X, cluster_labels, min_leaf_size=min_leaf_size, min_clusters=min_clusters)
 
                 new_n_splits = len(np.unique(merged_labels))
                 if new_n_splits == n_splits:
@@ -139,13 +141,12 @@ class DivisiveHierarchicalClustering():
                 new_child = recursive_clustering(
                     cluster_points, child_tree_node,
                     n_splits=0, max_iter=max_iter, depth=depth - 1,
-                    min_leaf_size=min_leaf_size, random_state=random_state,
+                    min_leaf_size=min_leaf_size, min_clusters=min_clusters, random_state=random_state,
                     clustering_model_factory=clustering_model_factory, init=init
                 )
                 
                 if new_child:  # Only add if valid
                     tree_node.add_child(cluster_label, new_child)
-
 
             return tree_node
                     
@@ -162,6 +163,7 @@ class DivisiveHierarchicalClustering():
             max_iter=max_iter,
             depth=depth + 1,
             min_leaf_size=min_leaf_size,
+            min_clusters=min_clusters,
             random_state=random_state,
             clustering_model_factory=clustering_model_factory,
             init=init
@@ -203,7 +205,7 @@ class DivisiveHierarchicalClustering():
         
         for input_embedding in batch_embeddings:
             
-            # print(f"Input Embedding: {input_embedding}")
+            # print(f"Input Embedding: {input_embedding[0]}")
             
             current_node = self.tree_node  # Start at the root
             pred = []
@@ -211,10 +213,12 @@ class DivisiveHierarchicalClustering():
             # print("Entered While Loop")
             while not current_node.is_leaf():
                 if current_node.cluster_node is None or current_node.cluster_node.model is None:
+                    # print("Cluster Model Is Null")
                     break
                 
+                # print(current_node)
+                
                 input_embedding = input_embedding.reshape(1, -1)
-                # Predicts the label
                 cluster_predictions = current_node.cluster_node.model.predict(input_embedding)[0]
                 
                 # print(f"Cluster Predictions: {cluster_predictions}")
@@ -234,6 +238,8 @@ class DivisiveHierarchicalClustering():
             # print(f"Cluster Predictions: {pred}")
             predictions.append(pred)
             
+            # exit()
+            
         return predictions
     
 
@@ -251,7 +257,7 @@ class DivisiveHierarchicalClustering():
         return optimal_clusters
     
     @staticmethod
-    def __merge_small_clusters(X, labels, min_leaf_size):
+    def __merge_small_clusters(X, labels, min_leaf_size, min_clusters):
         unique, counts = np.unique(labels, return_counts=True)
         cluster_sizes = dict(zip(unique, counts))
 
@@ -273,7 +279,7 @@ class DivisiveHierarchicalClustering():
             return np.zeros_like(labels)  # Assign all points to cluster 0  #  Avoid breaking if no valid clusters remain
         
         # Fix: If only one cluster exists, return it unchanged
-        if len(unique) <= 5:
+        if len(unique) <= min_clusters:
             print("Warning: Cluster does not have the minimum of clusters. Returning labels unchanged.")
             return labels
         
