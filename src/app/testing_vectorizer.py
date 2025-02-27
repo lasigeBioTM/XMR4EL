@@ -11,13 +11,16 @@ def main():
     
     parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
 
+    # print(parsed_train_data['corpus'])
     
     def normalize_text(text):
         return unicodedata.normalize("NFKC", text).strip()
     
-    X_train = [normalize_text(line) for line in parsed_train_data["corpus"]]
+    X_train = [" | ".join([normalize_text(str(text)) for text in sublist]) 
+            for sublist in parsed_train_data["corpus"]]
     
-    
+    print(X_train)
+
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
     onnx_cpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_cpu.npy"
     onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_gpu.npy"
