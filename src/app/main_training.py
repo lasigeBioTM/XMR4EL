@@ -1,11 +1,13 @@
-import os
 import time
 
-from src.app.commandhelper import MainCommand
+from sklearn.decomposition import PCA
+
+from src.machine_learning.hierarchical_linear_model import HierarchicalLinearModel
+from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
+from src.machine_learning.divisive_hierarchical_clustering import DivisiveHierarchicalClustering
 from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_clustering, create_hierarchical_linear_model, load_bio_bert_vectorizer, load_train_and_labels_file
 
 """
-
     Depending on the train file, different number of labels, 
 
     * train_Disease_100.txt -> 13240 labels, 
@@ -13,54 +15,67 @@ from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_cluste
     * train_Disease_1000.txt -> 13203 labels,  
 
     Labels file has,
-
     * labels.txt -> 13292 labels,
-
 """
 def main():
-    args = MainCommand().run()
-    kb_type = "medic"
-    kb_location = "data/raw/mesh_data/medic/CTD_diseases.tsv"
-
-    label_filepath = "data/raw/mesh_data/medic/labels.txt"
-    training_filepath = "data/train/disease/train_Disease_100.txt"
-    
-    vectorizer_directory = "data/processed/vectorizer"
-    onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
-    onnx_cpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_cpu.npy"
-    onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_gpu.npy"
-    onnx_gpu_prefix_filepath = "data/processed/vectorizer/biobert_onnx_dense.npz"
-    vectorizer_filepath = "data/processed/vectorizer/vectorizer.pkl"
-    
-    hierarchical_clustering_model_filepath = "data/processed/clustering/hierarchical_clustering_model.pkl"
-    hierarchical_linear_model_filepath = "data/processed/regression_dup/hierarchical_linear_model.pkl"
-
+   
+    onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_disease500_gpu.npy"
+   
     start = time.time()
 
-    parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
+    # numpy.array (13240, 768)
+    X_train_feat = load_bio_bert_vectorizer(onnx_gpu_embeddigns_filepath)
 
-    # Dense Matrix
-    # Y_train = [str(parsed) for parsed in parsed_train_data["labels"]]
-    X_train = [str(parsed) for parsed in parsed_train_data["corpus"]]
+    # pca = PCA(n_components=2)
+    # X_train_feat = pca.fit_transform(X_train_feat)
     
-    # See paths
-    if os.path.exists(onnx_cpu_embeddigns_filepath):
-        print(f"Path {onnx_cpu_embeddigns_filepath} does exists")
-        X_train_feat = load_bio_bert_vectorizer(onnx_cpu_embeddigns_filepath)
-    elif os.path.exists(onnx_gpu_embeddigns_filepath):
-        print(f"Path {onnx_gpu_embeddigns_filepath} does exists")
-        X_train_feat = load_bio_bert_vectorizer(onnx_gpu_embeddigns_filepath)
-    else:
-        print(f"Path does NOT exists")
-        X_train_feat = create_bio_bert_vectorizer(corpus=X_train, 
-                                                    output_embeddings_file=onnx_gpu_prefix_filepath,
-                                                    directory_onnx_model=onnx_directory)
- 
+    print(f"Starting the Hierarchical Clustering Model")
     
-    "Get directorys"
-    Y_train_feat = create_hierarchical_clustering(X_train_feat, save_directory=hierarchical_clustering_model_filepath)
+    divisiveModel = DivisiveHierarchicalClustering.fit(
+        X=X_train_feat,
+        clustering_model_factory=KMeansCPU.create_model(),
+        config={
+            'n_splits': 0,
+            'max_iter': 500,
+            'depth': 2,
+            'min_leaf_size':10,
+            'min_clusters': 3,
+            'init': 'k-means++',
+            'random_state': 0,
+            'spherical': True,
+            }
+    )
     
-    top_k, top_k_score = create_hierarchical_linear_model(X_train_feat, Y_train_feat, 1, save_directory=hierarchical_linear_model_filepath)
+    print(f"Finished the Hierarchical Clustering Model\n")
+    
+    divisiveModel.save("data/processed/clustering/test_hierarchical_clustering_model.pkl")
+    
+    tree_node = divisiveModel.tree_node
+    
+    top_k = 3
+    
+    print(f"Starting Hierarchical Linear Model")
+    
+    hierarchical_linear_model = HierarchicalLinearModel.fit(
+        tree_node=tree_node,
+        linear_model_factory=LogisticRegressionCPU.create_model(
+            {'max_iter': 1000,
+             'solver': 'newton-cg',
+             'penalty': 'l2',
+             'random_state': 0
+             }),
+        config= {
+            'min_leaf_size': 20,
+            'max_leaf_size': 40,
+            'top_k': top_k,
+            'top_k_threshold': 0.15,
+            'gpu_usage': False,
+        }
+    )
+    
+    print(f"Finished Hierarchical Linear Model\n")
+    
+    hierarchical_linear_model.save("data/processed/regression/test_hierarchical_linear_model.pkl")
     
     end = time.time()
     

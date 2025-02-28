@@ -73,7 +73,7 @@ class DivisiveHierarchicalClustering():
             """
             # **Fix: Stop if all data points belong to one cluster**
             if X.shape[0] <= min_leaf_size:
-                print("Stopping: Only one cluster exists or too few points to split further.")
+                # print("Stopping: Only one cluster exists or too few points to split further.")
                 tree_node.set_cluster_node(None, np.zeros(X.shape[0]), X)  # Assign all points to cluster 0
                 return tree_node
             
@@ -82,6 +82,9 @@ class DivisiveHierarchicalClustering():
                 n_splits = cls.__calculate_optimal_clusters(
                     X, clustering_model_factory, cluster_range=16, random_state=random_state
                 )
+                print(f"Calculate Optimal Clusters: {n_splits}")
+                if n_splits == None:
+                    return 16
 
             merge_loop = True
             while merge_loop:
@@ -99,7 +102,7 @@ class DivisiveHierarchicalClustering():
 
                 # **Fix: Stop merging if only one cluster remains**
                 if len(np.unique(cluster_labels)) <= min_clusters:
-                    print("Stopping: Minimun number of cluster detected after merging.")
+                    # print("Stopping: Minimun number of cluster detected after merging.")
                     return None
 
                 # Merge small clusters
@@ -110,8 +113,9 @@ class DivisiveHierarchicalClustering():
                     merge_loop = False
                 else:
                     n_splits = new_n_splits  
+                    # print(f"Number of splits after merge: {n_splits}")
 
-            print(cls.__count_label_occurrences(cluster_labels))
+            # print(cls.__count_label_occurrences(cluster_labels))
 
             # Insert the Node into the Tree
             tree_node.set_cluster_node(clustering_model, cluster_labels, X)
@@ -129,7 +133,7 @@ class DivisiveHierarchicalClustering():
 
                 # **Fix: Stop clustering at leaf nodes**
                 if cluster_points.shape[0] <= min_leaf_size:
-                    print(f"Stopping: Cluster {cluster_label} is a leaf node.")
+                    # print(f"Stopping: Cluster {cluster_label} is a leaf node.")
                     continue  # Don't apply further clustering
                 
                 if depth - 1 == 0:
@@ -245,6 +249,11 @@ class DivisiveHierarchicalClustering():
 
     @staticmethod
     def __calculate_optimal_clusters(X, clustering_model_factory, cluster_range, random_state=0):
+        max_clusters = min(len(X), cluster_range)
+        if max_clusters < cluster_range:
+            cluster_range = max_clusters
+        
+        print(f"Cluster Range : {cluster_range}")
         k_range = range(2, cluster_range)
         wcss = [clustering_model_factory.create_model(
             {'n_clusters': k, 
@@ -267,7 +276,7 @@ class DivisiveHierarchicalClustering():
         if len(small_clusters) == 0:
             return labels  #  No small clusters, return original labels
         
-        print(f"Detected {len(small_clusters)} small clusters (<{min_leaf_size})")
+        # print(f"Detected {len(small_clusters)} small clusters (<{min_leaf_size})")
 
         updated_labels = labels.copy()
 
@@ -275,12 +284,12 @@ class DivisiveHierarchicalClustering():
         large_clusters = [c for c in np.unique(updated_labels) if c not in small_clusters]
         
         if len(large_clusters) == 0:
-            print("Warning: No large clusters to merge into. Returning labels unchanged.")
+            # print("Warning: No large clusters to merge into. Returning labels unchanged.")
             return np.zeros_like(labels)  # Assign all points to cluster 0  #  Avoid breaking if no valid clusters remain
         
         # Fix: If only one cluster exists, return it unchanged
         if len(unique) <= min_clusters:
-            print("Warning: Cluster does not have the minimum of clusters. Returning labels unchanged.")
+            # print("Warning: Cluster does not have the minimum of clusters. Returning labels unchanged.")
             return labels
         
         centroids = np.array([X[updated_labels == c].mean(axis=0) for c in large_clusters])
