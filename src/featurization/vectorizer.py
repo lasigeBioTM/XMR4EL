@@ -16,11 +16,7 @@ class TfidfVectorizer(Preprocessor):
     
     @classmethod
     def train(cls, trn_corpus, dtype=np.float32):
-        # min_df = 0.0
-        # max df = 0.98
-
-        # 
-        # Mine -> (13298, 13715) min_df = 0.0001, max_df = 0.98
+        
         x_linker_params = {
             "ngram_range": (1, 2),       # n-grams from 1 to 2
             "max_features": None,        # No max feature limit
@@ -132,9 +128,6 @@ class BioBertVectorizer(Preprocessor):
         # Remove all batch files after saving the final file
         for f in batch_files:
             os.remove(f)
-            print(f"Deleted: {f}")
-        
-        print(all_embeddings)
         
         return all_embeddings
 
@@ -220,18 +213,3 @@ class BioBertVectorizer(Preprocessor):
             # print(f"Deleted: {f}")
 
         return all_embeddings
-
-"""
-    class DistilBertVectorizer():
-
-        model_name = "distilbert-base-uncased"
-        tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-        model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
-
-        @classmethod
-        def predict(cls, corpus):
-            inputs = cls.tokenizer(corpus, return_tensors='pt', padding=True, truncation=True)
-            with torch.no_grad():
-                outputs = cls.model(**inputs)
-            return outputs.last_hidden_state.mean(dim=1) 
-"""

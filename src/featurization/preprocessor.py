@@ -4,12 +4,6 @@ import os
 import numpy as np
 import pandas as pd
 
-from scipy.sparse import csr_matrix, load_npz
-
-kb_dict = {
-    'medic': 'DiseaseID',
-    'chemical': 'ChemicalID'
-    }
 
 class Preprocessor():
 
