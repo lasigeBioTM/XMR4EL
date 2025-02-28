@@ -1,8 +1,8 @@
 import os
 import unicodedata
 
-from src.featurization.vectorizer import BioBertVectorizer
-from src.app.utils import create_bio_bert_vectorizer, load_bio_bert_vectorizer, load_train_and_labels_file
+from src.featurization.bert_vectorizer import BioBert
+from src.app.utils import load_train_and_labels_file
 
 
 def main():
@@ -26,13 +26,7 @@ def main():
     onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_gpu.npy"
     onnx_gpu_prefix_filepath = "data/processed/vectorizer/testing_same_words.npz"
     
-    corpus, sorted_embeddings = BioBertVectorizer.predict_cpu_original_index(corpus=test_input, 
-                                                output_prefix=onnx_gpu_prefix_filepath,
-                                                directory=onnx_directory)
-    
-    for text, emb in zip(corpus, sorted_embeddings):
-        print(f"Text: {text}\nEmbedding: {emb[:5]}...")  # Print first 5 values for readability
-        print("-" * 50)
+    biobert = BioBert.predict_cpu(trn_corpus=test_input, config={})
 
 
 if __name__ == "__main__":

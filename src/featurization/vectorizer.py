@@ -1,23 +1,128 @@
+from abc import ABCMeta
+import json
+import logging
 import os
+import pickle
 import torch
 import glob
 
 import onnxruntime as ort
 import numpy as np
 
-from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVec
+from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import AutoTokenizer, AutoModel
 from scipy.sparse import csr_matrix
 
 from src.featurization.preprocessor import Preprocessor
 
 
-class TfidfVectorizer(Preprocessor):
+vectorizer_dict = {}
+
+LOGGER = logging.getLogger(__name__)
+
+class VectorizerMeta(ABCMeta):
+    """Metaclass for keeping track of all 'Vectorizer' subclasses"""
+    def __new__(cls, name, bases, attr):
+        new_cls = super().__new__(cls, name, bases, attr)
+        if name != 'Vectorizer':
+            vectorizer_dict[name.lower()] = new_cls
+        return new_cls
+
+class Vectorizer(metaclass=VectorizerMeta):
+    
+    def __init__(self, config, model):
+        self.config = config
+        self.model = model
+        
+    def save(self, vectorizer_folder):
+        os.makedirs(vectorizer_folder, exist_ok=True)
+        with open(os.path.join(vectorizer_folder, "config.json"), "w", encoding="utf-8") as fout:
+            fout.write(json.dumps(self.config))
+        self.model.save(vectorizer_folder)
+        
+    @classmethod
+    def load(cls, vectorizer_folder):
+        config_path = os.path.join(vectorizer_folder, "config.json")
+        
+        if not os.path.exists(config_path):
+            config = {"type": "tfidf", 'kwargs': {}}
+        else:
+            with open(config_path, "r", encoding="utf-8") as fin:
+                config = json.loads(fin.read())
+                
+        vectorizer_type = config.get("type", None)
+        assert vectorizer_type is not None, f"{vectorizer_folder} is not a valid vectorizer folder"
+        assert vectorizer_type in vectorizer_dict, f"invalid vectorizer type {config['type']}"
+        model = vectorizer_dict[vectorizer_type].load(vectorizer_folder)
+        return cls(config, model)
+
+    @classmethod
+    def train(cls, trn_corpus, config=None, dtype=np.float32):
+        config = config if config is not None else {"type": "tfidf", "kwargs": {}}
+        LOGGER.debug(f"Train Vectorizer with config: {json.dumps(config, indent=True)}")
+        vectorizer_type = config.get("type", None)
+        assert(
+            vectorizer_type is not None
+        ), f"config {config} should contain a key 'type' for the vectorizer type" 
+        assert(
+            isinstance(trn_corpus, list) or vectorizer_type == "tfidf"
+        ), "only tfidf support from file training"
+        model = vectorizer_dict[vectorizer_type].train(
+            trn_corpus, config=config["kwargs"], dtype=dtype
+        )
+        return cls(config, model)
+    
+    def predict(self, corpus, **kwargs):
+        if isinstance(corpus, str) and self.config["type"] != "tfidf":
+            raise ValueError("Iterable over raw text expected for vectorizer other than tfidf.")
+        return self.model.predict(corpus, **kwargs)
+
+    @staticmethod
+    def load_config_from_args(args):
+        if args.vectorizer_config_path is not None:
+            with open(args.vectorizer_config_path, "r", encoding="utf-8") as fin:
+                vectorizer_config_json = fin.read()
+        else:
+            vectorizer_config_json = args.vectorizer_config_json
+        
+        try:
+            vectorizer_config = json.loads(vectorizer_config_json)
+        except json.JSONDecodeError as jex:
+            raise Exception(
+                "Failed to load vectorizer config json from {} ({})".format(
+                    vectorizer_config_json, jex
+                )
+            )
+        return vectorizer_config
+        
+
+class Tfidf(Vectorizer):
+    
+    def __init__(self, model=None):
+        self.model = model
+        
+    def __del__(self):
+        """Destruct self model instance"""
+        self.model = None
+    
+    def save(self, save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "vectorizer.pkl"), "wb") as fout:
+            pickle.dump(self.model, fout)
     
     @classmethod
-    def train(cls, trn_corpus, dtype=np.float32):
+    def load(cls, load_dir):
+        vectorizer_path = os.path.join(load_dir, "vectorizer.pkl")
+        assert os.path.exists(vectorizer_path), "vectorizer path {} does not exist".format(
+            vectorizer_path
+        )
+        with open(vectorizer_path, "rb") as fvec:
+            return cls(pickle.load(fvec))
+
+    @classmethod
+    def train(cls, trn_corpus, config=None, dtype=np.float32):
         
-        x_linker_params = {
+        defaults = {
             "ngram_range": (1, 2),       # n-grams from 1 to 2
             "max_features": None,        # No max feature limit
             "min_df": 0.0,            # Minimum document frequency ratio
@@ -31,185 +136,15 @@ class TfidfVectorizer(Preprocessor):
             "stop_words": None,          # No stop words used
             "dtype": dtype
         }
-        default = {
-
-        }
+        
         try:
-            model = TfidfVec(**default)
+            model = TfidfVectorizer(**{**defaults, **config})
         except TypeError:
             raise Exception(
-                f"vectorizer config {x_linker_params} contains unexpected keyword arguments for TfidfVectorizer"
+                f"vectorizer config {config} contains unexpected keyword arguments for TfidfVectorizer"
             )
         model.fit(trn_corpus)
-        return cls(model=model, model_type='TfidfSkLearn')
+        return cls(model)
     
     def predict(self, corpus):
         return self.model.transform(corpus)
-    
-class BioBertVectorizer(Preprocessor):
-    
-    model_name = "dmis-lab/biobert-base-cased-v1.2"
-    
-    @classmethod
-    def export_to_onnx(cls, directory):
-        """Exports BioBERT to ONNX if not already exported."""
-        if os.path.exists(directory):
-            print("ONNX model already exists. Skipping Export.")
-            return 
-        else:
-            print("ONNX model doesn't exist. Exporting.")
-        
-        
-        model = AutoModel.from_pretrained(cls.model_name)
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        
-        # Create dummy input
-        dummy_test = ["This is a dummy test sentence for ONNX export."]
-        inputs = tokenizer(dummy_test, return_tensors="pt", padding=True, truncation=True, max_length=512)
-        
-      # Export to ONNX
-        torch.onnx.export(
-            model, 
-            (inputs["input_ids"], inputs["attention_mask"]), 
-            directory,
-            input_names=["input_ids", "attention_mask"],
-            output_names=["logits"],
-            dynamic_axes={
-                "input_ids": {0: "batch", 1: "seq_length"}, 
-                "attention_mask": {0: "batch", 1: "seq_length"}},
-            opset_version=14
-        )
-        print("Export complete.")
-    
-    @classmethod
-    def predict_cpu(cls, corpus, directory, batch_size=400, output_prefix="onnx_embeddings"):
-        """Runs inference using ONNX for faster CPU execution"""
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        
-        # Ensure ONNX model is exported before running inference
-        cls.export_to_onnx(directory)
-        
-        session = ort.InferenceSession(directory)
-        
-        #Split corpus into smaller batches 
-        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
-        print(num_batches)
-        
-        for batch_idx in range(num_batches):
-            print(f"Number of the batch: {batch_idx}")
-            
-            start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, len(corpus))
-            batch = corpus[start:end]
-            
-            # Tokenize input
-            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
-            
-            # Convert tensors to NumPy arrays
-            onnx_inputs = {
-                "input_ids": inputs["input_ids"].numpy().astype(np.int64),
-                "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
-            }
-            
-            # Run inference for the current batch
-            batch_results = session.run(None, onnx_inputs)[0]
-            
-            batch_results = batch_results[:, 0, :]
-            
-            batch_filename = f"{output_prefix}_batch{batch_idx}.npz"
-            np.savez_compressed(batch_filename, embeddings=batch_results)  
-                
-        # After processing all batches, load the embeddings        
-        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
-        
-        # Concatenate all batches 
-        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
-        
-        # Remove all batch files after saving the final file
-        for f in batch_files:
-            os.remove(f)
-        
-        return all_embeddings
-
-    @classmethod
-    def predict_cpu_original_index(cls, corpus, directory, batch_size=400, output_prefix="onnx_embeddings"):
-        """Runs inference using ONNX for faster CPU execution and returns labels with embeddings"""
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-
-        # Ensure ONNX model is exported before running inference
-        cls.export_to_onnx(directory)
-        session = ort.InferenceSession(directory)
-
-        # Store embeddings with their original indices
-        indexed_results = []
-
-        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
-        print(f"Total Batches: {num_batches}")
-
-        for batch_idx in range(num_batches):
-            print(f"Processing batch {batch_idx}")
-
-            start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, len(corpus))
-            batch = corpus[start:end]
-
-            # Tokenize input
-            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
-
-            # Convert tensors to NumPy arrays
-            onnx_inputs = {
-                "input_ids": inputs["input_ids"].numpy().astype(np.int64),
-                "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
-            }
-
-            # Run inference for the current batch
-            batch_results = session.run(None, onnx_inputs)[0]
-            batch_results = batch_results[:, 0, :]  # Extract CLS token embeddings
-
-            # Store embeddings with original indices
-            for i, emb in enumerate(batch_results):
-                indexed_results.append((start + i, emb))
-
-        # Sort embeddings back to original order
-        indexed_results.sort(key=lambda x: x[0])
-        sorted_embeddings = np.array([emb for _, emb in indexed_results])
-
-        return corpus, sorted_embeddings 
-        
-    @classmethod
-    def predict_gpu(cls, corpus, batch_size=400, output_prefix="gpu_embeddings"):
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        model = AutoModel.from_pretrained(cls.model_name)  
-        model.eval()  # Set to inference mode
-        model.to("cuda")
-        
-        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
-        print(f"Total batches: {num_batches}")
-
-        for batch_idx in range(num_batches):
-            print(f"Processing batch -> {batch_idx}")
-
-            start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, len(corpus))
-            batch = corpus[start:end]
-
-            # Tokenize & move input tensors to GPU
-            inputs = tokenizer(batch, return_tensors="pt", padding="max_length", truncation=True, max_length=512).to("cuda")
-
-            with torch.no_grad():
-                outputs = model(**inputs)  # Forward pass on GPU
-                batch_results = outputs.last_hidden_state[:, 0, :].cpu().numpy()  # Move results to CPU
-
-            batch_filename = f"{output_prefix}_batch{batch_idx}.npz"
-            np.savez_compressed(batch_filename, embeddings=batch_results)
-
-        # Load and concatenate all batch embeddings
-        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
-        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0)
-
-        # Clean up batch files
-        for f in batch_files:
-            os.remove(f)
-            # print(f"Deleted: {f}")
-
-        return all_embeddings
