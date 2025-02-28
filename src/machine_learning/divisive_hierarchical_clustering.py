@@ -5,7 +5,7 @@ import numpy as np
 from collections import Counter
 from kneed import KneeLocator
 from sklearn.preprocessing import normalize
-from sklearn.metrics import silhouette_score, pairwise_distances_argmin_min, silhouette_samples
+from sklearn.metrics import silhouette_score, silhouette_samples
 
 from src.node_logic.tree_node import TreeNode
      
