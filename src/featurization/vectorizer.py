@@ -137,7 +137,51 @@ class BioBertVectorizer(Preprocessor):
         print(all_embeddings)
         
         return all_embeddings
-        
+
+    @classmethod
+    def predict_cpu_original_index(cls, corpus, directory, batch_size=400, output_prefix="onnx_embeddings"):
+        """Runs inference using ONNX for faster CPU execution and returns labels with embeddings"""
+        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+
+        # Ensure ONNX model is exported before running inference
+        cls.export_to_onnx(directory)
+        session = ort.InferenceSession(directory)
+
+        # Store embeddings with their original indices
+        indexed_results = []
+
+        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
+        print(f"Total Batches: {num_batches}")
+
+        for batch_idx in range(num_batches):
+            print(f"Processing batch {batch_idx}")
+
+            start = batch_idx * batch_size
+            end = min((batch_idx + 1) * batch_size, len(corpus))
+            batch = corpus[start:end]
+
+            # Tokenize input
+            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512)
+
+            # Convert tensors to NumPy arrays
+            onnx_inputs = {
+                "input_ids": inputs["input_ids"].numpy().astype(np.int64),
+                "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
+            }
+
+            # Run inference for the current batch
+            batch_results = session.run(None, onnx_inputs)[0]
+            batch_results = batch_results[:, 0, :]  # Extract CLS token embeddings
+
+            # Store embeddings with original indices
+            for i, emb in enumerate(batch_results):
+                indexed_results.append((start + i, emb))
+
+        # Sort embeddings back to original order
+        indexed_results.sort(key=lambda x: x[0])
+        sorted_embeddings = np.array([emb for _, emb in indexed_results])
+
+        return corpus, sorted_embeddings 
         
     @classmethod
     def predict_gpu(cls, corpus, batch_size=400, output_prefix="gpu_embeddings"):
