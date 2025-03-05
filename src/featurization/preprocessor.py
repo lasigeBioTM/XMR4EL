@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from featurization.vectorizers import Vectorizer
+from src.featurization.vectorizers import Vectorizer
 
 
 class Preprocessor():

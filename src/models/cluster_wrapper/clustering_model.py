@@ -8,15 +8,19 @@ import numpy as np
 from abc import ABCMeta
 from joblib import parallel_backend
 
-from sklearn.cluster import AgglomerativeClustering as AgglomerativeClusteringSklearn
-from sklearn.cluster import KMeans as KMeansSklearn
-from sklearn.cluster import MiniBatchKMeans as MiniBatchKMeansSklearn
+from sklearn.cluster import AgglomerativeClustering, KMeans, MiniBatchKMeans
+
+from gpu_availability import is_cuda_available
+
 
 cluster_dict = {}
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+if is_cuda_available():
+    from cuml.cluster import KMeans as CUMLKMeans
+    
 
 class ClusterMeta(ABCMeta):
     """
@@ -135,7 +139,7 @@ class ClusteringModel(metaclass=ClusterMeta):
             model.fit(X_train)
         return model 
     
-class AgglomerativeClustering(ClusteringModel):
+class SklearnAgglomerativeClustering(ClusteringModel):
     """Hierarchical KMeans, Agglomerative Kmeans"""
     
     def __init__(self, config, model):
@@ -160,7 +164,7 @@ class AgglomerativeClustering(ClusteringModel):
             load_dir (str): Folder inside which the model is loaded.
 
         Returns:
-            AgglmerativeClustering: The loaded object.
+            SklearnAgglmerativeClustering: The loaded object.
         """
         
         LOGGER.info(f"Loading Agglomerative Clustering model from {load_dir}")
@@ -185,7 +189,7 @@ class AgglomerativeClustering(ClusteringModel):
             AgglomerativeClustering: Trained clustering.
 
         Raises:
-            Exception: If `config` contains keyword arguments that the AgglomerativeClustering does not accept.
+            Exception: If `config` contains keyword arguments that the SklearnAgglomerativeClustering does not accept.
         """
         
         defaults = {
@@ -201,15 +205,15 @@ class AgglomerativeClustering(ClusteringModel):
         
         try:
             config = {**defaults, **config}
-            model = AgglomerativeClusteringSklearn(**config)
+            model = AgglomerativeClustering(**config)
         except TypeError:
             raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for AgglomerativeClustering"
+                f"clustering config {config} contains unexpected keyword arguments for SklearnAgglomerativeClustering"
             )
         model = cls.force_multi_core_processing_clustering_model(model, trn_corpus)
         return cls(config, model)
     
-class KMeans(ClusteringModel):
+class SklearnKMeans(ClusteringModel):
     """Simple KMeans"""
     
     def __init__(self, config, model):
@@ -234,10 +238,10 @@ class KMeans(ClusteringModel):
             load_dir (str): Folder inside which the model is loaded.
 
         Returns:
-            KMeans: The loaded object.
+            SklearnKMeans: The loaded object.
         """
         
-        LOGGER.info(f"Loading Kmeans Clustering model from {load_dir}")
+        LOGGER.info(f"Loading SklearnKmeans Clustering model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(clustering_path), f"clustering path {clustering_path} does not exist"
         
@@ -259,7 +263,7 @@ class KMeans(ClusteringModel):
             KMeans: Trained clustering.
 
         Raises:
-            Exception: If `config` contains keyword arguments that the KMeans does not accept.
+            Exception: If `config` contains keyword arguments that the SklearnKMeans does not accept.
         """
         
         defaults = {
@@ -276,16 +280,27 @@ class KMeans(ClusteringModel):
         
         try:
             config = {**defaults, **config}
-            model = KMeansSklearn(**config)
+            model = KMeans(**config)
         except TypeError:
             raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for KMeans Clustering"
+                f"clustering config {config} contains unexpected keyword arguments for SklearnKMeans Clustering"
             )
         model = cls.force_multi_core_processing_clustering_model(model, trn_corpus)
         return cls(config, model)
+    
+    def predict(self, predict_input):
+        """Predict an input.
+
+        Args:
+            corpus (str, list): List of strings to predict.
+
+        Returns:
+            numpy.ndarray: Matrix of features.
+        """
+        return self.model.predict(predict_input)
 
 
-class MiniBatchKMeans(ClusteringModel):
+class SklearnMiniBatchKMeans(ClusteringModel):
     """MiniBatchKmeans, Batching KMeans"""
     
     def __init__(self, config, model):
@@ -313,7 +328,7 @@ class MiniBatchKMeans(ClusteringModel):
             KMeans: The loaded object.
         """
         
-        LOGGER.info(f"Loading MiniBatchKMeans Clustering model from {load_dir}")
+        LOGGER.info(f"Loading SklearnMiniBatchKMeans Clustering model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(clustering_path), f"clustering path {clustering_path} does not exist"
         
@@ -332,10 +347,10 @@ class MiniBatchKMeans(ClusteringModel):
             config (dict): Dict with keyword arguments to pass to sklearn's MiniBatchKmeans.
 
         Returns:
-            MiniBatchKMeans: Trained clustering.
+            SklearnMiniBatchKMeans: Trained clustering.
 
         Raises:
-            Exception: If `config` contains keyword arguments that the MiniBatchKmeans does not accept.
+            Exception: If `config` contains keyword arguments that the SklearnMiniBatchKmeans does not accept.
         """
         
         defaults = {
@@ -355,10 +370,110 @@ class MiniBatchKMeans(ClusteringModel):
         
         try:
             config = {**defaults, **config}
-            model = MiniBatchKMeansSklearn(**config)
+            model = MiniBatchKMeans(**config)
         except TypeError:
             raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for KMeans Clustering"
+                f"clustering config {config} contains unexpected keyword arguments for SklearnMiniBatchKMeans Clustering"
             )
         model = cls.force_multi_core_processing_clustering_model(model, trn_corpus)
         return cls(config, model)
+    
+    def predict(self, predict_input):
+        """Predict an input.
+
+        Args:
+            corpus (str, list): List of strings to predict.
+
+        Returns:
+            numpy.ndarray: Matrix of features.
+        """
+        return self.model.predict(predict_input)
+    
+class CumlKMeans(ClusteringModel):
+    """Cuml KMeans with gpu support"""
+    
+    def __init__(self, config, model):
+        self.config = config
+        self.model = model
+        
+    def save(self, save_dir):
+        """Save trained Cuml KMeans model to disk.
+
+        Args:
+            save_dir (str): Folder to store serialized object in.
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "clustering.pkl"), "wb") as fout:
+            pickle.dump(self.model, fout)
+    
+    @classmethod
+    def load(cls, load_dir):
+        """Load a saved Cuml KMeans model from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            CumlKMeans: The loaded object.
+        """
+        
+        LOGGER.info(f"Loading CumlKMeans Clustering model from {load_dir}")
+        clustering_path = os.path.join(load_dir, "clustering.pkl")
+        assert os.path.exists(clustering_path), f"clustering path {clustering_path} does not exist"
+        
+        with open(clustering_path, 'rb') as fin:
+            model_data = pickle.load(fin)
+        model = cls()
+        model.__dict__.update(model_data)
+        return model
+
+    @classmethod
+    def train(cls, trn_corpus, config={}):
+        """Train on a corpus.
+
+        Args:
+            trn_corpus (list): Training corpus in the form of a list of strings.
+            config (dict): Dict with keyword arguments to pass to cuml's Kmeans.
+
+        Returns:
+            CumlKMeans: Trained clustering.
+
+        Raises:
+            Exception: If `config` contains keyword arguments that the CumlKmeans does not accept.
+        """
+        
+        defaults = {
+            'handle': None,
+            'n_clusters': 8,
+            'max_iter': 300,
+            'tol': 0.0001,       
+            'verbose': False,
+            'random_state': 1,  
+            'init': 'scalable-k-means++',
+            'n_init': 1,
+            'oversampling_factor': 2.0,
+            'max_samples_per_batch': 32768,
+            'convert_dtype': True,
+            'output_type': None
+            }
+        
+        try:
+            config = {**defaults, **config}
+            model = CUMLKMeans(**config)
+        except TypeError:
+            raise Exception(
+                f"clustering config {config} contains unexpected keyword arguments for CumlKMeans Clustering"
+            )
+        model.fit(trn_corpus)
+        return cls(config, model)
+
+    def predict(self, predict_input):
+        """Predict an input.
+
+        Args:
+            corpus (str, list): List of strings to predict.
+
+        Returns:
+            numpy.ndarray: Matrix of features.
+        """
+        return self.model.predict(predict_input)

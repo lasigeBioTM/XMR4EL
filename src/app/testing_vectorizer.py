@@ -1,8 +1,8 @@
 import os
 import unicodedata
 
-from featurization.bert_vectorizers import BertVectorizer
-from featurization.vectorizers import Vectorizer
+from src.featurization.bert_vectorizers import BertVectorizer
+from src.featurization.vectorizers import Vectorizer
 from src.featurization.preprocessor import Preprocessor
 
 
