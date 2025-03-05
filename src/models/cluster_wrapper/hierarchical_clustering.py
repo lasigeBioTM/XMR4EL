@@ -7,10 +7,10 @@ from kneed import KneeLocator
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, silhouette_samples
 
-from src.node_logic.tree_node import TreeNode
+from models.tree_node import TreeNode
      
      
-class DivisiveHierarchicalClustering():
+class HierarchicalClustering():
     
     def __init__(self, clustering_model_type=None, tree_node=None, gpu_usage=False):
         """

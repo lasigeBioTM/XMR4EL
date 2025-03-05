@@ -7,7 +7,7 @@ class ClusterWrapper():
         """Initialization.
         
         Args:
-            cluster_model (ClusterML): Clustering Algorithm
+            cluster_model (ClusteringModel): Clustering Algorithm
         """
         self.cluster_model = cluster_model
     
@@ -21,7 +21,7 @@ class ClusterWrapper():
         
     @classmethod
     def load(cls, clustering_folder):
-        """Load preprocessor
+        """Load clustering model
 
         Args:
             clustering_folder (str): The folder to load
