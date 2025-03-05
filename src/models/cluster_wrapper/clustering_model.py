@@ -65,7 +65,7 @@ class ClusteringModel(metaclass=ClusterMeta):
         config_path = os.path.join(clustering_folder, "cluster_config.json")
         
         if not os.path.exists(config_path):
-            config = {"type": "kmeans", 'kwargs': {}}
+            config = {"type": "sklearnkmeans", 'kwargs': {}}
         else:
             with open(config_path, "r", encoding="utf-8") as fin:
                 config = json.loads(fin.read())
@@ -91,7 +91,7 @@ class ClusteringModel(metaclass=ClusterMeta):
             ClusteringModel: Trained cluster model.
         """
         
-        config = config if config is not None else {"type": "kmeans", "kwargs": {}}
+        config = config if config is not None else {"type": "sklearnkmeans", "kwargs": {}}
         LOGGER.debug(f"Train Clustering with config: {json.dumps(config, indent=True)}")
         cluster_type = config.get("type", None)
         assert(
@@ -127,9 +127,7 @@ class ClusteringModel(metaclass=ClusterMeta):
             cluster_config = json.loads(cluster_config_json)
         except json.JSONDecodeError as jex:
             raise Exception(
-                "Failed to load clustering config json from {} ({})".format(
-                    cluster_config_json, jex
-                )
+                f"Failed to load clustering config json from {cluster_config_json} ({jex})"
             )
         return cluster_config
     
