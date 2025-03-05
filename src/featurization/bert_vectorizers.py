@@ -204,10 +204,10 @@ class BioBert(BertVectorizer):
         """
         
         LOGGER.info(f"Loading BioBERT vectorizer from {load_dir}")
-        vectorizer_path = os.path.join(load_dir, "bert_vectorizer.pkl")
-        assert os.path.exists(vectorizer_path), f"bert_vectorizer path {vectorizer_path} does not exist"
+        bert_vectorizer_path = os.path.join(load_dir, "bert_vectorizer.pkl")
+        assert os.path.exists(bert_vectorizer_path), f"bert_vectorizer path {bert_vectorizer_path} does not exist"
         
-        with open(vectorizer_path, 'rb') as fin:
+        with open(bert_vectorizer_path, 'rb') as fin:
             model_data = pickle.load(fin)
         model = cls()
         model.__dict__.update(model_data)
@@ -219,7 +219,7 @@ class BioBert(BertVectorizer):
 
         Args:
             trn_corpus (list of str or str): Training corpus in the form of a list of strings or path to corpus file/folder.
-            config (dict): Dict with keyword arguments to pass to C++ class tfidf::Vectorizer.
+            config (dict): Dict with keyword arguments.
                 The keywords are:
                     return_tensors (str, optional, default='pt'): If set, will return tensors instead of list of python integers.
                     padding (bool, str, optional, default=False): Activates and controls padding.

@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from src.featurization.bert_vectorizer import BertVectorizer
+from featurization.bert_vectorizers import BertVectorizer
 
 
 class BertPreprocessor():

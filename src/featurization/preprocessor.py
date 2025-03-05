@@ -1,11 +1,12 @@
 import os
 import pandas as pd
 
-from src.featurization.vectorizer import Vectorizer
+from featurization.vectorizers import Vectorizer
 
 
 class Preprocessor():
-
+    """Preprocess text to numerical values"""
+    
     def __init__(self, vectorizer=None):
         """Initialization
 
@@ -15,13 +16,13 @@ class Preprocessor():
         
         self.vectorizer = vectorizer
 
-    def save(self, vectorizer_folder, vec_type=None):
+    def save(self, preprocessor_folder):
         """Save the preprocess object to a folder
 
         Args:
             preprocessor_folder (str): The saving folder name
         """
-        self.vectorizer.save(vectorizer_folder)
+        self.vectorizer.save(preprocessor_folder)
 
     @classmethod
     def load(cls, preprocessor_folder):
