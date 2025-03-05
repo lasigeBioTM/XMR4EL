@@ -1,8 +1,6 @@
 from src.machine_learning.classifier import Classifier
 from src.machine_learning.clustering import Clustering
 
-from cuml.cluster import KMeans
-from cuml.linear_model import LogisticRegression
 
 
 class KMeansGPU(Clustering):

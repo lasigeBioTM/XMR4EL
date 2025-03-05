@@ -4,7 +4,6 @@ import json
 import glob
 import pickle
 import shutil
-import subprocess
 import torch
 
 import onnxruntime as ort
@@ -13,6 +12,8 @@ import numpy as np
 from pathlib import Path
 from abc import ABCMeta
 from transformers import AutoTokenizer, AutoModel
+
+from src.gpu_availability import is_cuda_available
 
 
 vectorizer_dict = {}
@@ -143,23 +144,6 @@ class BertVectorizer(metaclass=BertVectorizerMeta):
             )
         return vectorizer_config
 
-    @staticmethod
-    def is_cuda_available():
-        """
-        Checks if CUDA (GPU support) is available.
-        """
-        
-        gpu_available = False
-        if shutil.which('nvidia-smi'):
-            try:
-                subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-                gpu_available = True
-            except subprocess.CalledProcessError as e:
-                LOGGER.warning("GPU acceleration is unavailable. Defaulting to CPU models.")
-        else:
-            LOGGER.warning("nvidia-smi command not found. Assuming no NVIDIA GPU.")
-        return gpu_available
-
     
 class BioBert(BertVectorizer):
     """BioBERT-based vectorizer."""
@@ -249,7 +233,7 @@ class BioBert(BertVectorizer):
             "onnx_directory": None
         }
         config = {**defaults, **config}
-        gpu_availability = cls.is_cuda_available()
+        gpu_availability = is_cuda_available()
         
         if gpu_availability:
             config.pop("onnx_directory", None)
