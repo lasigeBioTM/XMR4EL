@@ -97,9 +97,6 @@ class Vectorizer(metaclass=VectorizerMeta):
         assert(
             vectorizer_type is not None
         ), f"config {config} should contain a key 'type' for the vectorizer type" 
-        assert(
-            isinstance(trn_corpus, list) or vectorizer_type == "tfidf"
-        ), "only tfidf support from file training"
         model = vectorizer_dict[vectorizer_type].train(
             trn_corpus, config=config["kwargs"], dtype=dtype
         )
@@ -179,29 +176,31 @@ class Tfidf(Vectorizer):
         """Save trained sklearn Tfidf vectorizer to disk.
 
         Args:
-            vectorizer_folder (str): Folder to store serialized object in.
+            save_dir (str): Folder to store serialized object in.
         """
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "vectorizer.pkl"), "wb") as fout:
-            pickle.dump(self.model, fout)
+            pickle.dump(self.__dict__, fout)
     
     @classmethod
     def load(cls, load_dir):
         """Load a saved sklearn Tfidf vectorizer from disk.
 
         Args:
-            vectorizer_folder (str): Folder where `SklearnTfidf` object was saved to using `SklearnTfidf.save`.
+            load_dir (str): Folder inside which the model is loaded.
 
         Returns:
-            SklearnTfidf: The loaded object.
+            Tfidf: The loaded object.
         """
         
         vectorizer_path = os.path.join(load_dir, "vectorizer.pkl")
-        assert os.path.exists(vectorizer_path), "vectorizer path {} does not exist".format(
-            vectorizer_path
-        )
-        with open(vectorizer_path, "rb") as fvec:
-            return cls(pickle.load(fvec))
+        assert os.path.exists(vectorizer_path), f"vectorizer path {vectorizer_path} does not exist"
+        
+        with open(vectorizer_path, 'rb') as fin:
+            model_data = pickle.load(fin)
+        model = cls()
+        model.__dict__.update(model_data)
+        return model
 
     @classmethod
     def train(cls, trn_corpus, config={}, dtype=np.float32):

@@ -10,6 +10,7 @@ from src.machine_learning.clustering import Clustering
 
 
 class AgglomerativeClusteringCPU(Clustering):
+
     DEFAULTS = {
         'n_clusters': 16
         }
