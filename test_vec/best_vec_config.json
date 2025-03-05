@@ -1,0 +1,1 @@
+{"type": "biobert", "kwargs": {"return_tensors": "pt", "padding": true, "truncation": true, "max_length": 512, "batch_size": 400, "output_prefix": "onnx_embeddings", "batch_dir": "batch_dir", "onnx_directory": "data/processed/vectorizer/biobert_onnx_cpu.onnx"}}

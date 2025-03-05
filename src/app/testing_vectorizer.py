@@ -1,8 +1,9 @@
 import os
 import unicodedata
 
-from src.featurization.bert_vectorizer import BioBert
-from src.app.utils import load_train_and_labels_file
+from src.featurization.bert_vectorizer import BertVectorizer
+from src.featurization.vectorizer import Vectorizer
+from src.featurization.preprocessor import Preprocessor
 
 
 def main():
@@ -11,7 +12,7 @@ def main():
     training_filepath = "data/train/disease/train_Disease_100.txt"
     
     test_input_filepath = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
-    parsed_train_data = load_train_and_labels_file(training_filepath, label_filepath)
+    parsed_train_data = Preprocessor.load_data_from_file(training_filepath, label_filepath)
 
     # print(parsed_train_data['corpus'])
     
@@ -26,8 +27,19 @@ def main():
     onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_gpu.npy"
     onnx_gpu_prefix_filepath = "data/processed/vectorizer/testing_same_words.npz"
     
-    biobert = BioBert.predict_cpu(trn_corpus=test_input, config={})
-
+    config = {'type': 'biobert', 'kwargs':{'onnx_directory': onnx_directory}}
+    
+    bert_vectorizer = BertVectorizer.train(trn_corpus=test_input[0:5], config=config)
+    bert_vectorizer.save("test_vec")
+    bert_vectorizer.load("test_vec")
+    
+    """
+    config = {'type': 'tfidf', 'kwargs':{'max_features': 10}}
+    
+    vectorizer = Vectorizer.train(trn_corpus=test_input[0:5], config=config)
+    vectorizer.save("test_vec")
+    vectorizer.load("test_vec")
+    """
 
 if __name__ == "__main__":
     main()

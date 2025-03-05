@@ -1,41 +1,41 @@
 import os
 import pandas as pd
 
-from src.featurization.vectorizer import Vectorizer
+from src.featurization.bert_vectorizer import BertVectorizer
 
 
-class Preprocessor():
+class BertPreprocessor():
 
-    def __init__(self, vectorizer=None):
+    def __init__(self, bert_vectorizer=None):
         """Initialization
 
         Args:
-            vectorizer (Vectorizer): Text vectorizer class instance.
+            bert_vectorizer (BertVectorizer): Text BERT vectorizer class instance.
         """
         
-        self.vectorizer = vectorizer
+        self.bert_vectorizer = bert_vectorizer
 
-    def save(self, vectorizer_folder, vec_type=None):
+    def save(self, bert_vectorizer_folder):
         """Save the preprocess object to a folder
 
         Args:
-            preprocessor_folder (str): The saving folder name
+            bert_preprocessor_folder (str): The saving folder name
         """
-        self.vectorizer.save(vectorizer_folder)
+        self.bert_vectorizer.save(bert_vectorizer_folder)
 
     @classmethod
-    def load(cls, preprocessor_folder):
+    def load(cls, bert_preprocessor_folder):
         """Load preprocessor
 
         Args:
-            preprocess_folder (str): The folder to load
+            bert_preprocess_folder (str): The folder to load
 
         Returns:
-            cls: An instance of Preprocessor
+            cls: An instance of BertPreprocessor
         """
         
-        vectorizer = Vectorizer.load(preprocessor_folder)
-        return cls(vectorizer)
+        bert_vectorizer = BertVectorizer.load(bert_preprocessor_folder)
+        return cls(bert_vectorizer)
     
     @staticmethod 
     def load_data_from_file(train_filepath, labels_filepath):
