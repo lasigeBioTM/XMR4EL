@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import numpy as np
@@ -7,39 +8,57 @@ from kneed import KneeLocator
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score, silhouette_samples
 
-from models.tree_node import TreeNode
+from src.models.hierarchical_node import TreeNode
+from src.models.cluster_wrapper.clustering_model import ClusteringModel
      
      
-class HierarchicalClustering():
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+     
+class HierarchicalClustering(ClusteringModel):
     
-    def __init__(self, clustering_model_type=None, tree_node=None, gpu_usage=False):
+    def __init__(self, config, clustering_model_type=None, hierarchical_node=None):
         """
         Initialize the clustering model, labels, and centroids
         """
+        self.config = config
         self.clustering_model_type = clustering_model_type
-        self.tree_node = tree_node
-        self.gpu_usage = gpu_usage
+        self.hierarchical_node = hierarchical_node
         
-    def save(self, hierarchical_folder):
-        """Save the model and its parameters to a file """
-        os.makedirs(os.path.dirname(hierarchical_folder), exist_ok=True)
-        with open(hierarchical_folder, 'wb') as fout:
-            pickle.dump(self.__dict__, fout)
+    def save(self, save_dir):
+        """Save trained Hierarchical Clustering model to disk.
+
+        Args:
+            save_dir (str): Folder to store serialized object in.
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "clustering.pkl"), "wb") as fout:
+            pickle.dump(self.model, fout)
 
     @classmethod
-    def load(cls, hierarchical_folder):
-        """Load a saved model from a file."""
-        if not os.path.exists(hierarchical_folder):
-            raise FileNotFoundError(f"Hierarchical folder {hierarchical_folder} does not exist.")
+    def load(cls, load_dir):
+        """Load a saved Hierarchical Clustering model from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            SklearnAgglmerativeClustering: The loaded object.
+        """
         
-        with open(hierarchical_folder, 'rb') as fin:
+        LOGGER.info(f"Loading Agglomerative Clustering model from {load_dir}")
+        clustering_path = os.path.join(load_dir, "clustering.pkl")
+        assert os.path.exists(clustering_path), f"clustering path {clustering_path} does not exist"
+        
+        with open(clustering_path, 'rb') as fin:
             model_data = pickle.load(fin)
         model = cls()
         model.__dict__.update(model_data)
         return model
     
     @classmethod
-    def fit(cls, X, clustering_model_factory, config={}, gpu_usage=False):
+    def fit(cls, X, cluster_type, config={}, spherical=True, gpu_usage=False):
         """
         Main method to perform divisive hierarchical clustering
         """
@@ -50,9 +69,7 @@ class HierarchicalClustering():
             'depth': 1,
             'min_leaf_size':10,
             'min_clusters': 3,
-            'init': 'k-means++',
             'random_state': 0,
-            'spherical': True,
         }
         
         config = {**DEFAULTS, **config}
@@ -64,7 +81,6 @@ class HierarchicalClustering():
         min_clusters = config['min_clusters']
         init = config['init']
         random_state = config['random_state']
-        spherical = config['spherical']
 
         def recursive_clustering(X, tree_node, n_splits, max_iter, 
                                  depth, min_leaf_size, min_clusters, random_state, clustering_model_factory, init):
