@@ -10,17 +10,19 @@ import torch
 import onnxruntime as ort
 import numpy as np
 
+from pathlib import Path
 from abc import ABCMeta
-
 from transformers import AutoTokenizer, AutoModel
 
 
 vectorizer_dict = {}
 
 LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class BertVectorizerMeta(ABCMeta):
     """Metaclass for keeping track of all 'Vectorizer' subclasses"""
+    
     def __new__(cls, name, bases, attr):
         new_cls = super().__new__(cls, name, bases, attr)
         if name != 'BertVectorizer':
@@ -28,53 +30,103 @@ class BertVectorizerMeta(ABCMeta):
         return new_cls
 
 class BertVectorizer(metaclass=BertVectorizerMeta):
+    """Wrapper class for all BERT-based vectorizers."""
     
-    def __init__(self, model_name, config, emb):
-        self.model_name = model_name
-        self.config = config
-        self.emb = emb
+    def __init__(self, config, model):
+        """Initialization
+
+        Args:
+            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific vectorizer class to use.
+                Also contains keyword arguments to pass to the specified vectorizer.
+            model (BertVectorizer): Trained BertVectorizer.
+        """
         
-    def save(self, vectorizer_folder):
-        os.makedirs(vectorizer_folder, exist_ok=True)
-        with open(os.path.join(vectorizer_folder, "config.json"), "w", encoding="utf-8") as fout:
+        self.config = config
+        self.model = model
+        
+    def save(self, bert_vectorizer_folder):
+        """Save trained vectorizer to disk.
+
+        Args:
+            bert_vectorizer_folder (str): Folder to save to.
+        """
+        
+        LOGGER.info(f"Saving vectorizer to {bert_vectorizer_folder}")
+        os.makedirs(bert_vectorizer_folder, exist_ok=True)
+        with open(os.path.join(bert_vectorizer_folder, "best_vec_config.json"), "w", encoding="utf-8") as fout:
             fout.write(json.dumps(self.config))
-        self.model.save(vectorizer_folder)
+        self.model.save(bert_vectorizer_folder)
         
     @classmethod
-    def load(cls, vectorizer_folder):
-        config_path = os.path.join(vectorizer_folder, "config.json")
+    def load(cls, bert_vectorizer_folder):
+        """Load a saved vectorizer from disk.
+
+        Args:
+            bert_vectorizer_folder (str): Folder where `BertVectorizer` was saved to using `BertVectorizer.save`.
+
+        Returns:
+            BertVectorizer: The loaded object.
+        """
+        
+        LOGGER.info(f"Loading vectorizer from {bert_vectorizer_folder}")
+        config_path = os.path.join(bert_vectorizer_folder, "bert_vec_config.json")
         
         if not os.path.exists(config_path):
+            LOGGER.warning(f"Config file not found in {bert_vectorizer_folder}, using default config")
             config = {"type": "biobert", 'kwargs': {}}
         else:
             with open(config_path, "r", encoding="utf-8") as fin:
                 config = json.loads(fin.read())
                 
         vectorizer_type = config.get("type", None)
-        assert vectorizer_type is not None, f"{vectorizer_folder} is not a valid vectorizer folder"
+        assert vectorizer_type is not None, f"{bert_vectorizer_folder} is not a valid vectorizer folder"
         assert vectorizer_type in vectorizer_dict, f"invalid vectorizer type {config['type']}"
-        model = vectorizer_dict[vectorizer_type].load(vectorizer_folder)
-        return cls(model_name=config.get("type", "biobert"), config=config, emb=model)
+        model = vectorizer_dict[vectorizer_type].load(bert_vectorizer_folder)
+        return cls(config, model)
 
 
     @classmethod
     def train(cls, trn_corpus, config=None, dtype=np.float32):
+        """Train on a corpus.
+
+        Args:
+            trn_corpus (list or str): Training corpus in the form of a list of strings or path to text file.
+            config (dict, optional): Dict with key `"type"` and value being the lower-cased name of the specific vectorizer class to use.
+                Also contains keyword arguments to pass to the specified vectorizer. Default behavior is to use tfidf vectorizer with default arguments.
+            dtype (type, optional): Data type. Default is `numpy.float32`.
+
+        Returns:
+            BertVectorizer: Trained BertVectorizer.
+        """
+        
+        LOGGER.info("Starting training for BertVectorizer")
         config = config if config is not None else {"type": "biobert", "kwargs": {}}
-        LOGGER.debug(f"Train Vectorizer with config: {json.dumps(config, indent=True)}")
+        
         vectorizer_type = config.get("type", None)
-        assert(
-            vectorizer_type is not None
-        ), f"config {config} should contain a key 'type' for the vectorizer type" 
-        assert(
-            isinstance(trn_corpus, list)
-        ), "No model supports from file training"
+        assert vectorizer_type is not None, f"config {config} should contain a key 'type' for the vectorizer type" 
+        assert isinstance(trn_corpus, list), "No model supports from file training"
+        
+        LOGGER.info(f"Training vectorizer of type {vectorizer_type}")
         model = vectorizer_dict[vectorizer_type].train(
             trn_corpus, config=config["kwargs"], dtype=dtype
         )
+        config["kwargs"] = model.config
         return cls(config, model)
 
     @staticmethod
     def load_config_from_args(args):
+        """Parse config from a `argparse.Namespace` object.
+
+        Args:
+            args (argparse.Namespace): Contains either a `vectorizer_config_path` (path to a json file) or `vectorizer_config_json` (a json object in string form).
+
+        Returns:
+            dict: The dict resulting from loading the json file or json object.
+
+        Raises:
+            Exception: If json object cannot be loaded.
+        """
+        
         if args.vectorizer_config_path is not None:
             with open(args.vectorizer_config_path, "r", encoding="utf-8") as fin:
                 vectorizer_config_json = fin.read()
@@ -93,44 +145,68 @@ class BertVectorizer(metaclass=BertVectorizerMeta):
 
     @staticmethod
     def is_cuda_available():
-        # Default to using CPU models and set gpu_available to False
+        """
+        Checks if CUDA (GPU support) is available.
+        """
+        
         gpu_available = False
-
-        # Check if nvidia-smi is available on the system
         if shutil.which('nvidia-smi'):
             try:
-                # Run the nvidia-smi command to check for an NVIDIA GPU
                 subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
                 gpu_available = True
             except subprocess.CalledProcessError as e:
-                # Print the error message and continue execution
-                print(f"GPU acceleration is unavailable: {e}. Defaulting to CPU models.")
+                LOGGER.warning("GPU acceleration is unavailable. Defaulting to CPU models.")
         else:
-            print("nvidia-smi command not found. Assuming no NVIDIA GPU.")
-
+            LOGGER.warning("nvidia-smi command not found. Assuming no NVIDIA GPU.")
         return gpu_available
 
     
 class BioBert(BertVectorizer):
+    """BioBERT-based vectorizer."""
     
     model_name = "dmis-lab/biobert-base-cased-v1.2"
     
-    def __init__(self, labels=None):
-        self.labels = labels
+    def __init__(self, config=None, embeddings=None):
+        """Initialization
+
+        Args:
+            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific vectorizer class to use.
+                Also contains keyword arguments to pass to the specified vectorizer.
+            embeddings (numpy.ndarray): The Embeddings
+            model_name (str): Transformer name
+        """
         
+        self.config = config
+        self.embeddings = embeddings
         self.model_name = BioBert.model_name
         
     def save(self, save_dir):
+        """Save trained tfidf vectorizer to disk.
+
+        Args:
+            save_dir (str): Folder to save the model.
+        """
+        
+        LOGGER.info(f"Saving BioBERT vectorizer to {save_dir}")
         os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, "vectorizer.pkl"), "wb") as fout:
+        with open(os.path.join(save_dir, "bert_vectorizer.pkl"), "wb") as fout:
             pickle.dump(self.__dict__, fout)
     
     @classmethod
     def load(cls, load_dir):
-        vectorizer_path = os.path.join(load_dir, "vectorizer.pkl")
-        assert os.path.exists(vectorizer_path), "vectorizer path {} does not exist".format(
-            vectorizer_path
-        )
+        """Load a Tfidf vectorizer from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            BioBert: The loaded object.
+        """
+        
+        LOGGER.info(f"Loading BioBERT vectorizer from {load_dir}")
+        vectorizer_path = os.path.join(load_dir, "bert_vectorizer.pkl")
+        assert os.path.exists(vectorizer_path), f"bert_vectorizer path {vectorizer_path} does not exist"
+        
         with open(vectorizer_path, 'rb') as fin:
             model_data = pickle.load(fin)
         model = cls()
@@ -139,39 +215,58 @@ class BioBert(BertVectorizer):
     
     @classmethod
     def train(cls, trn_corpus, config, dtype=np.float32):
+        """Train on a corpus.
+
+        Args:
+            trn_corpus (list of str or str): Training corpus in the form of a list of strings or path to corpus file/folder.
+            config (dict): Dict with keyword arguments to pass to C++ class tfidf::Vectorizer.
+                The keywords are:
+                    return_tensors (str, optional, default='pt'): If set, will return tensors instead of list of python integers.
+                    padding (bool, str, optional, default=False): Activates and controls padding.
+                    truncation (bool, str, optional, default=True): Activates and controls truncation. 
+                    max_length (int, optional, default=512): Controls the maximum length to use by one of the truncation/padding parameters.
+                    batch_size (int, optional): Number of entities for batch
+                    output_prefix (str, optional): Name of the batch files
+                    batch_dir (str, optional): Where the batch files will be saved  
+                    onnx_directory (str): Location of the onnx model
+            dtype (numpy.dtype): The data type to use. Default to `np.float32`.
+            
+        Notes: https://huggingface.co/docs/transformers/v4.20.0/main_classes/tokenizer
+        Returns:
+            config: Dict with all the parameters
+            embeddings: The embedded labels
+        """
         
+        LOGGER.info("Training BioBERT vectorizer")
         defaults = {
             "return_tensors": "pt",
             "padding": True,
             "truncation": True,
             "max_length": 512,
             "batch_size": 400,
+            "output_prefix": "onnx_embeddings",
+            "batch_dir": "batch_dir",
             "onnx_directory": None
         }
+        config = {**defaults, **config}
+        gpu_availability = cls.is_cuda_available()
         
-        try:
-            gpu_availability = cls.is_cuda_available()
-            
-            config = {**defaults, **config}
-            
-            if gpu_availability:
-                config.pop("onnx_directory", None)
-                cls.predict_gpu(trn_corpus, dtype, **config)
-            else:
-                cls.predict_cpu(trn_corpus, dtype, **config)
-        except TypeError:
-            raise Exception(
-                f"vectorizer config {config} contains unexpected keyword arguments for TfidfVectorizer"
-            )
+        if gpu_availability:
+            config.pop("onnx_directory", None)
+            embeddings = cls.__predict_gpu(trn_corpus=trn_corpus, dtype=dtype, **config)
+        else:
+            embeddings = cls.__predict_cpu(trn_corpus=trn_corpus, dtype=dtype, **config)
+        
+        return cls(config, embeddings=embeddings)
     
     @classmethod
-    def export_to_onnx(cls, directory):
+    def __export_to_onnx(cls, directory):
         """Exports BioBERT to ONNX if not already exported."""
         if os.path.exists(directory):
-            print("ONNX model already exists. Skipping Export.")
+            LOGGER.info("ONNX model already exists. Skipping Export.")
             return 
         else:
-            print("ONNX model doesn't exist. Exporting.")
+            LOGGER.info("ONNX model doesn't exist. Exporting.")
         
         model = AutoModel.from_pretrained(cls.model_name)
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
@@ -192,33 +287,37 @@ class BioBert(BertVectorizer):
                 "attention_mask": {0: "batch", 1: "seq_length"}},
             opset_version=14
         )
-        print("Export complete.")
+        LOGGER.info("Export complete.")
     
     @classmethod
-    def predict_cpu(cls, corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=400, onnx_directory=None):
+    def __predict_cpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=400, output_prefix="onnx_embeddings", batch_dir="batch_dir", onnx_directory=None):
         if onnx_directory is None:
             raise ValueError("ONNX directory must be specified for CPU inference.")
         
-        output_prefix = "onnx_embeddings"
+        batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
+        emb_file = f"{batch_dir}/{output_prefix}" 
         
         """Runs inference using ONNX for faster CPU execution"""
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         
         # Ensure ONNX model is exported before running inference
-        cls.export_to_onnx(onnx_directory)
+        cls.__export_to_onnx(onnx_directory)
         
         session = ort.InferenceSession(onnx_directory)
         
+        len_corpus = len(trn_corpus)
+        
+        cls.__create_batch_dir(batch_dir)
+        
         #Split corpus into smaller batches 
-        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
-        print(num_batches)
+        num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)        
+        LOGGER.info(f"Total of batches: {num_batches}.")
         
         for batch_idx in range(num_batches):
-            print(f"Number of the batch: {batch_idx}")
-            
+            LOGGER.info(f"Number of the batch: {batch_idx + 1}")
             start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, len(corpus))
-            batch = corpus[start:end]
+            end = min((batch_idx + 1) * batch_size, len_corpus)
+            batch = trn_corpus[start:end]
             
             # Tokenize input
             inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
@@ -234,39 +333,41 @@ class BioBert(BertVectorizer):
             
             batch_results = batch_results[:, 0, :]
             
-            batch_filename = f"{output_prefix}_batch{batch_idx}.npz"
+            batch_filename = f"{emb_file}_batch{batch_idx}.npz"
             np.savez_compressed(batch_filename, embeddings=batch_results)  
                 
         # After processing all batches, load the embeddings        
-        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
+        batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))
         
         # Concatenate all batches 
         all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0).astype(dtype)
         
-        # Remove all batch files after saving the final file
-        for f in batch_files:
-            os.remove(f)
-        
-        return cls(all_embeddings)
+        cls.__del_batch_dir(batch_dir)
+        return all_embeddings
         
     @classmethod
-    def predict_gpu(cls, corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=400):
-        output_prefix = "gpu_embeddings"
+    def __predict_gpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=400, output_prefix="onnx_embeddings", batch_dir="batch_dir"):
+        batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
+        emb_file = f"{batch_dir}/{output_prefix}" 
         
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         model = AutoModel.from_pretrained(cls.model_name)  
         model.eval()  # Set to inference mode
         model.to("cuda")
         
-        num_batches = len(corpus) // batch_size + (1 if len(corpus) % batch_size != 0 else 0)
-        print(f"Total batches: {num_batches}")
+        len_corpus = len(trn_corpus)
+        
+        cls.__create_batch_dir(batch_dir)
+        
+        num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
+        LOGGER.info(f"Total of batches: {num_batches}.")
 
         for batch_idx in range(num_batches):
-            print(f"Processing batch -> {batch_idx}")
+            LOGGER.info(f"Number of the batch: {batch_idx + 1}")
 
             start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, len(corpus))
-            batch = corpus[start:end]
+            end = min((batch_idx + 1) * batch_size, len_corpus)
+            batch = trn_corpus[start:end]
 
             # Tokenize & move input tensors to GPU
             inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length).to("cuda")
@@ -275,15 +376,40 @@ class BioBert(BertVectorizer):
                 outputs = model(**inputs)  # Forward pass on GPU
                 batch_results = outputs.last_hidden_state[:, 0, :].cpu().numpy()  # Move results to CPU
 
-            batch_filename = f"{output_prefix}_batch{batch_idx}.npz"
+            batch_filename = f"{emb_file}_batch{batch_idx}.npz"
             np.savez_compressed(batch_filename, embeddings=batch_results)
 
         # Load and concatenate all batch embeddings
-        batch_files = sorted(glob.glob(f"{output_prefix}_batch*.npz"))
+        batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))
         all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0).astype(dtype)
 
-        # Clean up batch files
-        for f in batch_files:
-            os.remove(f)
+        cls.__del_batch_dir(batch_dir)
+        return all_embeddings
+    
+    def __create_batch_dir(batch_dir):
+        """
+        Create the batch dir if it does not exist,
+        if it exists, remove any file inside 
+        """
 
-        return cls(all_embeddings)
+        if os.path.exists(batch_dir):
+            for item in os.listdir(batch_dir):
+                emb_path = os.path.join(batch_dir, item)
+                os.remove(emb_path)
+        else:
+            LOGGER.warning(f"Directory does not exist, Creating")
+            os.makedirs(batch_dir)
+    
+    def __del_batch_dir(batch_dir):
+        """Delete the batch directory"""
+        
+        shutil.rmtree(batch_dir)
+    
+    @staticmethod
+    def __get_root_directory():
+        """Locate the src path of the project"""
+        
+        root_dir = Path(__file__).resolve().parent
+        while not (root_dir / "src").exists() and root_dir != root_dir.parent:
+            root_dir = root_dir.parent
+        return root_dir

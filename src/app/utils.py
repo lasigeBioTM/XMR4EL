@@ -2,11 +2,6 @@ import subprocess
 import shutil
 import os
 
-from src.machine_learning.divisive_hierarchical_clustering import DivisiveHierarchicalClustering
-from src.featurization.preprocessor import Preprocessor
-from src.featurization.vectorizer import BioBertVectorizer, TfidfVectorizer
-from src.machine_learning.hierarchical_linear_model import HierarchicalLinearModel
-
 
 def is_cuda_available():
     # Default to using CPU models and set gpu_available to False
