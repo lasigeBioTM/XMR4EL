@@ -2,5 +2,8 @@
 /.venv
 /venv
 /y_plots
-/test_vec
 /batch_dir
+
+/test_vec
+/test_linear
+/test_cl

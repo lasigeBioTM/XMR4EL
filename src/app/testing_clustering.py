@@ -18,10 +18,10 @@ divisive_clustering_config = {
 
 divisive_model = ClusteringModel.train(trn_corpus, divisive_clustering_config)
 
-# Is not finding the tree, will need to fix, and check the logic of training
-print(divisive_model.model.dtree)
+divisive_model.save("test_cl")
 
-predictions = divisive_model.model.predict([trn_corpus[0]])
+dmodel = divisive_model.load("test_cl")
 
-print(predictions)
+predictions = dmodel.model.predict([trn_corpus[0]])
+
 

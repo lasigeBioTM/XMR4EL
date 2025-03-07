@@ -1,6 +1,10 @@
+import importlib
+import logging
 import os
 import json
 import pickle
+import pkgutil
+import sys
 
 import numpy as np
 
@@ -8,6 +12,7 @@ from abc import ABCMeta
 
 from sklearn.linear_model import LogisticRegression
 
+from src.models.dtree import DTree
 from src.gpu_availability import is_cuda_available
 
 
@@ -30,6 +35,13 @@ class LinearMeta(ABCMeta):
         if name != 'LinearModel':
             linear_dict[name.lower()] = new_cls
         return new_cls
+
+    @classmethod
+    def load_subclasses(cls, package_name):
+        """Dynamically imports all modules in the package to register subclasses."""
+        package = sys.modules[package_name]
+        for _, modname, _ in pkgutil.iter_modules(package.__path__):
+            importlib.import_module(f"{package_name}.{modname}")
 
 class LinearModel(metaclass=LinearMeta):
     """Wrapper to all linear models"""
@@ -75,7 +87,7 @@ class LinearModel(metaclass=LinearMeta):
         return cls(config, model)
     
     @classmethod
-    def train(cls, trn_corpus, config=None, dtype=np.float32):
+    def train(cls, X_train, y_train=None, config=None, dtype=np.float32):
         """Train on a corpus.
 
         Args:
@@ -89,15 +101,22 @@ class LinearModel(metaclass=LinearMeta):
             LinearModel: Trained linear model.
         """
         
-        config = config if config is not None else {"type": "logisticregression", "kwargs": {}}
+        config = config if config is not None else {"type": "sklearnlogisticregression", "kwargs": {}}
         LOGGER.debug(f"Train Logistic Regression with config: {json.dumps(config, indent=True)}")
         linear_type = config.get("type", None)
         assert(
             linear_type is not None
         ), f"config {config} should contain a key 'type' for the linear type" 
-        model = linear_dict[linear_type].train(
-            trn_corpus, config=config["kwargs"], dtype=dtype
+        
+        if y_train is None:
+            assert isinstance(X_train, DTree), f"Trying to run an HierarchicalLinear but X_train is not of type({DTree.__class__})"
+            model = linear_dict[linear_type].train(
+            X_train, config=config["kwargs"], dtype=dtype
         )
+        else: 
+            model = linear_dict[linear_type].train(
+                X_train, y_train, config=config["kwargs"], dtype=dtype
+            )
         config['kwargs'] = model.config
         return cls(config, model)
     
@@ -168,7 +187,7 @@ class SklearnLogisticRegression(LinearModel):
         return model
 
     @classmethod
-    def train(cls, X_train, y_train, config={}):
+    def train(cls, X_train, y_train, config={}, dtype=np.float32):
         """Train on a corpus.
 
         Args:

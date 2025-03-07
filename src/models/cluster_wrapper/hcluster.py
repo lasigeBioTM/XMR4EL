@@ -83,8 +83,8 @@ class DivisiveClustering(ClusteringModel):
             save_dir (str): Folder to store serialized object in.
         """
         os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, "clustering.pkl"), "wb") as fout:
-            pickle.dump(self.model, fout)
+        with open(os.path.join(save_dir, "hierarchical_clustering.pkl"), "wb") as fout:
+            pickle.dump(self.__dict__, fout)
 
     @classmethod
     def load(cls, load_dir):
@@ -97,14 +97,16 @@ class DivisiveClustering(ClusteringModel):
             SklearnAgglmerativeClustering: The loaded object.
         """
         
-        LOGGER.info(f"Loading Agglomerative Clustering model from {load_dir}")
-        clustering_path = os.path.join(load_dir, "clustering.pkl")
+        LOGGER.info(f"Loading Divisive Clustering model from {load_dir}")
+        clustering_path = os.path.join(load_dir, "hierarchical_clustering.pkl")
         assert os.path.exists(clustering_path), f"clustering path {clustering_path} does not exist"
         
         with open(clustering_path, 'rb') as fin:
             model_data = pickle.load(fin)
         model = cls()
         model.__dict__.update(model_data)
+        
+        model.config = cls.Config(**model.config)
         return model
     
     @classmethod
