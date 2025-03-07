@@ -1,9 +1,18 @@
-/data
+# Venv folders
 /.venv
 /venv
-/y_plots
-/batch_dir
 
+# Data Folders
+/data
+
+# Plot Folders
+/y_plots
+
+# Test Models Folders
+/batch_dir
 /test_vec
 /test_linear
 /test_cl
+
+# Cache Folders
+__pycache__/
