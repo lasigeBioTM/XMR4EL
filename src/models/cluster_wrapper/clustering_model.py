@@ -1,7 +1,10 @@
+import importlib
 import os
 import logging
 import json
 import pickle
+import pkgutil
+import sys
 
 import numpy as np
 
@@ -10,8 +13,7 @@ from joblib import parallel_backend
 
 from sklearn.cluster import AgglomerativeClustering, KMeans, MiniBatchKMeans
 
-from gpu_availability import is_cuda_available
-
+from src.gpu_availability import is_cuda_available
 
 cluster_dict = {}
 
@@ -32,6 +34,13 @@ class ClusterMeta(ABCMeta):
         if name != 'ClusteringModel':
             cluster_dict[name.lower()] = new_cls
         return new_cls
+    
+    @classmethod
+    def load_subclasses(cls, package_name):
+        """Dynamically imports all modules in the package to register subclasses."""
+        package = sys.modules[package_name]
+        for _, modname, _ in pkgutil.iter_modules(package.__path__):
+            importlib.import_module(f"{package_name}.{modname}")
 
 class ClusteringModel(metaclass=ClusterMeta):
     """Wrapper to all clustering models"""
@@ -176,7 +185,7 @@ class SklearnAgglomerativeClustering(ClusteringModel):
         return model
 
     @classmethod
-    def train(cls, trn_corpus, config={}):
+    def train(cls, trn_corpus, config={}, dtype=np.float32):
         """Train on a corpus.
 
         Args:
@@ -208,8 +217,11 @@ class SklearnAgglomerativeClustering(ClusteringModel):
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnAgglomerativeClustering"
             )
-        model = cls.force_multi_core_processing_clustering_model(model, trn_corpus)
+        model = cls.force_multi_core_processing_clustering_models(model, trn_corpus)
         return cls(config, model)
+    
+    def get_params(self):
+        return self.model.get_params()
     
 class SklearnKMeans(ClusteringModel):
     """Simple KMeans"""
@@ -250,7 +262,7 @@ class SklearnKMeans(ClusteringModel):
         return model
 
     @classmethod
-    def train(cls, trn_corpus, config={}):
+    def train(cls, trn_corpus, config={}, dtype=np.float32):
         """Train on a corpus.
 
         Args:
@@ -283,7 +295,7 @@ class SklearnKMeans(ClusteringModel):
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnKMeans Clustering"
             )
-        model = cls.force_multi_core_processing_clustering_model(model, trn_corpus)
+        model = cls.force_multi_core_processing_clustering_models(model, trn_corpus)
         return cls(config, model)
     
     def predict(self, predict_input):
@@ -296,6 +308,9 @@ class SklearnKMeans(ClusteringModel):
             numpy.ndarray: Matrix of features.
         """
         return self.model.predict(predict_input)
+    
+    def get_params(self):
+        return self.model.get_params()
 
 
 class SklearnMiniBatchKMeans(ClusteringModel):
@@ -337,7 +352,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
         return model
 
     @classmethod
-    def train(cls, trn_corpus, config={}):
+    def train(cls, trn_corpus, config={}, dtype=np.float32):
         """Train on a corpus.
 
         Args:
@@ -373,7 +388,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnMiniBatchKMeans Clustering"
             )
-        model = cls.force_multi_core_processing_clustering_model(model, trn_corpus)
+        model = cls.force_multi_core_processing_clustering_models(model, trn_corpus)
         return cls(config, model)
     
     def predict(self, predict_input):
@@ -386,6 +401,9 @@ class SklearnMiniBatchKMeans(ClusteringModel):
             numpy.ndarray: Matrix of features.
         """
         return self.model.predict(predict_input)
+    
+    def get_params(self):
+        return self.model.get_params()
     
 class CumlKMeans(ClusteringModel):
     """Cuml KMeans with gpu support"""
@@ -426,7 +444,7 @@ class CumlKMeans(ClusteringModel):
         return model
 
     @classmethod
-    def train(cls, trn_corpus, config={}):
+    def train(cls, trn_corpus, config={}, dtype=np.float32):
         """Train on a corpus.
 
         Args:
