@@ -7,7 +7,7 @@ from src.models.cluster_wrapper.clustering_model import ClusteringModel
 
 class DTree():
     
-    def __init__(self, node=None, depth=-1, parent=None, children={}):
+    def __init__(self, node=None, depth=0, parent=None, children={}):
         self.depth = depth
         self.parent = parent
         self.children = children
