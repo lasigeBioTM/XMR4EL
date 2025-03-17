@@ -107,20 +107,22 @@ class HierarchicalLinear(LinearModel):
             DTree: A new tree with updated models and data classifications.
         """
         self.dtree = dtree
+        config = self.config
         
-        def train_subtree(dtree, dtype):
-            config = self.config
+        def train_subtree(dtree, config, dtype):
+            """Recursively train the model on each node of the tree."""
+            
             # Skip node if no cluster_node exists
             if dtree.node.cluster_node is None:
                 LOGGER.debug(f"Skipping node at depth {dtree.depth} because cluster_node is None.")
-                return dtree
+                return
 
             X = dtree.node.cluster_node.cluster_points
             Y = dtree.node.cluster_node.labels
             
             if X is None or Y is None:
                 LOGGER.debug(f"Skipping node at depth {dtree.depth} because data is missing.")
-                return dtree
+                return 
 
             # Train-test split
             try:
@@ -128,14 +130,14 @@ class HierarchicalLinear(LinearModel):
                     X, Y, test_size=0.2, random_state=42, stratify=Y)
             except ValueError as e:
                 LOGGER.error(f"Error in train-test split at depth {dtree.depth}: {e}")
-                return dtree
+                return 
             
             # Train the linear model
             try:
                 linear_model = LinearModel.train(X_train, y_train, config.model, dtype=dtype).model
             except Exception as e:
                 LOGGER.error(f"Model training failed at depth {dtree.depth}: {e}")
-                return dtree
+                return
             
             # Store Results
             test_split = {
@@ -146,18 +148,14 @@ class HierarchicalLinear(LinearModel):
             }
             
             # Create a new DTree node with the trained model and results
-            new_dtree = DTree()
-            new_dtree.node.set_linear_node(linear_model, test_split)
+            dtree.node.set_linear_node(linear_model, test_split)
             
-            # Recursively process and update child nodes
-            for child_dtree in dtree.children.values():
-                new_child_dtree = train_subtree(child_dtree, dtype)
-                new_dtree.add_child(new_child_dtree)
-
-            return new_dtree
-
-        # Start recursion from the root node and return the fully updated tree
-        return train_subtree(dtree, dtype)
+            for _, child in dtree.children.items():
+                train_subtree(child, config, dtype)
+                
+        
+        train_subtree(self.dtree, config, dtype)
+        return self.dtree
     
     def predict(self, cluster_predictions, test_input):
         """
@@ -183,6 +181,8 @@ class HierarchicalLinear(LinearModel):
             pred_len = len(cluster_pred)
             
             for idx in range(pred_len):
+                if current_dtree.children is None:
+                    print(current_dtree)
                 if cluster_pred[idx] in current_dtree.children:
                     current_dtree = current_dtree.children[cluster_pred[idx]]
                 else:

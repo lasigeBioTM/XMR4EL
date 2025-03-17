@@ -14,23 +14,27 @@ hierarchical_linear_config = {
         }
     }    
 
-divisive_cluster_model = ClusteringModel.load("test_cl").model
+dmodel = ClusteringModel.load("test_cl")
 
-dtree = divisive_cluster_model.dtree
+dtree = dmodel.model.dtree
+
+# print(divisive_cluster_model.dtree)
 
 linear_model = LinearModel.train(dtree, None, hierarchical_linear_config)
 
 linear_model.save("test_linear")
 
-linear_model = linear_model.load("test_linear").model
+lmodel = LinearModel.load("test_linear")
 
-# test_input = np.load(test_input_path, allow_pickle=True)
+test_input = np.load(test_input_path, allow_pickle=True)
 
-# cluster_predictions = divisive_cluster_model.predict(test_input)
+cluster_predictions = dmodel.model.predict(test_input)
 
-# predictions = linear_model.predict(cluster_predictions, test_input)
+# print(cluster_predictions)
 
-# print(predictions)
+predictions = lmodel.model.predict(cluster_predictions, test_input)
+
+print(predictions)
 
 
 
