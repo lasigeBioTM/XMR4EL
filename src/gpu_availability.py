@@ -18,7 +18,7 @@ def is_cuda_available():
             subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             gpu_available = True
         except subprocess.CalledProcessError as e:
-            LOGGER.warning("GPU acceleration is unavailable. Defaulting to CPU models.")
+            LOGGER.debug("GPU acceleration is unavailable. Defaulting to CPU models.")
     else:
-        LOGGER.warning("nvidia-smi command not found. Assuming no NVIDIA GPU.")
+        LOGGER.debug("nvidia-smi command not found. Assuming no NVIDIA GPU.")
     return gpu_available
