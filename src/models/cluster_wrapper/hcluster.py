@@ -3,12 +3,12 @@ import logging
 import pickle
 import numpy as np
 
-from kneed import KneeLocator
 from collections import Counter
 
-from sklearn.metrics.pairwise import cosine_distances
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 
+from src.models.cluster_wrapper.htuner import KTuner, SimilarityMetric
 from src.models.dtree import DTree
 from src.models.cluster_wrapper.clustering_model import ClusteringModel
 
@@ -23,7 +23,8 @@ class DivisiveClustering(ClusteringModel):
         
         def __init__(self, n_clusters=0, max_iter=300, depth=1, 
                      min_leaf_size=10, max_n_clusters=16, min_n_clusters=3,
-                     max_merge_attempts=5, spherical=True, model=None):
+                     max_merge_attempts=5, weight_silhouette=0.5, weight_db=0.3,
+                     weight_elbow=0.2, random_state=0, spherical=True, model=None):
             
             self.n_clusters = n_clusters
             self.max_iter = max_iter
@@ -32,6 +33,13 @@ class DivisiveClustering(ClusteringModel):
             self.max_n_clusters = max_n_clusters
             self.min_n_clusters = min_n_clusters
             self.max_merge_attempts = max_merge_attempts
+            
+            # Weights 
+            self.weight_silhouette = weight_silhouette
+            self.weight_db = weight_db
+            self.weight_elbow = weight_elbow
+            
+            self.random_state = random_state
             self.spherical = spherical
             
             if model is None:
@@ -53,6 +61,7 @@ class DivisiveClustering(ClusteringModel):
                 'max_n_clusters': self.max_n_clusters,
                 'min_n_clusters': self.min_n_clusters,
                 'max_merge_attempts': self.max_merge_attempts,
+                'random_state': self.random_state,
                 'spherical': self.spherical,
                 'model': self.model
             }
@@ -69,6 +78,7 @@ class DivisiveClustering(ClusteringModel):
                     f"max_n_clusters={self.max_n_clusters}, "
                     f"min_n_clusters={self.min_n_clusters}, "
                     f"max_merge_attempts={self.max_merge_attempts}, "
+                    f"random_state={self.random_state}, "
                     f"spherical={self.spherical}, "
                     f"model={self.model})")
             
@@ -128,38 +138,61 @@ class DivisiveClustering(ClusteringModel):
     def fit(self, trn_corpus, dtype):
         
         depth = self.config.depth
+        
         min_leaf_size = self.config.min_leaf_size
-        max_n_clusters = self.config.max_n_clusters
+        
         min_n_clusters = self.config.min_n_clusters
-        max_merge_attempts = self.config.max_merge_attempts
+        max_n_clusters = self.config.max_n_clusters
+        
+        weight_silhouette = self.config.weight_silhouette
+        weight_db = self.config.weight_db 
+        weight_elbow = self.config.weight_elbow
+        
         spherical = self.config.spherical
         
+        random_state = self.config.random_state
+
         def split_recursively(trn_corpus, parent_dtree, depth):
             """Recursively applies divisive clustering while handling cases where only one cluster remains."""
             
             config = self.config
             
-            n_clusters = self.__compute_elbow(trn_corpus, dtype=dtype) or max_n_clusters
-            config.set_model_n_clusters(int(n_clusters)) # Sets the n_clusters inside the config class
+            k_range = (min_n_clusters, max_n_clusters)
+            k, combined_score = KTuner.tune(trn_corpus,
+                                                 config,
+                                                 dtype,
+                                                 k_range,
+                                                 weight_silhouette,
+                                                 weight_db,
+                                                 weight_elbow
+                                                 )
+            
+            config.set_model_n_clusters(k) # Sets the n_clusters inside the config class
             
             cluster_model = ClusteringModel.train(trn_corpus, config.model, dtype=dtype).model # Type ClusteringModel
             cluster_labels = cluster_model.model.labels_
+            cluster_centroids = cluster_model.model.cluster_centers_
+            
+            allow_split = self.__allow_split(trn_corpus, 
+                                             cluster_labels,
+                                             cluster_centroids,
+                                             min_leaf_size=min_leaf_size
+                                             )
+            
             
             if min(Counter(cluster_labels).values()) < min_leaf_size:
-                return None
+                return parent_dtree
             
-            parent_dtree.node.set_cluster_node(cluster_model, trn_corpus, config.model)
-
-            # overall_silhouette_score, silhouette_scores = cls.__compute_silhouette_scores(X, cluster_labels)          
+            if not allow_split:
+                return parent_dtree
+            
+            parent_dtree.node.set_cluster_node(cluster_model, trn_corpus, config.model)       
 
             unique_labels = np.unique(cluster_labels)
 
             for cl in unique_labels:
                 idx = cluster_labels == cl
                 cluster_points = trn_corpus[idx]
-                
-                if cluster_points.shape[0] <= min_leaf_size or depth - 1 < 0 or cluster_points.shape[0] < max_n_clusters: # Stop clustring if datapoints are less than required
-                    continue
                 
                 new_dtree_instance = DTree(depth=parent_dtree.depth + 1)
                 new_child_dtree = split_recursively(cluster_points, new_dtree_instance, depth=depth - 1)
@@ -169,6 +202,7 @@ class DivisiveClustering(ClusteringModel):
             
             return parent_dtree
         
+        
         assert trn_corpus.shape[0] >= min_leaf_size, f"Training corpus is less than min_leaf_size"
         
         if spherical:
@@ -176,68 +210,34 @@ class DivisiveClustering(ClusteringModel):
         
         init_dtree = DTree(depth=0)
         final_dtree = split_recursively(trn_corpus, init_dtree, depth)
+        
         return final_dtree
-                
-    def __compact_clusters(self, trn_corpus, cluster_labels, centroids):
-        """Merges Clusters that are smaller than the specified size"""
         
-        unique, counts = np.unique(cluster_labels, return_counts=True)
-        cluster_sizes = dict(zip(unique, counts))
+    def __allow_split_intra_sim(self, trn_corpus, cluster_labels, cluster_centroids, intra_thresh=0.85):
         
-        if len(unique) <= self.config.min_n_clusters:
-            return cluster_labels
+        intra_sims = SimilarityMetric.compute_intra_cluster_similarity(trn_corpus, cluster_labels, cluster_centroids)
         
-        # c == cluster
-        small_clusters = {c for c, size in cluster_sizes.items() if size < self.config.min_leaf_size}
-        if len(small_clusters) == 0:
-            return cluster_labels # No small clusters, return original labels
+        for cluster, intra_sim in intra_sims.items():
+            if intra_sim > intra_thresh:
+                print(f"Cluster {cluster} is already tight (intra-cluster sim: {intra_sim:.2f}), stopping split.")
+                return False
+                        
+        return True   
+    
+    def __allow_split_inter_sim(self, cluster_centroids, inter_thresh=0.75):
+        inter_sims = SimilarityMetric.compute_inter_cluster_similarity(cluster_centroids)
         
-        updated_labels = cluster_labels.copy()
-        
-        large_clusters = [c for c in np.unique(updated_labels) if c not in small_clusters]
-        if len(large_clusters) == 0:
-            return np.zeros_like(cluster_labels) # Assign all points to cluster 0 
-
-        large_centroids = centroids[large_clusters]
-        
-        for cluster in small_clusters:
-            # Find the indices of the points belonging to the small cluster
-            indices = np.where(updated_labels == cluster)[0]
+        for i, j, inter_sim in inter_sims:
+            if inter_sim > inter_thresh:
+                print(f"Clusters {i} and {j} are too similar (inter-cluster sim: {inter_sim:.2f}), stopping further split.")
+                return False
             
-            if len(indices) == 0:
-                continue
-            
-            # Use cosine similarity
-            distances = cosine_distances(trn_corpus[indices], large_centroids)
-            
-            # Assign each data point to the closest large cluster centroid
-            nearest_cluster = np.argmin(distances, axis=1)
-            updated_labels[indices] = np.array(large_clusters)[nearest_cluster]
-            
-        return updated_labels
-
-    def __compute_elbow(self, trn_corpus, dtype):
-        """Computes the best number of clusters to a specific trn_corpus"""
+        # Stop if most clusters are highly similar internally or not well-separated externally
+        # stop_splitting = all(intra_sim > intra_thresh for intra_sim in intra_sims.values()) or \
+        #                 any(inter_sim > inter_thresh for _, _, inter_sim in inter_sims)
         
-        cluster_range = min(len(trn_corpus), self.config.max_n_clusters)
-        k_range = range(2, cluster_range)
-        
-        wcss = [
-            ClusteringModel.train(
-                trn_corpus, 
-                {
-                    **self.config.model,  # Keep the type and kwargs
-                    'kwargs': {**self.config.model['kwargs'], 'n_clusters': k}  # Update or add n_clusters to kwargs
-                }, 
-                dtype=dtype
-            ).model.model.inertia_
-            for k in k_range
-        ]
-
-        knee = KneeLocator(k_range, wcss, curve='convex', direction='decreasing', online=True)
-        optimal_clusters = knee.knee
-        return optimal_clusters
-        
+        return True
+    
     def predict(self, batch_embeddings):
         """Predicts the cluster for input data X by traversing the hierarchical tree."""
         

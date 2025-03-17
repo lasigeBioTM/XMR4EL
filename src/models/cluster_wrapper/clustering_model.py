@@ -5,6 +5,7 @@ import json
 import pickle
 import pkgutil
 import sys
+import multiprocessing
 
 import numpy as np
 
@@ -370,7 +371,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
             'n_clusters': 8,
             'init': 'k-means++',
             'max_iter': 300,
-            'batch_size': 1024,
+            'batch_size': 0, # Default: 1024
             'verbose': 0,
             'compute_labels': True,
             'random_state': None,  
@@ -383,12 +384,19 @@ class SklearnMiniBatchKMeans(ClusteringModel):
         
         try:
             config = {**defaults, **config}
+            
+            if config['batch_size'] <= 0:
+                num_cores = multiprocessing.cpu_count()
+                batch_size = len(trn_corpus) // num_cores
+                batch_size = max(1, batch_size)
+                config['batch_size'] = batch_size
+            
             model = MiniBatchKMeans(**config)
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnMiniBatchKMeans Clustering"
             )
-        model = cls.force_multi_core_processing_clustering_models(model, trn_corpus)
+        model = model.fit(trn_corpus)
         return cls(config, model)
     
     def predict(self, predict_input):

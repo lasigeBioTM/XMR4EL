@@ -6,17 +6,22 @@ onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_dis
 
 trn_corpus = np.load(onnx_gpu_embeddigns_filepath, allow_pickle=True)
 
-kmeans_config = {'type': 'sklearnminibatchkmeans', 'kwargs':{'random_state': 0}}    
+
+
+kmeans_config = {'type': 'sklearnminibatchkmeans', 'kwargs':{'random_state': 0, 
+                                                             'max_iter': 500}}
 
 divisive_clustering_config = {
     'type': 'divisiveclustering', 
     'kwargs':{
-        'depth': 2,
+        'depth': 0,
         'model': kmeans_config
         }
     }    
 
 divisive_model = ClusteringModel.train(trn_corpus, divisive_clustering_config)
+
+print(divisive_model.model.dtree)
 
 divisive_model.save("test_cl")
 
