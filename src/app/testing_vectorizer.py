@@ -1,6 +1,8 @@
 import os
 import unicodedata
 
+import numpy as np
+
 from src.featurization.bert_vectorizers import BertVectorizer
 from src.featurization.vectorizers import Vectorizer
 from src.featurization.preprocessor import Preprocessor
@@ -29,7 +31,13 @@ def main():
     
     config = {'type': 'biobert', 'kwargs':{'onnx_directory': onnx_directory}}
     
-    bert_vectorizer = BertVectorizer.train(trn_corpus=test_input[0:5], config=config)
+    unique_test_input = np.unique(test_input)
+    
+    unique_test_list = []
+    for sent in unique_test_input:
+        unique_test_list.append(str(sent))
+    
+    bert_vectorizer = BertVectorizer.train(trn_corpus=unique_test_list, config=config)
     bert_vectorizer.save("test_vec")
     bert_vectorizer.load("test_vec")
     

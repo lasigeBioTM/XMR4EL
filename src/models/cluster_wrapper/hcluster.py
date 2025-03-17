@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 
 from kneed import KneeLocator
+from collections import Counter
 
 from sklearn.metrics.pairwise import cosine_distances
 from sklearn.preprocessing import normalize
@@ -133,69 +134,49 @@ class DivisiveClustering(ClusteringModel):
         max_merge_attempts = self.config.max_merge_attempts
         spherical = self.config.spherical
         
-        def split_recursively(trn_corpus, dtree, depth):
+        def split_recursively(trn_corpus, parent_dtree, depth):
             """Recursively applies divisive clustering while handling cases where only one cluster remains."""
-            
-            # LOGGER.info(f"Dtree: {dtree}")
             
             config = self.config
             
-            # Assures that wont be created an cluster algorithm with less than min_leaf_size
-            if trn_corpus.shape[0] <= min_leaf_size:
-                return dtree
-            
             n_clusters = self.__compute_elbow(trn_corpus, dtype=dtype) or max_n_clusters
-            
             config.set_model_n_clusters(int(n_clusters)) # Sets the n_clusters inside the config class
             
-            merge_attempts = 0
+            cluster_model = ClusteringModel.train(trn_corpus, config.model, dtype=dtype).model # Type ClusteringModel
+            cluster_labels = cluster_model.model.labels_
             
-            LOGGER.info(f"Starting to merge")
-            while merge_attempts < max_merge_attempts:
-                cluster_model = ClusteringModel.train(trn_corpus, config.model, dtype=dtype).model # Type ClusteringModel
-                cluster_labels = cluster_model.model.labels_
-                centroids = cluster_model.model.cluster_centers_
-                
-                # Stop to cluster if the number of labels is less than the min_n_clusters permits
-                unique_labels = np.unique(cluster_labels)
-                if len(unique_labels) <= min_n_clusters:
-                    break
-
-                # Merge small clusters
-                LOGGER.info("Compact Clusters")
-                compacted_labels = self.__compact_clusters(trn_corpus, cluster_labels, centroids)
-                
-                if np.array_equal(cluster_labels, compacted_labels):
-                    break   # Stop merging if labels don't change
-                
-                n_clusters = len(np.unique(compacted_labels))
-                config.set_model_n_clusters(n_clusters)
-                merge_attempts += 1
+            if min(Counter(cluster_labels).values()) < min_leaf_size:
+                return None
             
-            dtree.node.set_cluster_node(cluster_model, trn_corpus, config.model)
+            parent_dtree.node.set_cluster_node(cluster_model, trn_corpus, config.model)
 
             # overall_silhouette_score, silhouette_scores = cls.__compute_silhouette_scores(X, cluster_labels)          
 
             unique_labels = np.unique(cluster_labels)
-            
-            LOGGER.info(f"Spliting")
+
             for cl in unique_labels:
                 idx = cluster_labels == cl
-                c_points = trn_corpus[idx]
+                cluster_points = trn_corpus[idx]
                 
-                if c_points.shape[0] <= min_leaf_size or depth - 1 == 0: # Stop clustring if datapoints are less than required
+                if cluster_points.shape[0] <= min_leaf_size or depth - 1 < 0 or cluster_points.shape[0] < max_n_clusters: # Stop clustring if datapoints are less than required
                     continue
                 
-                child_dtree = DTree(depth=dtree.depth + 1)
-                new_child_dtree = split_recursively(c_points, child_dtree, depth=depth - 1)
-                dtree.set_child_dtree(cl, new_child_dtree)
+                new_dtree_instance = DTree(depth=parent_dtree.depth + 1)
+                new_child_dtree = split_recursively(cluster_points, new_dtree_instance, depth=depth - 1)
+                
+                if new_child_dtree is not None:
+                    parent_dtree.set_child_dtree(int(cl), new_child_dtree)
             
-            return dtree
+            return parent_dtree
+        
+        assert trn_corpus.shape[0] >= min_leaf_size, f"Training corpus is less than min_leaf_size"
         
         if spherical:
-            trn_corpus = normalize(trn_corpus, norm='l2', axis=1)  
-            
-        return split_recursively(trn_corpus, DTree(), depth)
+            trn_corpus = normalize(trn_corpus, norm='l2', axis=1) 
+        
+        init_dtree = DTree(depth=0)
+        final_dtree = split_recursively(trn_corpus, init_dtree, depth)
+        return final_dtree
                 
     def __compact_clusters(self, trn_corpus, cluster_labels, centroids):
         """Merges Clusters that are smaller than the specified size"""
@@ -267,23 +248,22 @@ class DivisiveClustering(ClusteringModel):
             
             current_dtree = self.dtree  # Start at the root
             current_cluster_node = current_dtree.node.cluster_node
+            
             pred = []
             
             while current_cluster_node.is_populated():
                 input_embedding = input_embedding.reshape(1, -1)
                 
-                LOGGER.debug(current_cluster_node.model.model.get_params())
-                
-                cluster_predictions = current_cluster_node.model.predict(input_embedding)[0]
-                
-                LOGGER.debug(cluster_predictions)
-                pred.append(int(cluster_predictions))
+                cluster_predictions = int(current_cluster_node.model.predict(input_embedding)[0])
+                pred.append(cluster_predictions)
                 
                 if cluster_predictions not in current_dtree.children:
-                    LOGGER.debug("No Children")
                     break
                 
-                current_dtree = current_dtree.children[int(cluster_predictions)]
+                current_dtree = current_dtree.children[cluster_predictions]
+                current_cluster_node = current_dtree.node.cluster_node
+                
+            LOGGER.info(pred)
             
             predictions.append(pred)
         

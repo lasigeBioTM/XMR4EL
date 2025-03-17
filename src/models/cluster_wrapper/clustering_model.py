@@ -378,7 +378,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
             'max_no_improvement': 10,
             'init_size': None,   
             'n_init': 'auto',
-            'reassigment_ratio': 0.01
+            'reassignment_ratio': 0.01
             }
         
         try:

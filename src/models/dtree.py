@@ -1,16 +1,17 @@
 import numpy as np
 
 from typing import Dict, Optional
+from collections import Counter
 
 from src.models.cluster_wrapper.clustering_model import ClusteringModel
 
 
 class DTree():
     
-    def __init__(self, node=None, depth=0, parent=None, children={}):
+    def __init__(self, node=None, depth=0, parent=None):
         self.depth = depth
         self.parent = parent
-        self.children = children
+        self.children = {}
         
         if node is None:
             self.node = Node()
@@ -21,37 +22,39 @@ class DTree():
         return len(self.children) == 0    
     
     def set_child_dtree(self, cluster_label, child):
-        assert cluster_label not in self.children, f"Duplicated value of cluster label"
+        # print(f"\n{self.children}")
+        assert cluster_label not in self.children, f"Duplicated value of cluster label {cluster_label} at depth {self.depth}"
         assert isinstance(child, DTree), f"Expected child to be DTree, got {type(child).__name__}"
         
         child.parent = self
         self.children[cluster_label] = child
-    
-    def __str__(self, indent=0):
-        return str(self.depth)
-    
-    def __str__(self) -> str:
-        """ Returns a string representation of the TreeNode. """
-        indent = "  " * self.depth * 2
-        info = f"{indent}Depth: {self.depth}\n" if self.node.cluster_node else ""
+        
+    def __str__(self):
+        # Start with the current node and its depth
+        indent = f"{' ' * (self.depth + 1) * 5}"
+        result = f"{indent}Node at depth {self.depth} - "
+        
+        if self.is_leaf():
+            result += "Leaf Node"
+        else:
+            result += "Non-Leaf Node"
+        
+        # Add the node type (ClusterNode or LinearNode) for detailed understanding
+        if isinstance(self.node.cluster_node, ClusterNode):
+            unique_labels = len(set(self.node.cluster_node.labels)) if self.node.cluster_node.labels is not None else 0
+            result += f" - ClusterNode with {unique_labels} unique labels \n{indent} - Labels count\n"
+            for idx, item in sorted(Counter(self.node.cluster_node.labels).items()):
+                result += f"{indent}    {idx} -> {item}\n"
+        elif isinstance(self.node.linear_node, LinearNode):
+            result += f" - LinearNode with model: {self.node.model}"
 
-        if self.node.cluster_node:
-            if len(self.children.values()) == 0:
-                info += f"{indent}Cluster Info: {self.node.cluster_node}, No Child Clusters\n"
-            else:
-                n_cluster = ""
-                for child_cluster in self.children.keys():
-                    n_cluster += str(child_cluster) + " "
-                    
-                info += f"{indent}Cluster Info: {self.node.cluster_node}, Child Clusters: {n_cluster}\n"
+        # Recursively print children if the node is not a leaf
+        if not self.is_leaf():
+            result += "\n"
+            for label, child in self.children.items():
+                result += f"{'  ' * (self.depth + 1) * 5}Child {label}: " + str(child) + "\n"
 
-        if self.node.linear_node:
-            info += f"{indent}Classifier Info: {self.node.linear_node.__str__(indent)}\n"
-
-        for child in self.children.values():
-            info += str(child)  # Recursively print children
-
-        return info
+        return result.strip()
         
 class Node():
     
@@ -65,14 +68,6 @@ class Node():
     def set_linear_node(self, model, test_split):
         """ Assigns a classification model to this node. """
         self.linear_node = LinearNode(model=model, test_split=test_split)
-        
-    def __str__(self):
-        node_str = ""
-        if self.cluster_node:
-            node_str += f"ClusterNode: {str(self.cluster_node)}\n"
-        if self.linear_node:
-            node_str += f"LinearNode: {str(self.linear_node)}\n"
-        return node_str
         
 class ClusterNode():
     
@@ -88,9 +83,6 @@ class ClusterNode():
     
     def is_populated(self):
         return self.model is not None
-
-    def __str__(self):
-        return f"Model: {self.model.__class__.__name__}, Labels: {self.labels if self.labels is not None else 'None'}"
     
 class LinearNode():
     
@@ -98,8 +90,6 @@ class LinearNode():
         self.model = model
         self.test_split: Dict[str, list] = test_split
     
-    def __str__(self):
-        return f"Model: {self.model.__class__.__name__}, Test Split: {self.test_split}"
 
     
     

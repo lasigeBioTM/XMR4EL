@@ -105,7 +105,7 @@ class BertVectorizer(metaclass=BertVectorizerMeta):
         
         vectorizer_type = config.get("type", None)
         assert vectorizer_type is not None, f"config {config} should contain a key 'type' for the vectorizer type" 
-        assert isinstance(trn_corpus, list), "No model supports from file training"
+        # assert isinstance(trn_corpus, list), "No model supports from file training"
         
         LOGGER.info(f"Training vectorizer of type {vectorizer_type}")
         model = vectorizer_dict[vectorizer_type].train(
@@ -302,6 +302,8 @@ class BioBert(BertVectorizer):
             start = batch_idx * batch_size
             end = min((batch_idx + 1) * batch_size, len_corpus)
             batch = trn_corpus[start:end]
+            
+            print(batch)
             
             # Tokenize input
             inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
