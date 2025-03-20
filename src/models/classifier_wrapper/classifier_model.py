@@ -120,6 +120,9 @@ class ClassifierModel(metaclass=ClassifierMeta):
         config['kwargs'] = model.config
         return cls(config, model)
     
+    def predict(self, predict_input):
+        return self.model.predict(predict_input)
+    
     @staticmethod
     def load_config_from_args(args):
         """Parse config from a `argparse.Namespace` object.

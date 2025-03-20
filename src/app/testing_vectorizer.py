@@ -3,7 +3,7 @@ import unicodedata
 
 import numpy as np
 
-from src.featurization.bert_vectorizers import BertVectorizer
+from featurization.transformers import BertVectorizer
 from src.featurization.vectorizers import Vectorizer
 from src.featurization.preprocessor import Preprocessor
 

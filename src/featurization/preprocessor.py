@@ -7,37 +7,6 @@ from src.featurization.vectorizers import Vectorizer
 class Preprocessor():
     """Preprocess text to numerical values"""
     
-    def __init__(self, vectorizer=None):
-        """Initialization
-
-        Args:
-            vectorizer (Vectorizer): Text vectorizer class instance.
-        """
-        
-        self.vectorizer = vectorizer
-
-    def save(self, preprocessor_folder):
-        """Save the preprocess object to a folder
-
-        Args:
-            preprocessor_folder (str): The saving folder name
-        """
-        self.vectorizer.save(preprocessor_folder)
-
-    @classmethod
-    def load(cls, preprocessor_folder):
-        """Load preprocessor
-
-        Args:
-            preprocess_folder (str): The folder to load
-
-        Returns:
-            cls: An instance of Preprocessor
-        """
-        
-        vectorizer = Vectorizer.load(preprocessor_folder)
-        return cls(vectorizer)
-    
     @staticmethod 
     def load_data_from_file(train_filepath, labels_filepath):
         """Load the training data and labels data
