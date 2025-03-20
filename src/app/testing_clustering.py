@@ -6,15 +6,13 @@ onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_dis
 
 trn_corpus = np.load(onnx_gpu_embeddigns_filepath, allow_pickle=True)
 
-
-
 kmeans_config = {'type': 'sklearnminibatchkmeans', 'kwargs':{'random_state': 0, 
                                                              'max_iter': 500}}
 
 divisive_clustering_config = {
     'type': 'divisiveclustering', 
     'kwargs':{
-        'depth': 0,
+        'depth': 1,
         'model': kmeans_config
         }
     }    
