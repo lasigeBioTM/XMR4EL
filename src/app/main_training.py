@@ -2,7 +2,7 @@ import time
 
 from sklearn.decomposition import PCA
 
-from models.linear_wrapper.hierarchical_linear_model import HierarchicalLinearModel
+from models.classifier_wrapper.hierarchical_linear_model import HierarchicalLinearModel
 from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
 from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_clustering, create_hierarchical_linear_model, load_bio_bert_vectorizer, load_train_and_labels_file
 

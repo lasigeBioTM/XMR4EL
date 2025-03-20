@@ -1,7 +1,7 @@
 import numpy as np
 
 from src.models.cluster_wrapper.clustering_model import ClusteringModel
-from src.models.linear_wrapper.linear_model import LinearModel
+from models.classifier_wrapper.classifier_model import LinearModel
 
 test_input_path = "data/processed/vectorizer/test_input_embeddings.npy"
 
