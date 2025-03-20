@@ -16,73 +16,73 @@ from transformers import AutoTokenizer, AutoModel
 from src.gpu_availability import is_cuda_available
 
 
-vectorizer_dict = {}
+transformer_dict = {}
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class BertVectorizerMeta(ABCMeta):
-    """Metaclass for keeping track of all 'Vectorizer' subclasses"""
+class TransformersMeta(ABCMeta):
+    """Metaclass for keeping track of all 'Transformer' subclasses"""
     
     def __new__(cls, name, bases, attr):
         new_cls = super().__new__(cls, name, bases, attr)
-        if name != 'BertVectorizer':
-            vectorizer_dict[name.lower()] = new_cls
+        if name != 'Transformer':
+            transformer_dict[name.lower()] = new_cls
         return new_cls
 
-class BertVectorizer(metaclass=BertVectorizerMeta):
-    """Wrapper class for all BERT-based vectorizers."""
+class Transformer(metaclass=TransformersMeta):
+    """Wrapper class for all BERT-based Transformers."""
     
     def __init__(self, config, model):
         """Initialization
 
         Args:
-            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific vectorizer class to use.
-                Also contains keyword arguments to pass to the specified vectorizer.
-            model (BertVectorizer): Trained BertVectorizer.
+            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific transformer class to use.
+                Also contains keyword arguments to pass to the specified transformer.
+            model (Berttransformer): Trained Berttransformer.
         """
         
         self.config = config
         self.model = model
         
-    def save(self, bert_vectorizer_folder):
-        """Save trained vectorizer to disk.
+    def save(self, transformer_folder):
+        """Save trained transformer to disk.
 
         Args:
-            bert_vectorizer_folder (str): Folder to save to.
+            transformer_folder (str): Folder to save to.
         """
         
-        LOGGER.info(f"Saving vectorizer to {bert_vectorizer_folder}")
-        os.makedirs(bert_vectorizer_folder, exist_ok=True)
-        with open(os.path.join(bert_vectorizer_folder, "best_vec_config.json"), "w", encoding="utf-8") as fout:
+        LOGGER.info(f"Saving transformer to {transformer_folder}")
+        os.makedirs(transformer_folder, exist_ok=True)
+        with open(os.path.join(transformer_folder, "best_vec_config.json"), "w", encoding="utf-8") as fout:
             fout.write(json.dumps(self.config))
-        self.model.save(bert_vectorizer_folder)
+        self.model.save(transformer_folder)
         
     @classmethod
-    def load(cls, bert_vectorizer_folder):
-        """Load a saved vectorizer from disk.
+    def load(cls, transformer_folder):
+        """Load a saved transformer from disk.
 
         Args:
-            bert_vectorizer_folder (str): Folder where `BertVectorizer` was saved to using `BertVectorizer.save`.
+            transformer_folder (str): Folder where `Berttransformer` was saved to using `Berttransformer.save`.
 
         Returns:
-            BertVectorizer: The loaded object.
+            Berttransformer: The loaded object.
         """
         
-        LOGGER.info(f"Loading vectorizer from {bert_vectorizer_folder}")
-        config_path = os.path.join(bert_vectorizer_folder, "bert_vec_config.json")
+        LOGGER.info(f"Loading transformer from {transformer_folder}")
+        config_path = os.path.join(transformer_folder, "bert_vec_config.json")
         
         if not os.path.exists(config_path):
-            LOGGER.warning(f"Config file not found in {bert_vectorizer_folder}, using default config")
+            LOGGER.warning(f"Config file not found in {transformer_folder}, using default config")
             config = {"type": "biobert", 'kwargs': {}}
         else:
             with open(config_path, "r", encoding="utf-8") as fin:
                 config = json.loads(fin.read())
                 
-        vectorizer_type = config.get("type", None)
-        assert vectorizer_type is not None, f"{bert_vectorizer_folder} is not a valid vectorizer folder"
-        assert vectorizer_type in vectorizer_dict, f"invalid vectorizer type {config['type']}"
-        model = vectorizer_dict[vectorizer_type].load(bert_vectorizer_folder)
+        transformer_type = config.get("type", None)
+        assert transformer_type is not None, f"{transformer_folder} is not a valid transformer folder"
+        assert transformer_type in transformer_dict, f"invalid transformer type {config['type']}"
+        model = transformer_dict[transformer_type].load(transformer_folder)
         return cls(config, model)
 
 
@@ -92,23 +92,23 @@ class BertVectorizer(metaclass=BertVectorizerMeta):
 
         Args:
             trn_corpus (list or str): Training corpus in the form of a list of strings or path to text file.
-            config (dict, optional): Dict with key `"type"` and value being the lower-cased name of the specific vectorizer class to use.
-                Also contains keyword arguments to pass to the specified vectorizer. Default behavior is to use tfidf vectorizer with default arguments.
+            config (dict, optional): Dict with key `"type"` and value being the lower-cased name of the specific transformer class to use.
+                Also contains keyword arguments to pass to the specified transformer. Default behavior is to use tfidf transformer with default arguments.
             dtype (type, optional): Data type. Default is `numpy.float32`.
 
         Returns:
-            BertVectorizer: Trained BertVectorizer.
+            Berttransformer: Trained Berttransformer.
         """
         
-        LOGGER.info("Starting training for BertVectorizer")
+        LOGGER.info("Starting training for Berttransformer")
         config = config if config is not None else {"type": "biobert", "kwargs": {}}
         
-        vectorizer_type = config.get("type", None)
-        assert vectorizer_type is not None, f"config {config} should contain a key 'type' for the vectorizer type" 
+        transformer_type = config.get("type", None)
+        assert transformer_type is not None, f"config {config} should contain a key 'type' for the transformer type" 
         # assert isinstance(trn_corpus, list), "No model supports from file training"
         
-        LOGGER.info(f"Training vectorizer of type {vectorizer_type}")
-        model = vectorizer_dict[vectorizer_type].train(
+        LOGGER.info(f"Training transformer of type {transformer_type}")
+        model = transformer_dict[transformer_type].train(
             trn_corpus, config=config["kwargs"], dtype=dtype
         )
         config["kwargs"] = model.config
@@ -119,7 +119,7 @@ class BertVectorizer(metaclass=BertVectorizerMeta):
         """Parse config from a `argparse.Namespace` object.
 
         Args:
-            args (argparse.Namespace): Contains either a `vectorizer_config_path` (path to a json file) or `vectorizer_config_json` (a json object in string form).
+            args (argparse.Namespace): Contains either a `transformer_config_path` (path to a json file) or `transformer_config_json` (a json object in string form).
 
         Returns:
             dict: The dict resulting from loading the json file or json object.
@@ -128,25 +128,25 @@ class BertVectorizer(metaclass=BertVectorizerMeta):
             Exception: If json object cannot be loaded.
         """
         
-        if args.vectorizer_config_path is not None:
-            with open(args.vectorizer_config_path, "r", encoding="utf-8") as fin:
-                vectorizer_config_json = fin.read()
+        if args.transformer_config_path is not None:
+            with open(args.transformer_config_path, "r", encoding="utf-8") as fin:
+                transformer_config_json = fin.read()
         else:
-            vectorizer_config_json = args.vectorizer_config_json
+            transformer_config_json = args.transformer_config_json
         
         try:
-            vectorizer_config = json.loads(vectorizer_config_json)
+            transformer_config = json.loads(transformer_config_json)
         except json.JSONDecodeError as jex:
             raise Exception(
-                "Failed to load vectorizer config json from {} ({})".format(
-                    vectorizer_config_json, jex
+                "Failed to load transformer config json from {} ({})".format(
+                    transformer_config_json, jex
                 )
             )
-        return vectorizer_config
+        return transformer_config
 
     
-class BioBert(BertVectorizer):
-    """BioBERT-based vectorizer."""
+class BioBert(Transformer):
+    """BioBERT-based transformer."""
     
     model_name = "dmis-lab/biobert-base-cased-v1.2"
     
@@ -154,8 +154,8 @@ class BioBert(BertVectorizer):
         """Initialization
 
         Args:
-            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific vectorizer class to use.
-                Also contains keyword arguments to pass to the specified vectorizer.
+            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific transformer class to use.
+                Also contains keyword arguments to pass to the specified transformer.
             embeddings (numpy.ndarray): The Embeddings
             model_name (str): Transformer name
         """
@@ -165,20 +165,20 @@ class BioBert(BertVectorizer):
         self.model_name = BioBert.model_name
         
     def save(self, save_dir):
-        """Save trained tfidf vectorizer to disk.
+        """Save trained tfidf transformer to disk.
 
         Args:
             save_dir (str): Folder to save the model.
         """
         
-        LOGGER.info(f"Saving BioBERT vectorizer to {save_dir}")
+        LOGGER.info(f"Saving BioBERT transformer to {save_dir}")
         os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, "bert_vectorizer.pkl"), "wb") as fout:
+        with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
             pickle.dump(self.__dict__, fout)
     
     @classmethod
     def load(cls, load_dir):
-        """Load a Tfidf vectorizer from disk.
+        """Load a BioBert Transformer from disk.
 
         Args:
             load_dir (str): Folder inside which the model is loaded.
@@ -187,11 +187,11 @@ class BioBert(BertVectorizer):
             BioBert: The loaded object.
         """
         
-        LOGGER.info(f"Loading BioBERT vectorizer from {load_dir}")
-        bert_vectorizer_path = os.path.join(load_dir, "bert_vectorizer.pkl")
-        assert os.path.exists(bert_vectorizer_path), f"bert_vectorizer path {bert_vectorizer_path} does not exist"
+        LOGGER.info(f"Loading BioBERT transformer from {load_dir}")
+        transformer_path = os.path.join(load_dir, "transformer.pkl")
+        assert os.path.exists(transformer_path), f"transformer path {transformer_path} does not exist"
         
-        with open(bert_vectorizer_path, 'rb') as fin:
+        with open(transformer_path, 'rb') as fin:
             model_data = pickle.load(fin)
         model = cls()
         model.__dict__.update(model_data)
@@ -221,7 +221,7 @@ class BioBert(BertVectorizer):
             embeddings: The embedded labels
         """
         
-        LOGGER.info("Training BioBERT vectorizer")
+        LOGGER.info("Training BioBERT transformer")
         defaults = {
             "return_tensors": "pt",
             "padding": True,
