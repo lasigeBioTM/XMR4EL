@@ -220,7 +220,9 @@ class XMRPipeline():
             input_text = trn_corpus
         
         """Predict embeddings using Transformer"""
-        transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype)
+        transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
+        
+        print(transformer_model)
         
         transformer_emb = transformer_model.embeddings
         
