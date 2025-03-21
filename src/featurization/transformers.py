@@ -423,8 +423,8 @@ class BioBert(Transformer):
     def __dynamic_gpu_batch_size(len_corpus, max_length, model, dtype=torch.float32):
         """Calculate batch size dynamically based on available GPU memory."""
         # Get available GPU memory
-        available_memory = torch.cuda.mem_get_info()[0]  # in bytes
-        print(f"Available GPU memory: {available_memory / 1e9:.2f} GB")
+        total_memory, free_memory = torch.cuda.mem_get_info()
+        LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
 
         # Estimate memory usage per sample (this might need adjustment depending on your model)
         # For example, using float32 as the data type for model input
@@ -435,12 +435,12 @@ class BioBert(Transformer):
             estimated_size_per_sample += model_size / len_corpus
 
         # Estimate maximum batch memory usage
-        estimated_batch_memory = available_memory * 0.3  # Use 50% of available GPU memory
+        estimated_batch_memory = free_memory* 0.3  # Use 50% of available GPU memory
 
         # Calculate maximum batch size (number of samples per batch)
         batch_size = max(1, estimated_batch_memory // estimated_size_per_sample)
         batch_size = min(batch_size, len_corpus)  # Ensure batch size doesn't exceed corpus size
-        print(f"Auto-calculated batch size: {batch_size}")
+        LOGGER.info(f"Auto-calculated batch size: {batch_size}")
 
         # Return batch size and number of batches
         num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
