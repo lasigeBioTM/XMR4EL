@@ -4,6 +4,7 @@ from typing import Counter
 
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import normalize
 
 from src.featurization.transformers import Transformer
 from src.featurization.vectorizers import Vectorizer
@@ -23,6 +24,7 @@ class XMRPipeline():
                  cluster_model: ClusteringModel,
                  ranker_model: ClassifierModel
                  ):
+        """Initialization"""
         
         self.text_vec = text_vec
         self.transformer = transformer
@@ -31,14 +33,14 @@ class XMRPipeline():
         
     @staticmethod
     def __train_vectorizer(trn_corpus, config, dtype=np.float32):
-        """
-            Trains the vectorizer model with the training data
+        """Trains the vectorizer model with the training data
             
+        Args:
             trn_corpus (np.array): Training Data, sparse or dense array
             config (dict): Configurations of the vectorizer model
             dtype (np.float): Type of the data inside the array
             
-            Return:
+        Return:
             TextVectorizer (Vectorizer): Trained Vectorizer
         """
         
@@ -46,25 +48,28 @@ class XMRPipeline():
     
     @staticmethod
     def __predict_vectorizer(text_vec, corpus):
-        """
-            Predicts the training data with the Vectorizer model
-            
+        """Predicts the training data with the Vectorizer model
+        
+        Args:
             text_vec (Vectorizer): The Vectorizer Model
             corpus (np.array or sparse ?): The data array to be predicted
+            
+        Return:
+
         """
         
         return text_vec.predict(corpus)
     
     @staticmethod
     def __predict_transformer(trn_corpus, config, dtype=np.float32):
-        """
-            Predicts the training data with the transformer model 
-            
+        """Predicts the training data with the transformer model 
+        
+        Args:
             trn_corpus (np.array): Training Data, sparse or dense array
             config (dict): Configurations of the vectorizer model
             dtype (np.float): Type of the data inside the array
             
-            Return:
+        Return:
             Transformed Embeddings (np.array): Predicted Embeddings
         """
         
@@ -72,11 +77,14 @@ class XMRPipeline():
     
     @staticmethod
     def __reduce_dimensionality(emb, n_features):
-        """
-            Reduces the dimensionality of embeddings
-            
+        """Reduces the dimensionality of embeddings
+        
+        Args: 
             emb (np.array): Embeddings
             n_features (int): Number of features to have
+        
+        Returns:
+            np.array
         """
         
         pca = PCA(n_components=n_features)  # Limit to 300 dimensions
@@ -84,14 +92,14 @@ class XMRPipeline():
     
     @staticmethod
     def __train_clustering(trn_corpus, config, dtype=np.float32):
-        """
-            Trains the clustering model with the training data
-            
+        """Trains the clustering model with the training data
+        
+        Args:
             trn_corpus (np.array): Trainign data as a Dense Array
             config (dict): Configurations of the clustering model
             dtype (np.float): Type of the data inside the array
             
-            Return:
+        Return:
             ClusteringModel (ClusteringModel): Trained Clustering Model
         """
         
@@ -99,14 +107,14 @@ class XMRPipeline():
     
     @staticmethod
     def __train_classifier(X_corpus, y_corpus, config, dtype=np.float32):
-        """
-            Trains the classifier model with the training data
-            
+        """Trains the classifier model with the training data
+        
+        Args:
             trn_corpus (np.array): Trainign data as a Dense Array
             config (dict): Configurations of the clustering model
             dtype (np.float): Type of the data inside the array
             
-            Return:
+        Return:
             RankingModel (ClassifierModel): Trained Classifier Model
         """
     
@@ -128,7 +136,8 @@ class XMRPipeline():
         return classifier_model.predict(data_points)
     
     # Done, not tested
-    def __execute_first_pipeline(self,
+    @classmethod
+    def __execute_first_pipeline(cls,
                                  htree,
                                  text_emb,
                                  clustering_config,
@@ -148,7 +157,7 @@ class XMRPipeline():
         clustering_config['n_clusters'] = k
         
         """Training Clustering Model"""
-        clustering_model = self.__train_clustering(
+        clustering_model = cls.__train_clustering(
             text_emb, 
             clustering_config, 
             dtype
@@ -170,7 +179,7 @@ class XMRPipeline():
             text_points = text_emb[idx]
             
             new_child_htree_instance = XMRTree(depth=htree.depth + 1)
-            new_child_htree = self.__execute_first_pipeline(new_child_htree_instance, 
+            new_child_htree = cls.__execute_first_pipeline(new_child_htree_instance, 
                                                             text_points, 
                                                             clustering_config, 
                                                             min_leaf_size, 
@@ -182,8 +191,8 @@ class XMRPipeline():
                 
         return htree
     
-    # Done, not tested
-    def __execute_second_pipeline(self, 
+    @classmethod
+    def __execute_second_pipeline(cls, 
                                  htree, 
                                  transformer_config,
                                  classifier_config,
@@ -208,10 +217,13 @@ class XMRPipeline():
             input_text = trn_corpus
         
         """Predict embeddings using Transformer"""
-        transformer_emb = self.__predict_transformer(input_text, transformer_config, dtype)
+        transformer_emb = cls.__predict_transformer(input_text, transformer_config, dtype)
         
         """Reduce the dimension of the transformer to the dimension of the vectorizer"""
-        transformer_emb = self.__reduce_dimensionality(transformer_emb, n_features)
+        transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
+        
+        """Normalize the transformer embeddings"""
+        transformer_emb = normalize(transformer_emb, norm='l2', axis=1) 
             
         """Concatenates the transformer embeddings with the text embeddings"""
         concantenated_array = np.hstack((transformer_emb, text_emb))
@@ -224,7 +236,7 @@ class XMRPipeline():
             random_state=42,
             stratify=cluster_labels)
         
-        classifier_model = ClassifierModel.train(X_train, y_train)
+        classifier_model = cls.__train_classifier(X_train, y_train, classifier_config, dtype)
             
         """Save the train test split"""
         test_split = {
@@ -240,7 +252,7 @@ class XMRPipeline():
         
         for children_htree in htree.children.values():
             
-            self.__execute_second_pipeline(children_htree, 
+            cls.__execute_second_pipeline(children_htree, 
                                            transformer_config,
                                            classifier_config,
                                            initial_text_embeddings, 
@@ -248,16 +260,13 @@ class XMRPipeline():
                                            dtype
                                            )
             
-    
-    
-    
     def __execute_final_pipeline(self,
                                  htree, 
                                  input_text, 
                                  ):
 
         """
-            Make the final predictions for the labels
+            Testing pipeline
         """
         
         classifier_model = htree.classifier_model
@@ -268,28 +277,67 @@ class XMRPipeline():
         """Store the predicted labels"""
         """TODO"""
     
-    def execute_pipeline(self,
+    @classmethod
+    def execute_pipeline(cls,
                          trn_corpus,
                          vectorizer_config,
+                         transformer_config,
                          clustering_config,
+                         classifier_config,
                          n_features, # Number of Features
                          min_leaf_size, 
                          depth,
                          dtype=np.float32
                          ):
-        # Execute First Pipeline
-        # Execute Final Pipeline
+        
+        """Executes the full pipelin, tree initialization, and classifier training
+            
+        Args:
+            trn_corpus,
+            vectorizer_config,
+            transformer_config,
+            clustering_config, 
+            classifier_config,
+            n_features,
+            min_leaf_size,
+            depth,
+            dtype
+            
+        Return:
+            htree: The tree stucture with the classifiers at each level
+        """
         
         """Text Vectorizer Embeddings"""
-        vectorizer_model = self.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
-        text_emb = self.__predict_vectorizer(vectorizer_model, trn_corpus)
+        vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
+        text_emb = cls.__predict_vectorizer(vectorizer_model, trn_corpus)
+        
+        """Normalize the text embeddings"""
+        text_emb = text_emb.toarray()
+        text_emb = normalize(text_emb, norm='l2', axis=1) 
+        
+        text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         
         """Executing the first pipeline, Initializing the tree structure"""
         htree = XMRTree(depth=0)
-        htree = self.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
+        htree = cls.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
         
+        """Executing the second pipeline, Training the classifiers"""
+        cls.__execute_second_pipeline(htree, 
+                                       transformer_config, 
+                                       classifier_config, 
+                                       None, 
+                                       trn_corpus, 
+                                       n_features, 
+                                       dtype
+                                       )
         
+        """Testing the pipeline"""
+        # TODO
         
+        return htree
+        
+    def inference():
+        pass
     
         
     

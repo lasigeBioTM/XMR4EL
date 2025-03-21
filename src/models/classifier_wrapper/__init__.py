@@ -1,3 +1,3 @@
-from .classifier_model import LinearMeta
+from .classifier_model import ClassifierMeta
 
-LinearMeta.load_subclasses(__name__) # Load all linear model subclasses
+ClassifierMeta.load_subclasses(__name__)  # Load all clustering model subclasses

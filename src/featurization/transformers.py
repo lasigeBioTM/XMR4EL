@@ -5,6 +5,8 @@ import glob
 import pickle
 import shutil
 import torch
+import psutil
+import math
 
 import onnxruntime as ort
 import numpy as np
@@ -100,7 +102,7 @@ class Transformer(metaclass=TransformersMeta):
             Berttransformer: Trained Berttransformer.
         """
         
-        LOGGER.info("Starting training for Berttransformer")
+        LOGGER.info("Starting training for a Transformer")
         config = config if config is not None else {"type": "biobert", "kwargs": {}}
         
         transformer_type = config.get("type", None)
@@ -227,7 +229,7 @@ class BioBert(Transformer):
             "padding": True,
             "truncation": True,
             "max_length": 512,
-            "batch_size": 400,
+            "batch_size": 0,
             "output_prefix": "onnx_embeddings",
             "batch_dir": "batch_dir",
             "onnx_directory": None
@@ -274,7 +276,7 @@ class BioBert(Transformer):
         LOGGER.info("Export complete.")
     
     @classmethod
-    def __predict_cpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=400, output_prefix="onnx_embeddings", batch_dir="batch_dir", onnx_directory=None):
+    def __predict_cpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=0, output_prefix="onnx_embeddings", batch_dir="batch_dir", onnx_directory=None):
         if onnx_directory is None:
             raise ValueError("ONNX directory must be specified for CPU inference.")
         
@@ -293,17 +295,16 @@ class BioBert(Transformer):
         
         cls.__create_batch_dir(batch_dir)
         
-        #Split corpus into smaller batches 
-        num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)        
-        LOGGER.info(f"Total of batches: {num_batches}.")
+        if batch_size == 0:
+            batch_size, num_batches = cls.__dynamic_cpu_batch_size(len_corpus, max_length)
+        else:
+            num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
         
         for batch_idx in range(num_batches):
             LOGGER.info(f"Number of the batch: {batch_idx + 1}")
             start = batch_idx * batch_size
             end = min((batch_idx + 1) * batch_size, len_corpus)
             batch = trn_corpus[start:end]
-            
-            print(batch)
             
             # Tokenize input
             inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
@@ -332,7 +333,7 @@ class BioBert(Transformer):
         return all_embeddings
         
     @classmethod
-    def __predict_gpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=400, output_prefix="onnx_embeddings", batch_dir="batch_dir"):
+    def __predict_gpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=0, output_prefix="onnx_embeddings", batch_dir="batch_dir"):
         batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}" 
         
@@ -345,8 +346,12 @@ class BioBert(Transformer):
         
         cls.__create_batch_dir(batch_dir)
         
-        num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
-        LOGGER.info(f"Total of batches: {num_batches}.")
+        if batch_size == 0:
+            batch_size, num_batches = cls.__dynamic_gpu_batch_size(len_corpus, max_length)
+        else:
+            num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
+            
+        LOGGER.info(f"Total of batches: {num_batches} and batch size: {batch_size}")
 
         for batch_idx in range(num_batches):
             LOGGER.info(f"Number of the batch: {batch_idx + 1}")
@@ -399,3 +404,54 @@ class BioBert(Transformer):
         while not (root_dir / "src").exists() and root_dir != root_dir.parent:
             root_dir = root_dir.parent
         return root_dir
+    
+
+    @staticmethod
+    def __dynamic_gpu_batch_size(len_corpus, max_length, model, dtype=torch.float32):
+        """Calculate batch size dynamically based on available GPU memory."""
+        # Get available GPU memory
+        available_memory = torch.cuda.mem_get_info()[0]  # in bytes
+        print(f"Available GPU memory: {available_memory / 1e9:.2f} GB")
+
+        # Estimate memory usage per sample (this might need adjustment depending on your model)
+        # For example, using float32 as the data type for model input
+        estimated_size_per_sample = max_length * 4  # each token uses 4 bytes for float32
+        if model is not None:
+            # Model weights and activations need memory too. Let's assume it's not too large compared to input.
+            model_size = sum(p.numel() * p.element_size() for p in model.parameters())
+            estimated_size_per_sample += model_size / len_corpus
+
+        # Estimate maximum batch memory usage
+        estimated_batch_memory = available_memory * 0.5  # Use 50% of available GPU memory
+
+        # Calculate maximum batch size (number of samples per batch)
+        batch_size = max(1, estimated_batch_memory // estimated_size_per_sample)
+        batch_size = min(batch_size, len_corpus)  # Ensure batch size doesn't exceed corpus size
+        print(f"Auto-calculated batch size: {batch_size}")
+
+        # Return batch size and number of batches
+        num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
+        
+        return batch_size, num_batches
+
+    @staticmethod
+    def __dynamic_cpu_batch_size(len_corpus, max_length):
+        """Calculate the number of batches dynamically"""
+        # Get available memory
+        available_memory = psutil.virtual_memory().available  # In bytes
+        
+        print(available_memory)
+
+        # Estimate memory usage per sample
+        estimated_size_per_text = max_length * 8  # Rough estimate (each token ~8 bytes in float64)
+        estimated_batch_memory = available_memory * 0.5  # Use at most 50% of available memory
+
+        # Compute batch size dynamically
+        batch_size = max(1, estimated_batch_memory // estimated_size_per_text)
+        batch_size = min(batch_size, len_corpus)  # Don't exceed corpus size
+        LOGGER.info(f"Auto-calculated batch size: {batch_size}")    
+
+        # Calculate number of batches
+        num_batches = math.ceil(len_corpus / batch_size)
+        
+        return batch_size, num_batches

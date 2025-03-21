@@ -22,8 +22,8 @@ class XMRTuner():
             model = ClusteringModel.train(
                 trn_corpus, 
                 {
-                    **config.model,  
-                    'kwargs': {**config.model['kwargs'], 'n_clusters': k}  
+                    **config,  
+                    'kwargs': {**config['kwargs'], 'n_clusters': k}  
                 }, 
                 dtype=dtype
             ).model.model

@@ -1,10 +1,10 @@
 import time
 
-from sklearn.decomposition import PCA
+import numpy as np
 
-from models.classifier_wrapper.hierarchical_linear_model import HierarchicalLinearModel
-from src.machine_learning.cpu.ml import KMeansCPU, LogisticRegressionCPU
-from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_clustering, create_hierarchical_linear_model, load_bio_bert_vectorizer, load_train_and_labels_file
+from src.featurization.preprocessor import Preprocessor
+from src.xmr.xmr_pipeline import XMRPipeline
+
 
 """
     Depending on the train file, different number of labels, 
@@ -18,63 +18,37 @@ from src.app.utils import create_bio_bert_vectorizer, create_hierarchical_cluste
 """
 def main():
    
-    onnx_gpu_embeddigns_filepath = "data/processed/vectorizer/biobert_onnx_dense_disease500_gpu.npy"
-   
+    onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
+
     start = time.time()
 
-    # numpy.array (13240, 768)
-    X_train_feat = load_bio_bert_vectorizer(onnx_gpu_embeddigns_filepath)
+    n_features = 12
 
-    # pca = PCA(n_components=2)
-    # X_train_feat = pca.fit_transform(X_train_feat)
+    vectorizer_config = {'type': 'tfidf', 'kwargs': {'max_features': n_features}}
+    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 200, 'onnx_directory': onnx_directory}}
+    clustering_config = {'type': 'sklearnkmeans', 'kwargs': {'random_state': 0}}
+    classifier_config = {'type': 'sklearnlogisticregression', 'kwargs': {'n_jobs': -1, 'random_state': 0}}
     
-    print(f"Starting the Hierarchical Clustering Model")
+    min_leaf_size = 10
+    depth = 1
     
-    divisiveModel = DivisiveHierarchicalClustering.fit(
-        X=X_train_feat,
-        clustering_model_factory=KMeansCPU.create_model(),
-        config={
-            'n_splits': 0,
-            'max_iter': 500,
-            'depth': 2,
-            'min_leaf_size':10,
-            'min_clusters': 3,
-            'init': 'k-means++',
-            'random_state': 0,
-            'spherical': True,
-            }
-    )
+    training_file = "data/train/Disease/train_Disease_100.txt"
     
-    print(f"Finished the Hierarchical Clustering Model\n")
+    trn_corpus = Preprocessor.load_data_from_file(train_filepath=training_file)
     
-    divisiveModel.save("data/processed/clustering/test_hierarchical_clustering_model.pkl")
-    
-    tree_node = divisiveModel.tree_node
-    
-    top_k = 3
-    
-    print(f"Starting Hierarchical Linear Model")
-    
-    hierarchical_linear_model = HierarchicalLinearModel.fit(
-        tree_node=tree_node,
-        linear_model_factory=LogisticRegressionCPU.create_model(
-            {'max_iter': 1000,
-             'solver': 'newton-cg',
-             'penalty': 'l2',
-             'random_state': 0
-             }),
-        config= {
-            'min_leaf_size': 20,
-            'max_leaf_size': 40,
-            'top_k': top_k,
-            'top_k_threshold': 0.15,
-            'gpu_usage': False,
-        }
-    )
-    
-    print(f"Finished Hierarchical Linear Model\n")
-    
-    hierarchical_linear_model.save("data/processed/regression/test_hierarchical_linear_model.pkl")
+    htree = XMRPipeline.execute_pipeline(trn_corpus,
+                         vectorizer_config,
+                         transformer_config,
+                         clustering_config,
+                         classifier_config,
+                         n_features, # Number of Features
+                         min_leaf_size, 
+                         depth,
+                         dtype=np.float32
+                                         )
+
+
+    print(htree)
     
     end = time.time()
     

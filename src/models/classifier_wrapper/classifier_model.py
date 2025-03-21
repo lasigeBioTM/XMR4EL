@@ -12,7 +12,6 @@ from abc import ABCMeta
 
 from sklearn.linear_model import LogisticRegression
 
-from src.models.dtree import DTree
 from src.gpu_availability import is_cuda_available
 
 
@@ -32,7 +31,7 @@ class ClassifierMeta(ABCMeta):
     """
     def __new__(cls, name, bases, attr):
         new_cls = super().__new__(cls, name, bases, attr)
-        if name != 'classifierModel':
+        if name != 'ClassifierModel':
             classifier_dict[name.lower()] = new_cls
         return new_cls
 
@@ -108,15 +107,9 @@ class ClassifierModel(metaclass=ClassifierMeta):
             classifier_type is not None
         ), f"config {config} should contain a key 'type' for the classifier type" 
         
-        if y_train is None:
-            assert isinstance(X_train, DTree), f"Trying to run an Hierarchicalclassifier but X_train is not of type({DTree.__class__})"
-            model = classifier_dict[classifier_type].train(
-            X_train, config=config["kwargs"], dtype=dtype
-        )
-        else: 
-            model = classifier_dict[classifier_type].train(
-                X_train, y_train, config=config["kwargs"], dtype=dtype
-            )
+        model = classifier_dict[classifier_type].train(
+            X_train, y_train, config=config["kwargs"], dtype=dtype)
+        
         config['kwargs'] = model.config
         return cls(config, model)
     
