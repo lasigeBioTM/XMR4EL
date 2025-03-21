@@ -210,6 +210,7 @@ class XMRPipeline():
         
         """Initializing the htree attributes"""
         text_emb = htree.text_embeddings
+        print(text_emb.shape)
         cluster_labels = htree.clustering_model.model.labels_
 
         """Check depth because the depth 0, has all the text embeddings (root)"""
@@ -221,11 +222,7 @@ class XMRPipeline():
         
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
-        
-        print(transformer_model)
-        
         transformer_emb = transformer_model.embeddings
-        
         del transformer_model # Delete the model when no longer needed
         
         """Reduce the dimension of the transformer to the dimension of the vectorizer"""
@@ -324,13 +321,18 @@ class XMRPipeline():
         
         """Normalize the text embeddings"""
         text_emb = text_emb.toarray()
+        print(text_emb.shape)
         text_emb = normalize(text_emb, norm='l2', axis=1) 
+        print(text_emb.shape)
         
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
+        print(text_emb.shape)
         
         """Executing the first pipeline, Initializing the tree structure"""
         htree = XMRTree(depth=0)
         htree = cls.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
+        
+        print(htree)
         
         """Executing the second pipeline, Training the classifiers"""
         cls.__execute_second_pipeline(htree, 
