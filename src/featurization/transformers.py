@@ -338,10 +338,16 @@ class BioBert(Transformer):
         batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}" 
         
+        total_memory, free_memory = torch.cuda.mem_get_info()
+        LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
+        
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         model = AutoModel.from_pretrained(cls.model_name)  
         model.eval()  # Set to inference mode
         model.to("cuda")
+        
+        total_memory, free_memory = torch.cuda.mem_get_info()
+        LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
         
         len_corpus = len(trn_corpus)
         
@@ -376,12 +382,18 @@ class BioBert(Transformer):
             batch_filename = f"{emb_file}_batch{batch_idx}.npz"
             np.savez_compressed(batch_filename, embeddings=batch_results)
             
+            total_memory, free_memory = torch.cuda.mem_get_info()
+            LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
+            
             # After processing each batch
             del batch, inputs, outputs, batch_results
             torch.cuda.empty_cache()
             
             gc.collect()
             torch.cuda.ipc_collect()
+            
+            total_memory, free_memory = torch.cuda.mem_get_info()
+            LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
 
         # Load and concatenate all batch embeddings
         batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))
