@@ -313,6 +313,7 @@ class XMRPipeline():
         """Force garbage collection"""
         gc.collect()
         torch.cuda.empty_cache()
+        torch.cuda.synchronize()
         
         """Text Vectorizer Embeddings"""
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)

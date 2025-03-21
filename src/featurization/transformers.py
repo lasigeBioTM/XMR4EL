@@ -352,10 +352,6 @@ class BioBert(Transformer):
             num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
             
         LOGGER.info(f"Total of batches: {num_batches} and batch size: {batch_size}")
-        
-        """Colect Garbage"""
-        gc.collect()
-        torch.cuda.empty_cache()
 
         for batch_idx in range(num_batches):
             LOGGER.info(f"Number of the batch: {batch_idx + 1}")
