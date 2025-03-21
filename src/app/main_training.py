@@ -25,7 +25,7 @@ def main():
     n_features = 12
 
     vectorizer_config = {'type': 'tfidf', 'kwargs': {'max_features': n_features}}
-    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 200, 'onnx_directory': onnx_directory}}
+    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 0, 'onnx_directory': onnx_directory}}
     clustering_config = {'type': 'sklearnkmeans', 'kwargs': {'random_state': 0}}
     classifier_config = {'type': 'sklearnlogisticregression', 'kwargs': {'n_jobs': -1, 'random_state': 0}}
     
