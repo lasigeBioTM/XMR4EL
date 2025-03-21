@@ -1,3 +1,6 @@
+import gc
+import torch
+
 import numpy as np
 
 from typing import Counter
@@ -306,6 +309,10 @@ class XMRPipeline():
         Return:
             htree: The tree stucture with the classifiers at each level
         """
+        
+        """Force garbage collection"""
+        gc.collect()
+        torch.cuda.empty_cache()
         
         """Text Vectorizer Embeddings"""
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
