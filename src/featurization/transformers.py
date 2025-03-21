@@ -352,6 +352,10 @@ class BioBert(Transformer):
             num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
             
         LOGGER.info(f"Total of batches: {num_batches} and batch size: {batch_size}")
+        
+        """Colect Garbage"""
+        gc.collect()
+        torch.cuda.empty_cache()
 
         for batch_idx in range(num_batches):
             LOGGER.info(f"Number of the batch: {batch_idx + 1}")
@@ -415,14 +419,14 @@ class BioBert(Transformer):
 
         # Estimate memory usage per sample (this might need adjustment depending on your model)
         # For example, using float32 as the data type for model input
-        estimated_size_per_sample = max_length * 4  # each token uses 4 bytes for float32
+        estimated_size_per_sample = max_length * 8  # each token uses 4 bytes for float32
         if model is not None:
             # Model weights and activations need memory too. Let's assume it's not too large compared to input.
             model_size = sum(p.numel() * p.element_size() for p in model.parameters())
             estimated_size_per_sample += model_size / len_corpus
 
         # Estimate maximum batch memory usage
-        estimated_batch_memory = available_memory * 0.5  # Use 50% of available GPU memory
+        estimated_batch_memory = available_memory * 0.3  # Use 50% of available GPU memory
 
         # Calculate maximum batch size (number of samples per batch)
         batch_size = max(1, estimated_batch_memory // estimated_size_per_sample)
