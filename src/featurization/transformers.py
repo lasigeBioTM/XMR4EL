@@ -1,4 +1,5 @@
 import os
+import gc
 import logging
 import json
 import glob
@@ -360,15 +361,27 @@ class BioBert(Transformer):
             end = min((batch_idx + 1) * batch_size, len_corpus)
             batch = trn_corpus[start:end]
 
-            # Tokenize & move input tensors to GPU
-            inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length).to("cuda")
-
-            with torch.no_grad():
-                outputs = model(**inputs)  # Forward pass on GPU
-                batch_results = outputs.last_hidden_state[:, 0, :].cpu().numpy()  # Move results to CPU
+            try:
+                # Tokenize & move input tensors to GPU
+                inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length).to("cuda")
+                with torch.no_grad():
+                    outputs = model(**inputs)  # Forward pass on GPU
+                    batch_results = outputs.last_hidden_state[:, 0, :].cpu().numpy()  # Move results to CPU
+            except torch.cuda.OutOfMemoryError: # In case of out of memory error
+                    torch.cuda.empty_cache()
+                    LOGGER.error(f"Out of memory at batch {batch_idx}, reducing batch size and retrying.")
+                    batch_size = max(batch_size // 1.5, 1)  # Reduce batch size by half (at least 1)
+                    return cls.__predict_gpu(trn_corpus, dtype, return_tensors, padding, truncation, max_length, batch_size, output_prefix, batch_dir)  # Restart with smaller batch size
 
             batch_filename = f"{emb_file}_batch{batch_idx}.npz"
             np.savez_compressed(batch_filename, embeddings=batch_results)
+            
+            # After processing each batch
+            del batch, inputs, outputs, batch_results
+            torch.cuda.empty_cache()
+            
+            gc.collect()
+            torch.cuda.ipc_collect()
 
         # Load and concatenate all batch embeddings
         batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))

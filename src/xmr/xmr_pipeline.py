@@ -265,7 +265,7 @@ class XMRPipeline():
             
     def __execute_final_pipeline(self,
                                  htree, 
-                                 input_text, 
+                                 input_text
                                  ):
 
         """
@@ -310,10 +310,7 @@ class XMRPipeline():
             htree: The tree stucture with the classifiers at each level
         """
         
-        """Force garbage collection"""
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        # Force garbage collection
         
         """Text Vectorizer Embeddings"""
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
