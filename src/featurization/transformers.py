@@ -376,7 +376,7 @@ class BioBert(Transformer):
             except torch.cuda.OutOfMemoryError: # In case of out of memory error
                     torch.cuda.empty_cache()
                     LOGGER.error(f"Out of memory at batch {batch_idx}, reducing batch size and retrying.")
-                    batch_size = max(batch_size // 1.5, 1)  # Reduce batch size by half (at least 1)
+                    batch_size = int(max(batch_size // 1.5, 1))  # Reduce batch size by half (at least 1)
                     return cls.__predict_gpu(trn_corpus, dtype, return_tensors, padding, truncation, max_length, batch_size, output_prefix, batch_dir)  # Restart with smaller batch size
 
             batch_filename = f"{emb_file}_batch{batch_idx}.npz"
