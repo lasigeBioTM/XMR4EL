@@ -50,6 +50,8 @@ def main():
 
     print(htree)
     
+    htree.save("/")
+    
     end = time.time()
     
     print(f"{end - start} secs of running")
