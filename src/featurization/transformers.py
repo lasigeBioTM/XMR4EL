@@ -347,7 +347,7 @@ class BioBert(Transformer):
         cls.__create_batch_dir(batch_dir)
         
         if batch_size == 0:
-            batch_size, num_batches = cls.__dynamic_gpu_batch_size(len_corpus, max_length)
+            batch_size, num_batches = cls.__dynamic_gpu_batch_size(len_corpus, max_length, model)
         else:
             num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
             
