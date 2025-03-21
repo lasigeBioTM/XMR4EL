@@ -32,7 +32,7 @@ def main():
     min_leaf_size = 10
     depth = 1
     
-    training_file = "data/train/Disease/train_Disease_100.txt"
+    training_file = "data/train/disease/train_Disease_100.txt"
     
     trn_corpus = Preprocessor.load_data_from_file(train_filepath=training_file)
     
