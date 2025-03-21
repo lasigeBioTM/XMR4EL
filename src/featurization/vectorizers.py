@@ -101,7 +101,6 @@ class Vectorizer(metaclass=VectorizerMeta):
             trn_corpus, config=config["kwargs"], dtype=dtype
         )
         config['kwargs'] = model.config
-        print(config)
         return cls(config, model)
     
     def predict(self, corpus, **kwargs):
