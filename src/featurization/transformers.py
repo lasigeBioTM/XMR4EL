@@ -335,22 +335,24 @@ class BioBert(Transformer):
         
     @classmethod
     def __predict_gpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=0, output_prefix="onnx_embeddings", batch_dir="batch_dir"):
+        """
+        Optimized function for efficient memory usage during GPU-based embedding extraction.
+        """
+        
         batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}" 
         
+        # Log GPU memory
         total_memory, free_memory = torch.cuda.mem_get_info()
-        LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
+        LOGGER.info(f"Before Model Initialization -> Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
         
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        model = AutoModel.from_pretrained(cls.model_name)  
-        model.eval()  # Set to inference mode
-        model.to("cuda")
+        model = AutoModel.from_pretrained(cls.model_name).eval().to("cuda")  
         
         total_memory, free_memory = torch.cuda.mem_get_info()
-        LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
+        LOGGER.info(f"After Model Load -> Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
         
         len_corpus = len(trn_corpus)
-        
         cls.__create_batch_dir(batch_dir)
         
         if batch_size == 0:
@@ -360,40 +362,40 @@ class BioBert(Transformer):
             
         LOGGER.info(f"Total of batches: {num_batches} and batch size: {batch_size}")
 
-        for batch_idx in range(num_batches):
+        batch_idx = 0
+        while batch_idx < num_batches:
             LOGGER.info(f"Number of the batch: {batch_idx + 1}")
 
-            start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, len_corpus)
+            start, end = batch_idx * batch_size, min((batch_idx + 1) * batch_size, len_corpus)
             batch = trn_corpus[start:end]
 
             try:
                 # Tokenize & move input tensors to GPU
-                inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length).to("cuda")
+                inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, 
+                                   truncation=truncation, max_length=max_length).to("cuda")
+                
                 with torch.no_grad():
                     outputs = model(**inputs)  # Forward pass on GPU
                     batch_results = outputs.last_hidden_state[:, 0, :].cpu().numpy()  # Move results to CPU
+                
+                # Save batch results
+                batch_filename = f"{emb_file}_batch{batch_idx}.npz"
+                np.savez_compressed(batch_filename, embeddings=batch_results)
+                
             except torch.cuda.OutOfMemoryError: # In case of out of memory error
-                    torch.cuda.empty_cache()
-                    LOGGER.error(f"Out of memory at batch {batch_idx}, reducing batch size and retrying.")
-                    batch_size = int(max(batch_size // 1.5, 1))  # Reduce batch size by half (at least 1)
-                    return cls.__predict_gpu(trn_corpus, dtype, return_tensors, padding, truncation, max_length, batch_size, output_prefix, batch_dir)  # Restart with smaller batch size
+                LOGGER.error(f"Out of memory at batch {batch_idx}, reducing batch size and retrying.")
+                torch.cuda.empty_cache()
+                batch_size = max(1, batch_size - 8)  # Reduce batch size by half (at least 1)
+                num_batches = (len_corpus + batch_size - 1) // batch_size  # Recalculate total batches
+                continue
 
-            batch_filename = f"{emb_file}_batch{batch_idx}.npz"
-            np.savez_compressed(batch_filename, embeddings=batch_results)
-            
-            total_memory, free_memory = torch.cuda.mem_get_info()
-            LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
-            
-            # After processing each batch
+            # Free GPU memory
             del batch, inputs, outputs, batch_results
             torch.cuda.empty_cache()
-            
             gc.collect()
             torch.cuda.ipc_collect()
-            
-            total_memory, free_memory = torch.cuda.mem_get_info()
-            LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
+
+            batch_idx += 1  # Move to next batch
 
         # Load and concatenate all batch embeddings
         batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))
@@ -433,29 +435,32 @@ class BioBert(Transformer):
 
     @staticmethod
     def __dynamic_gpu_batch_size(len_corpus, max_length, model, dtype=torch.float32):
-        """Calculate batch size dynamically based on available GPU memory."""
-        # Get available GPU memory
+        """Dynamically calculate batch size based on available GPU memory and model size."""
+        
+        # Get total and free GPU memory
         total_memory, free_memory = torch.cuda.mem_get_info()
-        LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
+        LOGGER.info(f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free: {free_memory / 1e9:.2f} GB")
 
-        # Estimate memory usage per sample (this might need adjustment depending on your model)
-        # For example, using float32 as the data type for model input
-        estimated_size_per_sample = max_length * 8  # each token uses 4 bytes for float32
-        if model is not None:
-            # Model weights and activations need memory too. Let's assume it's not too large compared to input.
-            model_size = sum(p.numel() * p.element_size() for p in model.parameters())
-            estimated_size_per_sample += model_size / len_corpus
+        # Get memory usage per token dynamically based on dtype
+        bytes_per_token = torch.tensor([], dtype=dtype).element_size()  
+        estimated_size_per_sample = max_length * bytes_per_token  
 
-        # Estimate maximum batch memory usage
-        estimated_batch_memory = free_memory* 0.3  # Use 50% of available GPU memory
+        # Estimate model memory usage (only count parameters if model exists)
+        model_size = sum(p.numel() * p.element_size() for p in model.parameters()) if model else 0
 
-        # Calculate maximum batch size (number of samples per batch)
-        batch_size = max(1, estimated_batch_memory // estimated_size_per_sample)
-        batch_size = min(batch_size, len_corpus)  # Ensure batch size doesn't exceed corpus size
+        # Adjust available memory allocation (use 50% of free memory for batch processing)
+        estimated_batch_memory = free_memory * 0.5  
+
+        # Calculate maximum batch size
+        max_batch_size = max(1, estimated_batch_memory // (estimated_size_per_sample + model_size / len_corpus))
+
+        # Ensure batch size is within valid range
+        batch_size = min(int(max_batch_size), len_corpus)
+        
         LOGGER.info(f"Auto-calculated batch size: {batch_size}")
 
-        # Return batch size and number of batches
-        num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
+        # Calculate the number of batches
+        num_batches = math.ceil(len_corpus / batch_size)
         
         return batch_size, num_batches
 
