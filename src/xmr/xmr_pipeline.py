@@ -173,6 +173,7 @@ class XMRPipeline():
         
         """Saving the model in the tree"""
         htree.clustering_model = clustering_model
+        htree.text_embeddings = text_emb
         
         unique_labels = np.unique(cluster_labels)
         
@@ -210,7 +211,6 @@ class XMRPipeline():
         
         """Initializing the htree attributes"""
         text_emb = htree.text_embeddings
-        print(text_emb.shape)
         cluster_labels = htree.clustering_model.model.labels_
 
         """Check depth because the depth 0, has all the text embeddings (root)"""
@@ -254,6 +254,8 @@ class XMRPipeline():
         
         """Save the classifier model and test_split"""
         htree.classifier_model = classifier_model
+        htree.transformer_embeddings = transformer_emb
+        htree.concantened_embeddings = concantenated_array
         htree.test_split = test_split
         
         for children_htree in htree.children.values():
@@ -321,12 +323,8 @@ class XMRPipeline():
         
         """Normalize the text embeddings"""
         text_emb = text_emb.toarray()
-        print(text_emb.shape)
-        text_emb = normalize(text_emb, norm='l2', axis=1) 
-        print(text_emb.shape)
-        
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
-        print(text_emb.shape)
+        text_emb = normalize(text_emb, norm='l2', axis=1) 
         
         """Executing the first pipeline, Initializing the tree structure"""
         htree = XMRTree(depth=0)
