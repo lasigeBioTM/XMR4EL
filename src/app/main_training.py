@@ -1,3 +1,4 @@
+import os
 import time
 
 import numpy as np
@@ -51,6 +52,11 @@ def main():
     print(htree)
     
     htree.save("/data")
+    
+    if os.path.exists("data/tree.pkl"):
+        print("File saved successfully!")
+    else:
+        print("Error: File was not saved!")
     
     htree = XMRTree.load("/data")
     
