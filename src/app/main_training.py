@@ -19,7 +19,7 @@ from src.xmr.xmr_tree import XMRTree
     * labels.txt -> 13292 labels,
 """
 def main():
-   
+      
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
 
     start = time.time()
