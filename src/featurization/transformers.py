@@ -24,6 +24,9 @@ transformer_dict = {}
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+
 class TransformersMeta(ABCMeta):
     """Metaclass for keeping track of all 'Transformer' subclasses"""
     

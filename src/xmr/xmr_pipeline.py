@@ -217,6 +217,7 @@ class XMRPipeline():
         if htree.depth > 0:
             # Find indices where rows in initial_text_embeddings match text_emb
             idx = np.where((initial_text_embeddings[:, None] == text_emb).all(-1))[0]
+            print(type(idx), type(trn_corpus))
             input_text = trn_corpus[idx]
         else:
             input_text = trn_corpus
