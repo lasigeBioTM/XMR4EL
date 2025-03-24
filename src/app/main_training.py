@@ -53,7 +53,7 @@ def main():
     print(htree)
     
     # Save the tree
-    save_dir = "/data"  # Ensure this path is correct and writable
+    save_dir = "/xmr4el"  # Ensure this path is correct and writable
     htree.save(save_dir)
     
     # Load the tree from the saved directory
