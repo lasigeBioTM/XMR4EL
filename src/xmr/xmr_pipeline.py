@@ -209,6 +209,10 @@ class XMRPipeline():
             Produce the transformer embeddings and classifiers
         """
         
+        print(type(initial_text_embeddings), type(text_emb))
+        
+        exit()
+        
         """Initializing the htree attributes"""
         text_emb = htree.text_embeddings
         cluster_labels = htree.clustering_model.model.labels_
@@ -265,6 +269,7 @@ class XMRPipeline():
                                            classifier_config,
                                            initial_text_embeddings, 
                                            trn_corpus,
+                                           n_features,
                                            dtype
                                            )
             
