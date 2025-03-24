@@ -217,10 +217,9 @@ class XMRPipeline():
         if htree.depth > 0:
             # Find indices where rows in initial_text_embeddings match text_emb
             idx = np.where((initial_text_embeddings[:, None] == text_emb).all(-1))[0]
-            trn_corpus = np.array(trn_corpus)
-            input_text = trn_corpus[idx]
+            input_text = [trn_corpus[i] for i in idx]  # Use list comprehension to get the elements
         else:
-            input_text = trn_corpus
+            input_text = trn_corpus  # Keep input_text as the full list if depth is 0
         
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
