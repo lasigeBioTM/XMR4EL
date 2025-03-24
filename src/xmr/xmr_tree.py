@@ -38,8 +38,12 @@ class XMRTree():
             save_dir (str): Folder to store serialized object in.
         """
         os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
-            pickle.dump(self.__dict__, fout)
+        try:
+            with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
+                pickle.dump(self.__dict__, fout)
+            print("Saved successfully!")
+        except Exception as e:
+            print(f"Failed to save: {e}")
     
     @classmethod
     def load(cls, load_dir):
