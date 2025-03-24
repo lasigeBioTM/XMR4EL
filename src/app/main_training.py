@@ -51,16 +51,14 @@ def main():
     
     print(htree)
     
-    os.makedirs("tree", True)
+    htree.save("/test")
     
-    htree.save("/tree")
-    
-    if os.path.exists("data/tree.pkl"):
+    if os.path.exists("/test/tree.pkl"):
         print("File saved successfully!")
     else:
         print("Error: File was not saved!")
     
-    htree = XMRTree.load("/tree")
+    htree = XMRTree.load("/test")
     
     print(htree)
     
