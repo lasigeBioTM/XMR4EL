@@ -4,6 +4,7 @@ import numpy as np
 
 from src.featurization.preprocessor import Preprocessor
 from src.xmr.xmr_pipeline import XMRPipeline
+from src.xmr.xmr_tree import XMRTree
 
 
 """
@@ -51,7 +52,9 @@ def main():
     
     htree.save("/data")
     
-    htree.load("/data")
+    htree = XMRTree.load("/data")
+    
+    print(htree)
     
     end = time.time()
     
