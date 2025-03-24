@@ -49,21 +49,20 @@ def main():
                          dtype=np.float32
                                          )
     
+    # Print the tree structure
     print(htree)
     
-    htree.save("/")
+    # Save the tree
+    save_dir = "/data"  # Ensure this path is correct and writable
+    htree.save(save_dir)
     
-    if os.path.exists("/xmrtree.pkl"):
-        print("File saved successfully!")
-    else:
-        print("Error: File was not saved!")
+    # Load the tree from the saved directory
+    htree = XMRTree.load(save_dir)
     
-    htree = XMRTree.load("/")
-    
+    # Print the loaded tree structure
     print(htree)
     
     end = time.time()
-    
     print(f"{end - start} secs of running")
 
 if __name__ == "__main__":
