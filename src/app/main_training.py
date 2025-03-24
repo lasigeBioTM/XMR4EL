@@ -27,7 +27,7 @@ def main():
     n_features = 12
 
     vectorizer_config = {'type': 'tfidf', 'kwargs': {'max_features': n_features}}
-    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 250, 'onnx_directory': onnx_directory}}
+    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 400, 'onnx_directory': onnx_directory}}
     clustering_config = {'type': 'sklearnkmeans', 'kwargs': {'random_state': 0}}
     classifier_config = {'type': 'sklearnlogisticregression', 'kwargs': {'n_jobs': -1, 'random_state': 0}}
     
@@ -38,7 +38,7 @@ def main():
     
     trn_corpus = Preprocessor.load_data_from_file(train_filepath=training_file)
     
-    htree = XMRPipeline.execute_pipeline(trn_corpus[:500],
+    htree = XMRPipeline.execute_pipeline(trn_corpus,
                          vectorizer_config,
                          transformer_config,
                          clustering_config,
