@@ -47,7 +47,11 @@ def main():
                          dtype=np.float32
                                          )
     
+    print(htree)
+    
     htree.save("/data")
+    
+    htree.load("/data")
     
     end = time.time()
     
