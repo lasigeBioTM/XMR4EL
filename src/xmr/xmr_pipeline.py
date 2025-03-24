@@ -1,6 +1,3 @@
-import gc
-import torch
-
 import numpy as np
 
 from typing import Counter
@@ -20,19 +17,6 @@ from src.xmr.xmr_tree import XMRTree
 
 
 class XMRPipeline():
-    
-    def __init__(self,
-                 text_vec: Vectorizer,
-                 transformer: Transformer,
-                 cluster_model: ClusteringModel,
-                 ranker_model: ClassifierModel
-                 ):
-        """Initialization"""
-        
-        self.text_vec = text_vec
-        self.transformer = transformer
-        self.cluster_model = cluster_model
-        self.ranker_model = ranker_model
         
     @staticmethod
     def __train_vectorizer(trn_corpus, config, dtype=np.float32):
@@ -138,7 +122,7 @@ class XMRPipeline():
         
         return classifier_model.predict(data_points)
     
-    # Done, not tested
+    # Tested, Working
     @classmethod
     def __execute_first_pipeline(cls,
                                  htree,
@@ -195,6 +179,7 @@ class XMRPipeline():
                 
         return htree
     
+    # Tested Working
     @classmethod
     def __execute_second_pipeline(cls, 
                                  htree, 
@@ -207,6 +192,20 @@ class XMRPipeline():
                                  ):
         """
             Produce the transformer embeddings and classifiers
+            
+        Args:
+            htree (XMRTtree): The tree structure with the clustering
+            transformer_config (config): the config to the transformer model
+            classifier_config (config): the config to the classifier model
+            initial_text_embeddings (numpy.array): the initial vectorizer trn_corpus
+            trn_corpus (list[str]): the training corpus
+            n_features (int): the number of features/dimensions the embeddings can have
+            dtype (numpy.dtype): the type of the results ? 
+            
+        Return:
+            htree (XMRTree): An trained tree with the classifiers, test_split,
+            concantenated embeddings, transformer embeddings
+            
         """
         
         """Initializing the htree attributes"""
@@ -281,23 +280,6 @@ class XMRPipeline():
                                            n_features,
                                            dtype
                                            )
-            
-    def __execute_final_pipeline(self,
-                                 htree, 
-                                 input_text
-                                 ):
-
-        """
-            Testing pipeline
-        """
-        
-        classifier_model = htree.classifier_model
-        test_split = htree.test_split
-        
-        predicted_labels = classifier_model.predict(test_split['X_test'])
-        
-        """Store the predicted labels"""
-        """TODO"""
     
     @classmethod
     def execute_pipeline(cls,
@@ -330,18 +312,22 @@ class XMRPipeline():
         """
         
         # Force garbage collection
+        """Initializing tree structure"""
+        htree = XMRTree(depth=0)
         
         """Text Vectorizer Embeddings"""
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
         text_emb = cls.__predict_vectorizer(vectorizer_model, trn_corpus)
+        
+        """Saving the vectorizer"""
+        htree.vectorizer = vectorizer_model
         
         """Normalize the text embeddings"""
         text_emb = text_emb.toarray()
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         text_emb = normalize(text_emb, norm='l2', axis=1) 
         
-        """Executing the first pipeline, Initializing the tree structure"""
-        htree = XMRTree(depth=0)
+        """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
         
         """Executing the second pipeline, Training the classifiers"""
@@ -354,12 +340,40 @@ class XMRPipeline():
                                        dtype
                                        )
         
-        """Testing the pipeline"""
-        # TODO
-        
         return htree
         
-    def inference():
+    @classmethod
+    def inference(cls, htree, input_text, transformer_config, n_features, dtype):
+        """Inference to know which cluster doest the inputs or input"""
+        
+        vectorizer = htree.vectorizer
+        
+        """Predict Embeddings using stored vectorizer"""
+        text_emb = cls.__predict_vectorizer(vectorizer, input_text)
+        text_emb = text_emb.toarray()
+        
+        """Reduce Dimensions"""
+        text_emb = cls.__reduce_dimensionality(text_emb, n_features)
+        
+        """Normalizing"""
+        text_emb = normalize(text_emb, norm='l2', axis=1) 
+        
+        """Predict embeddings using Transformer"""
+        transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
+        transformer_emb = transformer_model.embeddings
+        del transformer_model # Delete the model when no longer needed
+        
+        """Reduce the dimension of the transformer to the dimension of the vectorizer"""
+        transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
+        
+        """Normalize the transformer embeddings"""
+        transformer_emb = normalize(transformer_emb, norm='l2', axis=1) 
+            
+        """Concatenates the transformer embeddings with the text embeddings"""
+        concantenated_array = np.hstack((transformer_emb, text_emb))
+        
+        transformer_emb = cls.__predict_transformer(transformer_config, input_text)
+        
         pass
     
         
