@@ -277,10 +277,10 @@ class BioBert(Transformer):
         LOGGER.info("Export complete.")
     
     @classmethod
-    def __predict_cpu(cls, trn_corpus, dtype=np.float32, return_tensors="pt", padding=True, truncation=True, max_length=512, batch_size=0, output_prefix="onnx_embeddings", batch_dir="batch_dir", onnx_directory=None):
+    def __predict_cpu(cls, trn_corpus, dtype=np.float32, return_tensors="np", padding=True, truncation=True, max_length=512, batch_size=0, output_prefix="onnx_embeddings", batch_dir="batch_dir", onnx_directory=None):
         if onnx_directory is None:
             raise ValueError("ONNX directory must be specified for CPU inference.")
-        
+
         batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}" 
         
@@ -290,46 +290,47 @@ class BioBert(Transformer):
         # Ensure ONNX model is exported before running inference
         cls.__export_to_onnx(onnx_directory)
         
-        session = ort.InferenceSession(onnx_directory)
-        
-        len_corpus = len(trn_corpus)
-        
         cls.__create_batch_dir(batch_dir)
         
+        len_corpus = len(trn_corpus)
         if batch_size == 0:
             batch_size, num_batches = cls.__dynamic_cpu_batch_size(len_corpus, max_length)
         else:
             num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
-        
-        for batch_idx in range(num_batches):
-            LOGGER.info(f"Number of the batch: {batch_idx + 1}")
-            start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, len_corpus)
-            batch = trn_corpus[start:end]
-            
-            # Tokenize input
-            inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
-            
-            # Convert tensors to NumPy arrays
-            onnx_inputs = {
-                "input_ids": inputs["input_ids"].numpy().astype(np.int64),
-                "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
-            }
-            
-            # Run inference for the current batch
-            batch_results = session.run(None, onnx_inputs)[0]
-            
-            batch_results = batch_results[:, 0, :]
-            
-            batch_filename = f"{emb_file}_batch{batch_idx}.npz"
-            np.savez_compressed(batch_filename, embeddings=batch_results)  
+
+        with ort.InferenceSession(onnx_directory) as session:
+            for batch_idx in range(num_batches):
+                LOGGER.info(f"Processing batch: {batch_idx + 1}/{num_batches}")
+                start, end = batch_idx * batch_size, min((batch_idx + 1) * batch_size, len_corpus)
+                batch = trn_corpus[start:end]
+
+                # Tokenize input
+                inputs = tokenizer(batch, return_tensors="np", padding=padding, truncation=truncation, max_length=max_length)
+
+                # Convert tensors to NumPy arrays
+                onnx_inputs = {
+                    "input_ids": inputs["input_ids"].astype(np.int64),
+                    "attention_mask": inputs["attention_mask"].astype(np.int64)
+                }
+                del inputs  # Free memory
+                gc.collect()
+
+                # Run inference
+                batch_results = session.run(None, onnx_inputs)[0][:, 0, :]
                 
-        # After processing all batches, load the embeddings        
-        batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))
-        
-        # Concatenate all batches 
-        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0).astype(dtype)
-        
+                # Save batch embeddings
+                batch_filename = f"{emb_file}_batch{batch_idx}.npz"
+                np.savez_compressed(batch_filename, embeddings=batch_results)
+                del batch_results
+                gc.collect()
+
+        # Load and merge embeddings efficiently
+        all_embeddings = []
+        for batch_file in sorted(glob.glob(f"{emb_file}_batch*.npz")):
+            all_embeddings.append(np.load(batch_file)["embeddings"])
+
+        all_embeddings = np.vstack(all_embeddings).astype(dtype)
+
         cls.__del_batch_dir(batch_dir)
         return all_embeddings
         
@@ -342,15 +343,8 @@ class BioBert(Transformer):
         batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}" 
         
-        # Log GPU memory
-        total_memory, free_memory = torch.cuda.mem_get_info()
-        LOGGER.info(f"Before Model Initialization -> Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
-        
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         model = AutoModel.from_pretrained(cls.model_name).eval().to("cuda")  
-        
-        total_memory, free_memory = torch.cuda.mem_get_info()
-        LOGGER.info(f"After Model Load -> Total GPU memory: {total_memory / 1e9:.2f} GB, Free GPU memory: {free_memory / 1e9:.2f} GB")
         
         len_corpus = len(trn_corpus)
         cls.__create_batch_dir(batch_dir)
@@ -358,7 +352,7 @@ class BioBert(Transformer):
         if batch_size == 0:
             batch_size, num_batches = cls.__dynamic_gpu_batch_size(len_corpus, max_length, model)
         else:
-            num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
+            num_batches = (len_corpus + batch_size - 1) // batch_size  # Ensure rounding up
             
         LOGGER.info(f"Total of batches: {num_batches} and batch size: {batch_size}")
 
@@ -370,9 +364,9 @@ class BioBert(Transformer):
             batch = trn_corpus[start:end]
 
             try:
-                # Tokenize & move input tensors to GPU
-                inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, 
-                                   truncation=truncation, max_length=max_length).to("cuda")
+                # Tokenize & move tensors to GPU
+                inputs = tokenizer(batch, return_tensors="pt", padding=padding, truncation=truncation, max_length=max_length)
+                inputs = {k: v.to("cuda") for k, v in inputs.items()}
                 
                 with torch.no_grad():
                     outputs = model(**inputs)  # Forward pass on GPU
@@ -382,24 +376,33 @@ class BioBert(Transformer):
                 batch_filename = f"{emb_file}_batch{batch_idx}.npz"
                 np.savez_compressed(batch_filename, embeddings=batch_results)
                 
-            except torch.cuda.OutOfMemoryError: # In case of out of memory error
+            except torch.cuda.OutOfMemoryError:
                 LOGGER.error(f"Out of memory at batch {batch_idx}, reducing batch size and retrying.")
                 torch.cuda.empty_cache()
-                batch_size = max(1, batch_size - 8)  # Reduce batch size by half (at least 1)
-                num_batches = (len_corpus + batch_size - 1) // batch_size  # Recalculate total batches
-                continue
+                gc.collect()
+                batch_size = max(1, batch_size - 8)  # Reduce batch size by at least 8
+                num_batches = (len_corpus + batch_size - 1) // batch_size  # Recalculate batches
+                continue  # Retry batch with new size
 
-            # Free GPU memory
+            # Free memory after each batch
             del batch, inputs, outputs, batch_results
             torch.cuda.empty_cache()
             gc.collect()
             torch.cuda.ipc_collect()
 
             batch_idx += 1  # Move to next batch
+        
+        # Free model memory after inference
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
 
-        # Load and concatenate all batch embeddings
-        batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))
-        all_embeddings = np.concatenate([np.load(f)["embeddings"] for f in batch_files], axis=0).astype(dtype)
+        # Load embeddings efficiently
+        all_embeddings = []
+        for batch_file in sorted(glob.glob(f"{emb_file}_batch*.npz")):
+            all_embeddings.append(np.load(batch_file)["embeddings"])
+
+        all_embeddings = np.vstack(all_embeddings).astype(dtype)
 
         cls.__del_batch_dir(batch_dir)
         return all_embeddings
