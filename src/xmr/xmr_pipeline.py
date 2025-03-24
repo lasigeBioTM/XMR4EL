@@ -212,14 +212,11 @@ class XMRPipeline():
         """Initializing the htree attributes"""
         text_emb = htree.text_embeddings
         cluster_labels = htree.clustering_model.model.labels_
-        
-        print(type(initial_text_embeddings), type(text_emb))
-        
-        exit()
 
         """Check depth because the depth 0, has all the text embeddings (root)"""
         if htree.depth > 0:
-            idx = initial_text_embeddings == text_emb
+            # Find indices where rows in initial_text_embeddings match text_emb
+            idx = np.where((initial_text_embeddings[:, None] == text_emb).all(-1))[0]
             input_text = trn_corpus[idx]
         else:
             input_text = trn_corpus
@@ -341,7 +338,7 @@ class XMRPipeline():
         cls.__execute_second_pipeline(htree, 
                                        transformer_config, 
                                        classifier_config, 
-                                       None, 
+                                       text_emb,
                                        trn_corpus, 
                                        n_features, 
                                        dtype
