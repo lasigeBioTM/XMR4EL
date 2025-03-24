@@ -51,7 +51,7 @@ def main():
     
     print(htree)
     
-    htree.save("/test")
+    htree.save("/")
     
     if os.path.exists("/test/xmrtree.pkl"):
         print("File saved successfully!")

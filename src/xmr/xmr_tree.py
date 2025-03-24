@@ -12,6 +12,7 @@ class XMRTree():
                  text_embeddings=None,
                  transformer_embeddings=None,
                  concatenated_embeddings=None,
+                 vectorizer=None,
                  clustering_model=None,
                  classifier_model=None,
                  test_split=None,
@@ -22,6 +23,8 @@ class XMRTree():
         self.text_embeddings = text_embeddings
         self.transformer_embeddings = transformer_embeddings
         self.concatenated_embeddings = concatenated_embeddings
+        
+        self.vectorizer = vectorizer
         
         self.clustering_model = clustering_model
         
