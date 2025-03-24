@@ -301,8 +301,6 @@ class BioBert(Transformer):
             batch_size, num_batches = cls.__dynamic_cpu_batch_size(len_corpus, max_length)
         else:
             num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
-
-        print(batch_size)
         
         session = ort.InferenceSession(onnx_directory)
         
