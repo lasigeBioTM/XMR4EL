@@ -215,11 +215,23 @@ class XMRPipeline():
 
         """Check depth because the depth 0, has all the text embeddings (root)"""
         if htree.depth > 0:
-            # Find indices where rows in initial_text_embeddings match text_emb
-            idx = np.where((initial_text_embeddings[:, None] == text_emb).all(-1))[0]
-            input_text = [trn_corpus[i] for i in idx]  # Use list comprehension to get the elements
+            # Create a dictionary to store the initial_text_embeddings by hash (tuple)
+            embedding_dict = {tuple(initial_emb): idx for idx, initial_emb in enumerate(initial_text_embeddings)}
+
+            # Initialize input_text as an empty list
+            input_text = []
+
+            # Iterate over each embedding in text_emb and find its exact match in embedding_dict
+            for emb in text_emb:
+                emb_tuple = tuple(emb)  # Convert the embedding to a tuple for hashing
+                match_idx = embedding_dict.get(emb_tuple)  # Get the index of the matching embedding
+
+                # If a match is found, add the corresponding text to input_text
+                if match_idx is not None:
+                    input_text.append(trn_corpus[match_idx])
+
         else:
-            input_text = trn_corpus  # Keep input_text as the full list if depth is 0
+            input_text = trn_corpus
         
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
