@@ -39,8 +39,7 @@ class XMRTree():
 
         Args:
             save_dir (str): Folder to store serialized object in.
-        """
-        os.makedirs(save_dir, exist_ok=True)
+        """ 
         try:
             with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
                 pickle.dump(self.__dict__, fout)
