@@ -217,7 +217,7 @@ class XMRPipeline():
         if htree.depth > 0:
             # Find indices where rows in initial_text_embeddings match text_emb
             idx = np.where((initial_text_embeddings[:, None] == text_emb).all(-1))[0]
-            print(type(idx), type(trn_corpus))
+            trn_corpus = np.array(trn_corpus)
             input_text = trn_corpus[idx]
         else:
             input_text = trn_corpus
@@ -319,8 +319,6 @@ class XMRPipeline():
         """
         
         # Force garbage collection
-        
-        trn_corpus = np.array(trn_corpus)
         
         """Text Vectorizer Embeddings"""
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
