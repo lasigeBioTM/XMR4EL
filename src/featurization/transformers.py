@@ -302,32 +302,35 @@ class BioBert(Transformer):
         else:
             num_batches = len_corpus // batch_size + (1 if len_corpus % batch_size != 0 else 0)
 
-        with ort.InferenceSession(onnx_directory) as session:
-            for batch_idx in range(num_batches):
-                LOGGER.info(f"Processing batch: {batch_idx + 1}/{num_batches}")
-                start, end = batch_idx * batch_size, min((batch_idx + 1) * batch_size, len_corpus)
-                batch = trn_corpus[start:end]
+        print(batch_size)
+        
+        session = ort.InferenceSession(onnx_directory)
+        
+        for batch_idx in range(num_batches):
+            LOGGER.info(f"Processing batch: {batch_idx + 1}/{num_batches}")
+            start, end = batch_idx * batch_size, min((batch_idx + 1) * batch_size, len_corpus)
+            batch = trn_corpus[start:end]
 
-                # Tokenize input
-                inputs = tokenizer(batch, return_tensors="np", padding=padding, truncation=truncation, max_length=max_length)
+            # Tokenize input
+            inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
 
-                # Convert tensors to NumPy arrays
-                onnx_inputs = {
-                    "input_ids": inputs["input_ids"].astype(np.int64),
-                    "attention_mask": inputs["attention_mask"].astype(np.int64)
-                }
-                del inputs  # Free memory
-                gc.collect()
+            # Convert tensors to NumPy arrays
+            onnx_inputs = {
+                "input_ids": np.array(inputs["input_ids"], dtype=np.int64),
+                "attention_mask": np.array(inputs["attention_mask"], dtype=np.int64)
+            }
+            del inputs  # Free memory
+            gc.collect()
 
-                # Run inference
-                batch_results = session.run(None, onnx_inputs)[0][:, 0, :]
-                
-                # Save batch embeddings
-                batch_filename = f"{emb_file}_batch{batch_idx}.npz"
-                np.savez_compressed(batch_filename, embeddings=batch_results)
-                del batch_results
-                gc.collect()
-
+            # Run inference
+            batch_results = session.run(None, onnx_inputs)[0][:, 0, :]
+            
+            # Save batch embeddings
+            batch_filename = f"{emb_file}_batch{batch_idx}.npz"
+            np.savez_compressed(batch_filename, embeddings=batch_results)
+            del batch_results
+            gc.collect()
+        
         # Load and merge embeddings efficiently
         all_embeddings = []
         for batch_file in sorted(glob.glob(f"{emb_file}_batch*.npz")):
@@ -369,7 +372,7 @@ class BioBert(Transformer):
 
             try:
                 # Tokenize & move tensors to GPU
-                inputs = tokenizer(batch, return_tensors="pt", padding=padding, truncation=truncation, max_length=max_length)
+                inputs = tokenizer(batch, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
                 inputs = {k: v.to("cuda") for k, v in inputs.items()}
                 
                 with torch.no_grad():

@@ -157,7 +157,7 @@ class XMRPipeline():
         """Evaluating best K according to elbow method, and some more weighted statistics"""
         k_range = (2, 6) # Hardcode for now
         k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range)
-        clustering_config['n_clusters'] = k
+        clustering_config['kwargs']['n_clusters'] = k
         
         """Training Clustering Model"""
         clustering_model = cls.__train_clustering(
@@ -190,7 +190,7 @@ class XMRPipeline():
                                                             depth - 1,
                                                             dtype)
             
-            if new_child_htree is not None:
+            if not new_child_htree.is_empty():
                 htree.children[int(cluster)] = new_child_htree
                 
         return htree
@@ -343,8 +343,6 @@ class XMRPipeline():
         """Executing the first pipeline, Initializing the tree structure"""
         htree = XMRTree(depth=0)
         htree = cls.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
-        
-        print(htree)
         
         """Executing the second pipeline, Training the classifiers"""
         cls.__execute_second_pipeline(htree, 

@@ -62,6 +62,9 @@ class XMRTree():
         model.__dict__.update(model_data)
         return model
     
+    def is_empty(self):
+        return self.clustering_model is None
+    
     def __str__(self):
         """String representation of XMRTree."""
         return (f"XMRTree(depth={self.depth}, "
