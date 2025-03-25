@@ -156,8 +156,8 @@ class XMRPipeline():
             return htree
         
         """Saving the model in the tree"""
-        htree.clustering_model = clustering_model
-        htree.text_embeddings = text_emb
+        htree.set_clustering_model(clustering_model)
+        htree.set_text_embeddings(text_emb)
         
         unique_labels = np.unique(cluster_labels)
         
@@ -175,7 +175,7 @@ class XMRPipeline():
                                                             dtype)
             
             if not new_child_htree.is_empty():
-                htree.children[int(cluster)] = new_child_htree
+                htree.set_children(int(cluster), new_child_htree)
                 
         return htree
     
@@ -245,11 +245,10 @@ class XMRPipeline():
             
         """Concatenates the transformer embeddings with the text embeddings"""
         concantenated_array = np.hstack((transformer_emb, text_emb))
-        
-        print(concantenated_array)
-        
-        exit()
             
+        htree.set_transformer_embeddings(transformer_emb)
+        htree.set_concantened_embeddings(concantenated_array)
+
         """Train the classifier with the concatenated embeddings with cluster labels"""
         X_train, X_test, y_train, y_test = train_test_split(
             concantenated_array, 
@@ -269,10 +268,8 @@ class XMRPipeline():
         }
         
         """Save the classifier model and test_split"""
-        htree.classifier_model = classifier_model
-        htree.transformer_embeddings = transformer_emb
-        htree.concantened_embeddings = concantenated_array
-        htree.test_split = test_split
+        htree.set_classifier_model(classifier_model)
+        htree.set_test_split(test_split)
         
         for children_htree in htree.children.values():
             

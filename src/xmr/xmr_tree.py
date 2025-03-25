@@ -1,6 +1,10 @@
 import os
 import pickle
 import logging
+import datetime
+import glob
+
+import numpy as np
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,38 +38,118 @@ class XMRTree():
         self.children = children if children is not None else {}
         self.depth = depth
         
-    def save(self, save_dir):
+    def set_text_embeddings(self, text_embeddings):
+        self.text_embeddings = text_embeddings
+        
+    def set_transformer_embeddings(self, transformer_embeddings):
+        self.transformer_embeddings = transformer_embeddings
+        
+    def set_concatenated_embeddings(self, concatenated_embeddings):
+        self.concatenated_embeddings = concatenated_embeddings
+        
+    def set_vectorizer(self, vectorizer):
+        self.vectorizer = vectorizer
+        
+    def set_clustering_model(self, clustering_model):
+        self.clustering_model = clustering_model
+    
+    def set_test_split(self, test_split):
+        self.test_split = test_split
+        
+    def set_children(self, idx, child_tree):
+        self.children[idx] = child_tree
+    
+    def set_depth(self, depth):
+        self.depth = depth
+        
+    def save(self, base_dir="saved_trees"):
         """Save trained XMRTree model to disk.
 
         Args:
             save_dir (str): Folder to store serialized object in.
         """ 
-        try:
-            with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
-                pickle.dump(self.__dict__, fout)
-            print("Saved successfully!")
-        except Exception as e:
-            print(f"Failed to save: {e}")
+        # Generate directory name based on class name and current date-time
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_dir = os.path.join(base_dir, f"{self.__class__.__name__}_{timestamp}")
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Prepare state dictionary without embeddings
+        state = self.__dict__.copy()
+        
+        # Save embeddings separately
+        if self.text_embeddings is not None:
+            np.save(os.path.join(save_dir, "text_embeddings.npy"), self.text_embeddings)
+            state.pop("text_embeddings", None)
+        else:
+            LOGGER.warning("Text embeddings is None")
+
+        if self.transformer_embeddings is not None:
+            np.save(os.path.join(save_dir, "transformer_embeddings.npy"), self.transformer_embeddings)
+            state.pop("transformer_embeddings", None)
+        else:
+            LOGGER.warning("Transformer embeddings is None")
+
+        if self.concatenated_embeddings is not None:
+            np.save(os.path.join(save_dir, "concatenated_embeddings.npy"), self.concatenated_embeddings)
+            state.pop("concatenated_embeddings", None)
+        else:
+            LOGGER.warning("Concatenated embeddings is None")
+
+        # Save each child tree separately
+        children_dir = os.path.join(save_dir, "children")
+        os.makedirs(children_dir, exist_ok=True)
+        for idx, child in self.children.items():
+            child.save(os.path.join(children_dir, f"child_{idx}"))
+
+        # Save the metadata using pickle
+        with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
+            pickle.dump(state, fout)
+            
+        LOGGER.info("Correctly Saved")
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, base_dir="saved_trees", load_dir=None):
         """Load a saved XMRTree model from disk.
 
         Args:
-            load_dir (str): Folder inside which the model is loaded.
+            base_dir (str): The root directory where trees are saved.
+            load_dir (str): Specific folder to load from. If None, loads the latest saved model.
 
         Returns:
             XMRTree: The loaded object.
         """
-        
-        LOGGER.info(f"Loading XMRTree Model from {load_dir}")
+        if load_dir is None:
+            # Find the most recent directory
+            all_saves = sorted(glob.glob(os.path.join(base_dir, f"{cls.__name__}_*")), reverse=True)
+            if not all_saves:
+                raise FileNotFoundError(f"No saved {cls.__name__} models found in {base_dir}.")
+            load_dir = all_saves[0]  # Load the most recent one
+            LOGGER.info(f"Loading latest model from: {load_dir}")
+
         tree_path = os.path.join(load_dir, "xmrtree.pkl")
         assert os.path.exists(tree_path), f"XMRTree path {tree_path} does not exist"
-        
-        with open(tree_path, 'rb') as fin:
+
+        # Load metadata from pickle
+        with open(tree_path, "rb") as fin:
             model_data = pickle.load(fin)
+
         model = cls()
         model.__dict__.update(model_data)
+
+        # Load large embeddings separately
+        for attr in ["text_embeddings", "transformer_embeddings", "concatenated_embeddings"]:
+            emb_path = os.path.join(load_dir, f"{attr}.npy")
+            if os.path.exists(emb_path):
+                setattr(model, attr, np.load(emb_path, allow_pickle=True))
+
+        # Load children trees
+        children_dir = os.path.join(load_dir, "children")
+        if os.path.exists(children_dir):
+            for child_name in os.listdir(children_dir):
+                child_path = os.path.join(children_dir, child_name)
+                model.children[child_name] = cls.load(child_path)
+
+        LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
     
     def is_empty(self):
