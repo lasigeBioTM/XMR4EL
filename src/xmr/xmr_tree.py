@@ -39,20 +39,26 @@ class XMRTree():
         self.children = children if children is not None else {}
         self.depth = depth
         
-    def save(self, base_dir="saved_trees"):
+    def save(self, base_dir="saved_trees", child_tree=False):
         """Save trained XMRTree model to disk.
 
         Args:
-            save_dir (str): Folder to store serialized object in.
+            base_dir (str): Folder to store serialized object in.
+            child_tree (bool): If True, saves the tree without the timestamp (for child trees).
         """ 
-        # Generate directory name based on class name and current date-time for the main tree
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        save_dir = os.path.join(base_dir, f"{self.__class__.__name__}_{timestamp}")
-        os.makedirs(save_dir, exist_ok=True)
+        if not child_tree:
+            # Generate directory name based on class name and current date-time for the main tree
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            save_dir = os.path.join(base_dir, f"{self.__class__.__name__}_{timestamp}")
+            os.makedirs(save_dir, exist_ok=True)
+        else:
+            # If saving as a child tree, just generate the directory under 'children'
+            save_dir = base_dir
+            os.makedirs(save_dir, exist_ok=True)
 
         # Prepare state dictionary without embeddings
         state = self.__dict__.copy()
-        
+
         # Save embeddings separately
         if self.text_embeddings is not None:
             np.save(os.path.join(save_dir, "text_embeddings.npy"), self.text_embeddings)
@@ -73,16 +79,17 @@ class XMRTree():
             LOGGER.warning("Concatenated embeddings is None")
 
         # Save each child tree separately, but without timestamp for children
-        children_dir = os.path.join(save_dir, "children")
-        os.makedirs(children_dir, exist_ok=True)
-        for idx, child in self.children.items():
-            # Save child tree directly under 'children' directory
-            child.save(os.path.join(children_dir, f"child_{idx}"))
+        if not child_tree and self.children:  # Only create 'children' directory if there are children
+            children_dir = os.path.join(save_dir, "children")
+            os.makedirs(children_dir, exist_ok=True)
+            for idx, child in self.children.items():
+                # Save child tree directly under 'children' directory without timestamp
+                child.save(children_dir, child_tree=True)
 
         # Save the metadata using pickle
         with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
             pickle.dump(state, fout)
-            
+        
         LOGGER.info(f"Model saved successfully at {save_dir}")
     
     @classmethod
