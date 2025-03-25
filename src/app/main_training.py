@@ -24,7 +24,7 @@ def main():
 
     start = time.time()
 
-    n_features = 12
+    n_features = 6
 
     vectorizer_config = {'type': 'tfidf', 'kwargs': {'max_features': n_features}}
     transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 400, 'onnx_directory': onnx_directory}}
