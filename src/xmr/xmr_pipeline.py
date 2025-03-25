@@ -343,12 +343,27 @@ class XMRPipeline():
         
         return htree
     
-    @staticmethod
-    def __inference_predict_input(htree, concatenated_array):
-        pass
+    @classmethod
+    def __inference_predict_input(cls, htree, conc_input):
+        
+        current_htree = htree
+        predicted_labels = []
+        
+        while True:
+            current_classifier = current_htree.classifier_model
+            predicted_label = cls.__predict_classifier(current_classifier, conc_input)
+            predicted_labels.append(predicted_label)
+            
+            if predicted_label in current_htree.children:
+                current_htree = htree.childre[predicted_label]
+            else:
+                break # Stop if there are no more children
+            
+        return predicted_labels
+            
         
     @classmethod
-    def inference(cls, htree, input_text, transformer_config, n_features, dtype):
+    def inference(cls, htree, input_text, transformer_config, n_features, dtype=np.float32):
         """Inference to know which cluster doest the inputs or input"""
         
         vectorizer = htree.vectorizer
@@ -376,6 +391,14 @@ class XMRPipeline():
             
         """Concatenates the transformer embeddings with the text embeddings"""
         concantenated_array = np.hstack((transformer_emb, text_emb))
+        
+        # Predict labels for each concatenated input
+        predicted_labels = [cls.__inference_predict_input(htree, conc_input) for conc_input in concantenated_array]
+        
+        return predicted_labels
+            
+        return predicted_labels
+            
         
         
     
