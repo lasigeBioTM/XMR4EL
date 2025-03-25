@@ -23,11 +23,10 @@ def main():
     
     n_features = 12
     
-    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 400, 'onnx_directory': onnx_directory}}
+    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 500, 'onnx_directory': onnx_directory}}
     
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
-    tree_location = "data/saved_trees/XMRTree_2025-03-25_12-22-39"
-    
+    tree_location = "data/saved_trees"
     
     # Read the file and extract unique names
     with open(file_test_input, "r") as file:
@@ -35,17 +34,13 @@ def main():
         
     name_list = list(unique_names)
     
-    xtree = XMRTree.load(tree_location)
+    xtree = XMRTree.load()
     
-    print(xtree)
+    predicted_labels = XMRPipeline.inference(xtree, name_list[0:50], transformer_config, n_features)
     
-    print(xtree.children)
+    print(predicted_labels)
     
-    exit()
-    
-    predicted_labels = XMRPipeline.inference(xtree, name_list, transformer_config, n_features)
-    
-    save_predicted_labels(predicted_labels, filename="/xmr4el/predicted_labels.txt")
+    # save_predicted_labels(predicted_labels, filename="predicted_labels.txt")
     
     end = time.time()
     

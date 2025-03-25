@@ -39,7 +39,7 @@ class XMRTree():
         self.children = children if children is not None else {}
         self.depth = depth
         
-    def save(self, save_dir="saved_trees", child_tree=False):
+    def save(self, save_dir="data/saved_trees", child_tree=False):
         """Save trained XMRTree model to disk.
 
         Args:
@@ -82,7 +82,7 @@ class XMRTree():
         LOGGER.info(f"Model saved successfully at {save_dir}")
     
     @classmethod
-    def load(cls, load_dir="saved_trees"):
+    def load(cls, load_dir=None):
         """Load a saved XMRTree model from disk.
 
         Args:
@@ -93,7 +93,7 @@ class XMRTree():
         """
         if load_dir is None:
             # Find the most recent directory
-            all_saves = sorted(glob.glob(os.path.join("saved_trees", f"{cls.__name__}_*")), reverse=True)
+            all_saves = sorted(glob.glob(os.path.join("data/saved_trees", f"{cls.__name__}_*")), reverse=True)
             if not all_saves:
                 raise FileNotFoundError(f"No saved {cls.__name__} models found in saved_trees.")
             load_dir = all_saves[0]  # Load the most recent one
@@ -101,7 +101,6 @@ class XMRTree():
 
         # Path to the main tree's metadata
         tree_path = os.path.join(load_dir, "xmrtree.pkl")
-        # LOGGER.info(f"Loading metadata from {tree_path}")
         assert os.path.exists(tree_path), f"XMRTree path {tree_path} does not exist"
 
         # Load metadata from pickle
@@ -116,10 +115,10 @@ class XMRTree():
             emb_path = os.path.join(load_dir, f"{attr}.npy")
             if os.path.exists(emb_path):
                 setattr(model, attr, np.load(emb_path, allow_pickle=True))
-                LOGGER.info(f"Loaded {attr} embeddings from {emb_path}")
+                LOGGER.debug(f"Loaded {attr} embeddings from {emb_path}")
             else:
                 pass
-                LOGGER.warning(f"{attr} not found at {emb_path}")
+                LOGGER.debug(f"{attr} not found at {emb_path}")
 
         # Load children trees if present
         children_dir = os.path.join(load_dir, "children")
@@ -130,10 +129,10 @@ class XMRTree():
                     try:
                         child_index = int(child_name.replace("child_", ""))  # Convert 'child_0' -> 0
                     except ValueError:
-                        LOGGER.warning(f"Skipping unexpected child folder: {child_name}")
+                        LOGGER.debug(f"Skipping unexpected child folder: {child_name}")
                         continue  # Ignore folders that don't match 'child_X' format
                     
-                    LOGGER.info(f"Loading child tree from {child_tree_path} as index {child_index}")
+                    LOGGER.debug(f"Loading child tree from {child_tree_path} as index {child_index}")
                     child_model = cls.load(child_tree_path)  # Recursively load child
                     model.children[child_index] = child_model
 

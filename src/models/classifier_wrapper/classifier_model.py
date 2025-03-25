@@ -225,7 +225,7 @@ class SklearnLogisticRegression(ClassifierModel):
         return cls(config, model)
     
     def predict(self, predict_input):
-        self.model.predict(predict_input)
+        return self.model.predict(predict_input)
         
 
 class SklearnRandomForestClassifier(ClassifierModel):
@@ -314,7 +314,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
         return cls(config, model)
     
     def predict(self, predict_input):
-        self.model.predict(predict_input)
+        return self.model.predict(predict_input)
             
         
         
@@ -397,4 +397,4 @@ class CumlLogisticRegression(ClassifierModel):
         return cls(config, model)
     
     def predict(self, predict_input):
-        self.model.predict(predict_input)
+        return self.model.predict(predict_input)
