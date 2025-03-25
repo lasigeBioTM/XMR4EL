@@ -26,6 +26,8 @@ def main():
     transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 400, 'onnx_directory': onnx_directory}}
     
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
+    tree_location = "data/saved_trees/XMRTree_2025-03-25_12-22-39"
+    
     
     # Read the file and extract unique names
     with open(file_test_input, "r") as file:
@@ -33,9 +35,11 @@ def main():
         
     name_list = list(unique_names)
     
-    xtree = XMRTree.load()
+    xtree = XMRTree.load(tree_location)
     
     print(xtree)
+    
+    print(xtree.children)
     
     exit()
     
