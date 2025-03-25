@@ -245,6 +245,10 @@ class XMRPipeline():
             
         """Concatenates the transformer embeddings with the text embeddings"""
         concantenated_array = np.hstack((transformer_emb, text_emb))
+        
+        print(concantenated_array)
+        
+        exit()
             
         """Train the classifier with the concatenated embeddings with cluster labels"""
         X_train, X_test, y_train, y_test = train_test_split(
@@ -341,6 +345,10 @@ class XMRPipeline():
                                        )
         
         return htree
+    
+    @staticmethod
+    def __inference_predict_input(htree, concatenated_array):
+        pass
         
     @classmethod
     def inference(cls, htree, input_text, transformer_config, n_features, dtype):
@@ -372,9 +380,7 @@ class XMRPipeline():
         """Concatenates the transformer embeddings with the text embeddings"""
         concantenated_array = np.hstack((transformer_emb, text_emb))
         
-        transformer_emb = cls.__predict_transformer(transformer_config, input_text)
         
-        pass
     
         
     
