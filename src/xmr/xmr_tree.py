@@ -38,30 +38,6 @@ class XMRTree():
         self.children = children if children is not None else {}
         self.depth = depth
         
-    def set_text_embeddings(self, text_embeddings):
-        self.text_embeddings = text_embeddings
-        
-    def set_transformer_embeddings(self, transformer_embeddings):
-        self.transformer_embeddings = transformer_embeddings
-        
-    def set_concatenated_embeddings(self, concatenated_embeddings):
-        self.concatenated_embeddings = concatenated_embeddings
-        
-    def set_vectorizer(self, vectorizer):
-        self.vectorizer = vectorizer
-        
-    def set_clustering_model(self, clustering_model):
-        self.clustering_model = clustering_model
-    
-    def set_test_split(self, test_split):
-        self.test_split = test_split
-        
-    def set_children(self, idx, child_tree):
-        self.children[idx] = child_tree
-    
-    def set_depth(self, depth):
-        self.depth = depth
-        
     def save(self, base_dir="saved_trees"):
         """Save trained XMRTree model to disk.
 
@@ -151,6 +127,33 @@ class XMRTree():
 
         LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
+    
+    def set_text_embeddings(self, text_embeddings):
+        self.text_embeddings = text_embeddings
+        
+    def set_transformer_embeddings(self, transformer_embeddings):
+        self.transformer_embeddings = transformer_embeddings
+        
+    def set_concatenated_embeddings(self, concatenated_embeddings):
+        self.concatenated_embeddings = concatenated_embeddings
+        
+    def set_vectorizer(self, vectorizer):
+        self.vectorizer = vectorizer
+        
+    def set_clustering_model(self, clustering_model):
+        self.clustering_model = clustering_model
+        
+    def set_classifier_model(self, classifier_model):
+        self.classifier_model = classifier_model
+    
+    def set_test_split(self, test_split):
+        self.test_split = test_split
+        
+    def set_children(self, idx, child_tree):
+        self.children[idx] = child_tree
+    
+    def set_depth(self, depth):
+        self.depth = depth
     
     def is_empty(self):
         return self.clustering_model is None

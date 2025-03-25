@@ -247,7 +247,7 @@ class XMRPipeline():
         concantenated_array = np.hstack((transformer_emb, text_emb))
             
         htree.set_transformer_embeddings(transformer_emb)
-        htree.set_concantened_embeddings(concantenated_array)
+        htree.set_concatenated_embeddings(concantenated_array)
 
         """Train the classifier with the concatenated embeddings with cluster labels"""
         X_train, X_test, y_train, y_test = train_test_split(
