@@ -45,7 +45,7 @@ class XMRTree():
         Args:
             save_dir (str): Folder to store serialized object in.
         """ 
-        # Generate directory name based on class name and current date-time
+        # Generate directory name based on class name and current date-time for the main tree
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         save_dir = os.path.join(base_dir, f"{self.__class__.__name__}_{timestamp}")
         os.makedirs(save_dir, exist_ok=True)
@@ -72,18 +72,20 @@ class XMRTree():
         else:
             LOGGER.warning("Concatenated embeddings is None")
 
-        # Save each child tree separately
+        # Save each child tree separately, but without timestamp for children
         children_dir = os.path.join(save_dir, "children")
         os.makedirs(children_dir, exist_ok=True)
         for idx, child in self.children.items():
+            # Save child tree directly under 'children' directory
             child.save(os.path.join(children_dir, f"child_{idx}"))
 
         # Save the metadata using pickle
         with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
             pickle.dump(state, fout)
             
-        LOGGER.info("Correctly Saved")
+        LOGGER.info(f"Model saved successfully at {save_dir}")
     
+class XMRTree:
     @classmethod
     def load(cls, base_dir="saved_trees", load_dir=None):
         """Load a saved XMRTree model from disk.
@@ -103,7 +105,9 @@ class XMRTree():
             load_dir = all_saves[0]  # Load the most recent one
             LOGGER.info(f"Loading latest model from: {load_dir}")
 
+        # saved_trees/XMRTree_2025-03-25_11-38-13/children/child_2/XMRTree_2025-03-25_11-38-13/xmrtree.pkl
         tree_path = os.path.join(load_dir, "xmrtree.pkl")
+        print(tree_path)
         assert os.path.exists(tree_path), f"XMRTree path {tree_path} does not exist"
 
         # Load metadata from pickle
@@ -118,13 +122,18 @@ class XMRTree():
             emb_path = os.path.join(load_dir, f"{attr}.npy")
             if os.path.exists(emb_path):
                 setattr(model, attr, np.load(emb_path, allow_pickle=True))
+            else:
+                LOGGER.warning(f"{attr} not found at {emb_path}")
 
         # Load children trees
         children_dir = os.path.join(load_dir, "children")
         if os.path.exists(children_dir):
             for child_name in os.listdir(children_dir):
-                child_path = os.path.join(children_dir, child_name)
-                model.children[child_name] = cls.load(child_path)
+                child_tree_path = os.path.join(children_dir, child_name)
+                print(child_tree_path)
+                if os.path.isdir(child_tree_path):  # Make sure it's a directory
+                    child_model = cls.load(base_dir, child_tree_path)  # Recursively load child
+                    model.children[child_name] = child_model
 
         LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model

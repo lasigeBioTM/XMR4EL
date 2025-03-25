@@ -1,11 +1,8 @@
 import time
 import numpy as np
 
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import normalize
-
-from src.predicter.predict import PredictTopK
-from src.app.utils import load_bio_bert_vectorizer, load_hierarchical_clustering_model, load_hierarchical_linear_model
+from src.xmr.xmr_tree import XMRTree
+from src.xmr.xmr_pipeline import XMRPipeline
 
 """
     Depending on the train file, different number of labels, 
@@ -19,63 +16,46 @@ from src.app.utils import load_bio_bert_vectorizer, load_hierarchical_clustering
     * labels.txt -> 13292 labels,
 """
 def main():
-
-    hierarchical_clustering_model_filepath = "data/processed/clustering/test_hierarchical_clustering_model.pkl"
-    hierarchical_linear_model_filepath = "data/processed/regression/test_hierarchical_linear_model.pkl"
-    
-    test_input_embeddings_filepath = "data/processed/vectorizer/test_input_embeddings_gpu.npy"
     
     start = time.time()
     
-    # load inputs, 
-    test_input = load_bio_bert_vectorizer(test_input_embeddings_filepath)
+    onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
     
-    # pca = PCA(n_components=2)
-    # test_input = pca.fit_transform(test_input)  # Reduce to 12 features
-    test_input = normalize(test_input, norm='l2', axis=1)
+    n_features = 12
     
-    hierarchical_clustering_model = load_hierarchical_clustering_model(hierarchical_clustering_model_filepath)
-    hierarchical_linear_model = load_hierarchical_linear_model(hierarchical_linear_model_filepath)
+    transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 400, 'onnx_directory': onnx_directory}}
     
-    top_k = 3
+    file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
     
-    root_node = hierarchical_linear_model.tree_node
-    
-    cluster_predictions = hierarchical_clustering_model.predict(test_input)
-    
-    predictions = PredictTopK.predict(cluster_predictions, root_node, test_input, k=top_k)
-    
-    correct_count = 0
-    total = len(predictions)
-    top_k_confidence_list = []
-
-    for idx in range(total):
-        cluster_pred = cluster_predictions[idx]
-        predicted_labels = predictions[idx]['predicted_labels']
-        top_k_confidences = predictions[idx]['top_k_confidences']
-        true_label = predictions[idx]['true_label']
+    # Read the file and extract unique names
+    with open(file_test_input, "r") as file:
+        unique_names = set(file.read().splitlines())
         
-        # print(f"Cluster Predictions: {cluster_pred}")
-        # print(f"True Label: {true_label}")
-        # print(f"Predicted Labels: {predicted_labels}")
-        # print(f"Confidence Scores: {top_k_confidences}")
-        # print("-" * 50)
-        
-        top_k_confidence_list.append(top_k_confidences)
-        
-        if true_label in predicted_labels:
-            correct_count += 1
+    name_list = list(unique_names)
     
-    top_k_confidence_list = np.concatenate(top_k_confidence_list).tolist()
-    top_k_confidence_list = [float(x) for x in top_k_confidence_list]
+    xtree = XMRTree.load()
     
-    print(f"\nTop-1 Confidence: {np.mean(top_k_confidence_list)}")
-    print(f"Top-{top_k} Accuracy: {round(correct_count / total if total > 0 else 0, 6)}")
+    print(xtree)
+    
+    exit()
+    
+    predicted_labels = XMRPipeline.inference(xtree, name_list, transformer_config, n_features)
+    
+    save_predicted_labels(predicted_labels, filename="/xmr4el/predicted_labels.txt")
     
     end = time.time()
     
     print(f"{end - start} secs of running")
     
+
+def save_predicted_labels(predicted_labels, filename="predicted_labels.txt"):
+    with open(filename, "w") as file:
+        for labels in predicted_labels:
+            if isinstance(labels, list):  # If nested list, join with commas
+                file.write(",".join(map(str, labels)) + "\n")
+            else:
+                file.write(str(labels) + "\n")
+    print(f"Predicted labels saved to {filename}")
 
 if __name__ == "__main__":
     main()
