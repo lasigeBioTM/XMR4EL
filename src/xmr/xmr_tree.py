@@ -1,10 +1,11 @@
 import os
 import pickle
 import logging
-import datetime
 import glob
 
 import numpy as np
+
+from datetime import datetime
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
