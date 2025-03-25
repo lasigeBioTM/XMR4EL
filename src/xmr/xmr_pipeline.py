@@ -319,9 +319,9 @@ class XMRPipeline():
         """Text Vectorizer Embeddings"""
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
         text_emb = cls.__predict_vectorizer(vectorizer_model, trn_corpus)
-        
+
         """Saving the vectorizer"""
-        htree.vectorizer = vectorizer_model
+        htree.set_vectorizer(vectorizer_model)
         
         """Normalize the text embeddings"""
         text_emb = text_emb.toarray()

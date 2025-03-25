@@ -24,7 +24,7 @@ def main():
 
     start = time.time()
 
-    n_features = 6
+    n_features = 12
 
     vectorizer_config = {'type': 'tfidf', 'kwargs': {'max_features': n_features}}
     transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 400, 'onnx_directory': onnx_directory}}
@@ -39,15 +39,15 @@ def main():
     trn_corpus = Preprocessor.load_data_from_file(train_filepath=training_file)
     
     htree = XMRPipeline.execute_pipeline(trn_corpus,
-                         vectorizer_config,
-                         transformer_config,
-                         clustering_config,
-                         classifier_config,
-                         n_features, # Number of Features
-                         min_leaf_size, 
-                         depth,
-                         dtype=np.float32
-                                         )
+                                         vectorizer_config,
+                                         transformer_config,
+                                         clustering_config,
+                                         classifier_config,
+                                         n_features, # Number of Features
+                                         min_leaf_size, 
+                                         depth,
+                                         dtype=np.float32
+                                        )
     
     # Print the tree structure
     print(htree)
