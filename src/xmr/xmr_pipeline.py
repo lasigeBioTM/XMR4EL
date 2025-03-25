@@ -63,7 +63,7 @@ class XMRPipeline():
         return Transformer.train(trn_corpus, config, dtype)
     
     @staticmethod
-    def __reduce_dimensionality(emb, n_features):
+    def __reduce_dimensionality(emb, n_features, random_state=0):
         """Reduces the dimensionality of embeddings
         
         Args: 
@@ -74,7 +74,7 @@ class XMRPipeline():
             np.array
         """
         
-        pca = PCA(n_components=n_features)  # Limit to 300 dimensions
+        pca = PCA(n_components=n_features, random_state=random_state)  # Limit to 300 dimensions
         return pca.fit_transform(emb) 
     
     @staticmethod
@@ -352,10 +352,11 @@ class XMRPipeline():
         while True:
             current_classifier = current_htree.classifier_model
             predicted_label = cls.__predict_classifier(current_classifier, conc_input)
+            predicted_label = int(predicted_label[0])
             predicted_labels.append(predicted_label)
             
             if predicted_label in current_htree.children:
-                current_htree = htree.childre[predicted_label]
+                current_htree = htree.children[predicted_label]
             else:
                 break # Stop if there are no more children
             
@@ -372,11 +373,16 @@ class XMRPipeline():
         text_emb = cls.__predict_vectorizer(vectorizer, input_text)
         text_emb = text_emb.toarray()
         
+        print(text_emb)
+        
         """Reduce Dimensions"""
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         
         """Normalizing"""
         text_emb = normalize(text_emb, norm='l2', axis=1) 
+        
+        
+        exit()
         
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
@@ -393,11 +399,10 @@ class XMRPipeline():
         concantenated_array = np.hstack((transformer_emb, text_emb))
         
         # Predict labels for each concatenated input
-        predicted_labels = [cls.__inference_predict_input(htree, conc_input) for conc_input in concantenated_array]
+        predicted_labels = [cls.__inference_predict_input(htree, conc_input.reshape(1, -1)) for conc_input in concantenated_array]
         
         return predicted_labels
-            
-        return predicted_labels
+
             
         
         
