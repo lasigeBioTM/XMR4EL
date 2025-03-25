@@ -85,7 +85,6 @@ class XMRTree():
             
         LOGGER.info(f"Model saved successfully at {save_dir}")
     
-class XMRTree:
     @classmethod
     def load(cls, base_dir="saved_trees", load_dir=None):
         """Load a saved XMRTree model from disk.
