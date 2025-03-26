@@ -7,6 +7,10 @@ import numpy as np
 
 from datetime import datetime
 
+from src.featurization.vectorizers import Vectorizer
+from src.models.classifier_wrapper.classifier_model import ClassifierModel
+from src.models.cluster_wrapper.clustering_model import ClusteringModel
+
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -55,6 +59,19 @@ class XMRTree():
 
         # Prepare state dictionary without embeddings
         state = self.__dict__.copy()
+
+        # Save models separately
+        models = ["vectorizer", "clustering_model", "classifier_model"]
+        models_data = [getattr(self, model_name, None) for model_name in models]
+
+        for idx, model in enumerate(models_data):
+            if model is not None:  # Ensure model exists before saving
+                print(type(model))
+                model.save(os.path.join(save_dir, models[idx]))
+
+        # Remove saved models from state dictionary
+        for model in models:
+            state.pop(model, None)
 
         # Save embeddings separately (if they exist)
         for attr in ["text_embeddings", "transformer_embeddings", "concatenated_embeddings"]:
@@ -109,6 +126,11 @@ class XMRTree():
 
         model = cls()
         model.__dict__.update(model_data)
+
+        # Load models separately
+        setattr(model, "vectorizer", Vectorizer.load(os.path.join(load_dir, "vectorizer")))
+        setattr(model, "clustering_model", ClusteringModel.load(os.path.join(load_dir, "clustering_model")))
+        setattr(model, "classifier", ClassifierModel.load(os.path.join(load_dir, "classifier_model")))
 
         # Load embeddings separately if they exist
         for attr in ["text_embeddings", "transformer_embeddings", "concatenated_embeddings"]:
@@ -168,6 +190,9 @@ class XMRTree():
     
     def is_empty(self):
         return self.clustering_model is None
+    
+    def is_leaf(self):
+        return self.children is None
     
     def __str__(self):
         """String representation of XMRTree."""

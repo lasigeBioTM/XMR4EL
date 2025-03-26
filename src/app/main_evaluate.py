@@ -22,6 +22,7 @@ def main():
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
     
     n_features = 12
+    k = 3
     
     transformer_config = {'type': 'biobert', 'kwargs': {'batch_size': 500, 'onnx_directory': onnx_directory}}
     
@@ -36,9 +37,11 @@ def main():
     
     xtree = XMRTree.load()
     
-    predicted_labels = XMRPipeline.inference(xtree, name_list[0:50], transformer_config, n_features)
+    predicted_labels = XMRPipeline.inference(xtree, name_list[0:50], transformer_config, n_features, k=k)
     
     print(predicted_labels)
+    
+    # Para gerar ground truth o modelo tem ver o test data, tem de ser processado um novo modelo
     
     # save_predicted_labels(predicted_labels, filename="predicted_labels.txt")
     
