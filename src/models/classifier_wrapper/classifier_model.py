@@ -82,7 +82,7 @@ class ClassifierModel(metaclass=ClassifierMeta):
         classifier_type = config.get("type", None)
         assert classifier_type is not None, f"{classifier_folder} is not a valid classifier folder"
         assert classifier_type in classifier_dict, f"invalid classifier type {config['type']}"
-        model = classifier_dict[classifier_type].load(classifier_folder)
+        model = classifier_dict[classifier_type].load(classifier_folder, config)
         return cls(config, model)
     
     @classmethod
@@ -116,6 +116,9 @@ class ClassifierModel(metaclass=ClassifierMeta):
     def predict(self, predict_input):
         return self.model.predict(predict_input)
     
+    def predict_proba(self, predict_input):
+        return self.model.predict_proba(predict_input)
+    
     @staticmethod
     def load_config_from_args(args):
         """Parse config from a `argparse.Namespace` object.
@@ -147,7 +150,7 @@ class ClassifierModel(metaclass=ClassifierMeta):
 class SklearnLogisticRegression(ClassifierModel):
     """Sklearn Logistic Regression"""
     
-    def __init__(self, config, model):
+    def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
         
@@ -162,7 +165,7 @@ class SklearnLogisticRegression(ClassifierModel):
             pickle.dump(self.model, fout)
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir, config):
         """Load a saved sklearn Logistic Regression model from disk.
 
         Args:
@@ -178,8 +181,7 @@ class SklearnLogisticRegression(ClassifierModel):
         
         with open(classifier_path, 'rb') as fin:
             model_data = pickle.load(fin)
-        model = cls()
-        model.__dict__.update(model_data)
+        model = cls(config, model_data)
         return model
 
     @classmethod
@@ -224,14 +226,17 @@ class SklearnLogisticRegression(ClassifierModel):
         model.fit(X_train, y_train)
         return cls(config, model)
     
-    def predict(self, predict_input):
-        return self.model.predict(predict_input)
+    def predict(self, X):
+        return self.model.predict(X)
+    
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)    
         
 
 class SklearnRandomForestClassifier(ClassifierModel):
     """ SKlearn Random Forest"""
     
-    def __init__(self, config, model):
+    def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
         
@@ -246,7 +251,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
             pickle.dump(self.model, fout)
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir, config):
         """Load a saved sklearn Logistic Regression model from disk.
 
         Args:
@@ -262,8 +267,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
         
         with open(classifier_path, 'rb') as fin:
             model_data = pickle.load(fin)
-        model = cls()
-        model.__dict__.update(model_data)
+        model = cls(config, model_data)
         return model
 
     @classmethod
@@ -321,7 +325,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
 class CumlLogisticRegression(ClassifierModel):
     """Cuml Logistic Regression"""
     
-    def __init__(self, config, model):
+    def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
         
@@ -336,7 +340,7 @@ class CumlLogisticRegression(ClassifierModel):
             pickle.dump(self.model, fout)
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir, config):
         """Load a saved sklearn Logistic Regression model from disk.
 
         Args:
@@ -352,8 +356,7 @@ class CumlLogisticRegression(ClassifierModel):
         
         with open(classifier_path, 'rb') as fin:
             model_data = pickle.load(fin)
-        model = cls()
-        model.__dict__.update(model_data)
+        model = cls(config, model_data)
         return model
 
     @classmethod

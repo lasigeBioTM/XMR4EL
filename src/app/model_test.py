@@ -1,10 +1,12 @@
 from typing import Counter
+from src.models.cluster_wrapper.clustering_model import ClusteringModel
 from src.xmr.xmr_tree import XMRTree
 
-htree = XMRTree.load()
+xtree = XMRTree.load()
 
-labels_3_3 = htree.children[3].clustering_model.model.labels_
+# clustering_config = {'type': 'sklearnkmeans', 'kwargs': {}}
+# clustering_config['kwargs'] = xtree.clustering_model.config
 
-print(Counter(labels_3_3))
+# xtree.clustering_model = ClusteringModel(clustering_config, xtree.clustering_model)
 
-print(htree)
+# xtree.save("data/saved_trees")

@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 
 from typing import Counter
@@ -14,6 +16,10 @@ from src.models.cluster_wrapper.clustering_model import ClusteringModel
 
 from src.xmr.xmr_tuner import XMRTuner
 from src.xmr.xmr_tree import XMRTree
+
+
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class XMRPipeline():
@@ -108,7 +114,7 @@ class XMRPipeline():
         return ClassifierModel.train(X_corpus, y_corpus, config, dtype)
     
     @staticmethod
-    def __predict_classifier(classifier_model, data_points):
+    def __predict_proba_classifier(classifier_model, data_points):
         """
             Predicts what label it will correspond with the use of the 
             classifier model.
@@ -120,7 +126,7 @@ class XMRPipeline():
             predicted_label (): Predicted Label       
         """
         
-        return classifier_model.predict(data_points)
+        return classifier_model.predict_proba(data_points)
     
     # Tested, Working
     @classmethod
@@ -148,9 +154,10 @@ class XMRPipeline():
             text_emb, 
             clustering_config, 
             dtype
-            ).model # Returns the Model (SKlearnKmeans)
+            )# Returns the Model (ClusteringModel)
         
-        cluster_labels = clustering_model.model.labels_
+        # Changed this
+        cluster_labels = clustering_model.model.labels()
         
         if min(Counter(cluster_labels).values()) <= min_leaf_size:
             return htree
@@ -183,10 +190,9 @@ class XMRPipeline():
     @classmethod
     def __execute_second_pipeline(cls, 
                                  htree, 
-                                 transformer_config,
                                  classifier_config,
-                                 initial_text_embeddings,
-                                 trn_corpus, # Not yet vectorizer,
+                                 initial_text_emb,
+                                 initial_transformer_emb,
                                  n_features, 
                                  dtype=np.float32
                                  ):
@@ -210,43 +216,34 @@ class XMRPipeline():
         
         """Initializing the htree attributes"""
         text_emb = htree.text_embeddings
-        cluster_labels = htree.clustering_model.model.labels_
+        cluster_labels = htree.clustering_model.labels()
+
+        """Initialize a list for indexes of the embeddings"""
+        match_idx = []
 
         """Check depth because the depth 0, has all the text embeddings (root)"""
         if htree.depth > 0:
-            # Create a dictionary to store the initial_text_embeddings by hash (tuple)
-            embedding_dict = {tuple(initial_emb): idx for idx, initial_emb in enumerate(initial_text_embeddings)}
-
-            # Initialize input_text as an empty list
-            input_text = []
+            # Create a dictionary mapping text embeddings to indices
+            embedding_dict = {tuple(initial_emb): idx for idx, initial_emb in enumerate(initial_text_emb)}
 
             # Iterate over each embedding in text_emb and find its exact match in embedding_dict
             for emb in text_emb:
                 emb_tuple = tuple(emb)  # Convert the embedding to a tuple for hashing
-                match_idx = embedding_dict.get(emb_tuple)  # Get the index of the matching embedding
-
-                # If a match is found, add the corresponding text to input_text
-                if match_idx is not None:
-                    input_text.append(trn_corpus[match_idx])
-
+                matched_idx = embedding_dict.get(emb_tuple)  # Get the index of the matching embedding
+                if matched_idx is not None:
+                    match_idx.append(matched_idx)
+                    
         else:
-            input_text = trn_corpus
-        
-        """Predict embeddings using Transformer"""
-        transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
-        transformer_emb = transformer_model.embeddings
-        del transformer_model # Delete the model when no longer needed
-        
-        """Reduce the dimension of the transformer to the dimension of the vectorizer"""
-        transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
-        
-        """Normalize the transformer embeddings"""
-        transformer_emb = normalize(transformer_emb, norm='l2', axis=1) 
+            # Depth 0, root: Include all indices from the initial embeddings
+            match_idx = list(range(len(initial_text_emb)))
             
+        partial_transformer_emb = initial_transformer_emb[match_idx]
+        partial_text_emb = initial_text_emb[match_idx]
+        
         """Concatenates the transformer embeddings with the text embeddings"""
-        concantenated_array = np.hstack((transformer_emb, text_emb))
+        concantenated_array = np.hstack((partial_transformer_emb, partial_text_emb))
             
-        htree.set_transformer_embeddings(transformer_emb)
+        htree.set_transformer_embeddings(partial_transformer_emb)
         htree.set_concatenated_embeddings(concantenated_array)
 
         """Train the classifier with the concatenated embeddings with cluster labels"""
@@ -274,10 +271,9 @@ class XMRPipeline():
         for children_htree in htree.children.values():
             
             cls.__execute_second_pipeline(children_htree, 
-                                           transformer_config,
                                            classifier_config,
-                                           initial_text_embeddings, 
-                                           trn_corpus,
+                                           initial_text_emb,
+                                           initial_transformer_emb, 
                                            n_features,
                                            dtype
                                            )
@@ -322,6 +318,7 @@ class XMRPipeline():
 
         """Saving the vectorizer"""
         htree.set_vectorizer(vectorizer_model)
+        del vectorizer_model
         
         """Normalize the text embeddings"""
         text_emb = text_emb.toarray()
@@ -331,20 +328,30 @@ class XMRPipeline():
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
         
+        """Predict embeddings using Transformer"""
+        transformer_model = cls.__predict_transformer(trn_corpus, transformer_config, dtype)
+        transformer_emb = transformer_model.embeddings
+        del transformer_model # Delete the model when no longer needed
+        
+        """Reduce the dimension of the transformer to the dimension of the vectorizer"""
+        transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
+        
+        """Normalize the transformer embeddings"""
+        transformer_emb = normalize(transformer_emb, norm='l2', axis=1) 
+        
         """Executing the second pipeline, Training the classifiers"""
-        cls.__execute_second_pipeline(htree, 
-                                       transformer_config, 
-                                       classifier_config, 
-                                       text_emb,
-                                       trn_corpus, 
-                                       n_features, 
-                                       dtype
-                                       )
+        cls.__execute_second_pipeline(htree,  
+                                      classifier_config, 
+                                      text_emb,
+                                      transformer_emb,
+                                      n_features, 
+                                      dtype
+                                      )
         
         return htree
     
     @classmethod
-    def __inference_predict_input(cls, htree, conc_input):
+    def __inference_predict_input(cls, htree, conc_input, k):
         """Inference of an single concatenated text throw out the tree
         
         Args:
@@ -359,27 +366,41 @@ class XMRPipeline():
         
         while True:
             current_classifier = current_htree.classifier_model
-            predicted_label = cls.__predict_classifier(current_classifier, conc_input)
-            predicted_label = int(predicted_label[0])
-            predicted_labels.append(predicted_label)
             
-            if predicted_label in current_htree.children:
-                current_htree = htree.children[predicted_label]
+            n_labels = len(current_htree.clustering_model.labels())            
+                        
+            if n_labels <  k:
+                k = n_labels
+                LOGGER.warning("Children number is '< k', k value will be the number of children")
+            
+            # Get top-k predictions from the classifier model
+            top_k_probs = cls.__predict_proba_classifier(current_classifier, conc_input.reshape(1, -1))[0]
+            top_k_indices = np.argsort(top_k_probs)[-k:][::-1]  # Sort probabilities and get top-k indices
+            top_k_labels = top_k_indices[:k]
+            
+            predicted_labels.append(top_k_labels.tolist())
+            
+            # Move to the best child node if possible
+            best_label = top_k_labels[0]  # Select the label with the highest probability
+            
+            if best_label in current_htree.children:
+                current_htree = current_htree.children[best_label]
             else:
-                break # Stop if there are no more children
-            
+                break  # Stop if there are no more children
+
         return predicted_labels
             
         
     @classmethod
-    def inference(cls, htree, input_text, transformer_config, n_features, dtype=np.float32):
+    def inference(cls, htree, input_text, transformer_config, n_features, k=3, dtype=np.float32):
         """Inference to know which cluster doest the inputs or input
         
         Args:
             htree (XMRTree): Trained tree
             input_text (lst): Text to be predicted by the classifiers
             transfomrer_config (config): Configuration to run a transformer
-            n_featres (int): Number of features that the new embeddings should have n_features + n_features
+            n_features (int): Number of features that the new embeddings should have n_features + n_features
+            k (int): Number of predictions to make 
             dtype (np.dtype): type of the embeddings
             
         Return:
@@ -388,12 +409,8 @@ class XMRPipeline():
         
         vectorizer = htree.vectorizer
         
-        print(vectorizer.model.model.vocabulary_)
-        
         """Predict Embeddings using stored vectorizer"""
         text_emb = cls.__predict_vectorizer(vectorizer, input_text)
-        
-        print(text_emb)
         
         text_emb = text_emb.toarray()
         
@@ -422,7 +439,32 @@ class XMRPipeline():
         concantenated_array = np.hstack((transformer_emb, text_emb))
         
         # Predict labels for each concatenated input
-        predicted_labels = [cls.__inference_predict_input(htree, conc_input.reshape(1, -1)) for conc_input in concantenated_array]
+        predicted_labels = [cls.__inference_predict_input(htree, conc_input.reshape(1, -1), k=k) for conc_input in concantenated_array]
         
         return predicted_labels
+    
+    def compute_top_k_accuracy(true_labels, predicted_labels, k=5):
+        """
+        Compute the top-k accuracy for a set of predictions.
+
+        Args:
+            true_labels (list): List of true labels (ground truth) for each sample.
+            predicted_labels (list): List of top-k predicted labels (for each sample).
+            k (int): The number of top predictions to consider.
+
+        Returns:
+            float: The top-k accuracy score.
+        """
+        correct_predictions = 0
+        total_samples = len(true_labels)
+
+        # Iterate over each sample
+        for true_label, pred_labels in zip(true_labels, predicted_labels):
+            # Check if the true label is within the top-k predicted labels
+            if true_label in pred_labels[:k]:
+                correct_predictions += 1
+
+        # Calculate top-k accuracy
+        top_k_accuracy = correct_predictions / total_samples
+        return top_k_accuracy
     

@@ -79,11 +79,11 @@ class ClusteringModel(metaclass=ClusterMeta):
         else:
             with open(config_path, "r", encoding="utf-8") as fin:
                 config = json.loads(fin.read())
-                
+        
         cluster_type = config.get("type", None)
         assert cluster_type is not None, f"{clustering_folder} is not a valid clustering folder"
         assert cluster_type in cluster_dict, f"invalid cluster type {config['type']}"
-        model = cluster_dict[cluster_type].load(clustering_folder)
+        model = cluster_dict[cluster_type].load(clustering_folder, config['kwargs'])
         return cls(config, model)
     
     @classmethod
@@ -112,6 +112,9 @@ class ClusteringModel(metaclass=ClusterMeta):
         )
         config['kwargs'] = model.config
         return cls(config, model)
+    
+    def labels(self):
+        return self.model.labels()
     
     @staticmethod
     def load_config_from_args(args):
@@ -165,7 +168,7 @@ class SklearnAgglomerativeClustering(ClusteringModel):
             pickle.dump(self.model, fout)
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir, config):
         """Load a saved sklearn Agglomerative Clustering model from disk.
 
         Args:
@@ -181,8 +184,7 @@ class SklearnAgglomerativeClustering(ClusteringModel):
         
         with open(clustering_path, 'rb') as fin:
             model_data = pickle.load(fin)
-        model = cls()
-        model.__dict__.update(model_data)
+        model = cls(config, model_data)
         return model
 
     @classmethod
@@ -221,13 +223,16 @@ class SklearnAgglomerativeClustering(ClusteringModel):
         model = cls.force_multi_core_processing_clustering_models(model, trn_corpus)
         return cls(config, model)
     
+    def labels(self):
+        return self.model.labels_
+    
     def get_params(self):
         return self.model.get_params()
     
 class SklearnKMeans(ClusteringModel):
     """Simple KMeans"""
     
-    def __init__(self, config, model):
+    def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
         
@@ -242,7 +247,7 @@ class SklearnKMeans(ClusteringModel):
             pickle.dump(self.model, fout)
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir, config):
         """Load a saved sklearn KMeans model from disk.
 
         Args:
@@ -258,8 +263,7 @@ class SklearnKMeans(ClusteringModel):
         
         with open(clustering_path, 'rb') as fin:
             model_data = pickle.load(fin)
-        model = cls()
-        model.__dict__.update(model_data)
+        model = cls(config, model_data)
         return model
 
     @classmethod
@@ -312,12 +316,15 @@ class SklearnKMeans(ClusteringModel):
     
     def get_params(self):
         return self.model.get_params()
+    
+    def labels(self):
+        return self.model.labels_
 
 
 class SklearnMiniBatchKMeans(ClusteringModel):
     """MiniBatchKmeans, Batching KMeans"""
     
-    def __init__(self, config, model):
+    def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
         
@@ -332,7 +339,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
             pickle.dump(self.model, fout)
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir, config):
         """Load a saved sklearn MiniBatchKMeans model from disk.
 
         Args:
@@ -348,8 +355,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
         
         with open(clustering_path, 'rb') as fin:
             model_data = pickle.load(fin)
-        model = cls()
-        model.__dict__.update(model_data)
+        model = cls(config, model_data)
         return model
 
     @classmethod
@@ -412,11 +418,14 @@ class SklearnMiniBatchKMeans(ClusteringModel):
     
     def get_params(self):
         return self.model.get_params()
+
+    def labels(self):
+        return self.model.labels_
     
 class CumlKMeans(ClusteringModel):
     """Cuml KMeans with gpu support"""
     
-    def __init__(self, config, model):
+    def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
         
@@ -431,7 +440,7 @@ class CumlKMeans(ClusteringModel):
             pickle.dump(self.model, fout)
     
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir, config):
         """Load a saved Cuml KMeans model from disk.
 
         Args:
@@ -447,8 +456,7 @@ class CumlKMeans(ClusteringModel):
         
         with open(clustering_path, 'rb') as fin:
             model_data = pickle.load(fin)
-        model = cls()
-        model.__dict__.update(model_data)
+        model = cls(config, model_data)
         return model
 
     @classmethod
@@ -501,3 +509,6 @@ class CumlKMeans(ClusteringModel):
             numpy.ndarray: Matrix of features.
         """
         return self.model.predict(predict_input)
+
+    def labels(self):
+        return self.model.labels_

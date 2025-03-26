@@ -120,6 +120,9 @@ class Transformer(metaclass=TransformersMeta):
         )
         config["kwargs"] = model.config
         return cls(config, model)
+    
+    def embeddings(self):
+        return self.model.embeddings()
 
     @staticmethod
     def load_config_from_args(args):
@@ -249,6 +252,9 @@ class BioBert(Transformer):
             embeddings = cls.__predict_cpu(trn_corpus=trn_corpus, dtype=dtype, **config)
         
         return cls(config, embeddings=embeddings)
+    
+    def embeddings(self):
+        return self.embeddings
     
     @classmethod
     def __export_to_onnx(cls, directory):
