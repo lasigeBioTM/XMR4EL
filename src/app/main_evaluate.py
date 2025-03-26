@@ -32,7 +32,7 @@ def main():
     with open(file_test_input, "r") as file:
         unique_names = set(file.read().splitlines())
         
-    name_list = list(unique_names)
+    name_list = sorted(unique_names)
     
     xtree = XMRTree.load()
     
@@ -45,16 +45,6 @@ def main():
     end = time.time()
     
     print(f"{end - start} secs of running")
-    
-
-def save_predicted_labels(predicted_labels, filename="predicted_labels.txt"):
-    with open(filename, "w") as file:
-        for labels in predicted_labels:
-            if isinstance(labels, list):  # If nested list, join with commas
-                file.write(",".join(map(str, labels)) + "\n")
-            else:
-                file.write(str(labels) + "\n")
-    print(f"Predicted labels saved to {filename}")
 
 if __name__ == "__main__":
     main()

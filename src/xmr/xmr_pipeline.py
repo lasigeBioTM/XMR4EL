@@ -345,7 +345,15 @@ class XMRPipeline():
     
     @classmethod
     def __inference_predict_input(cls, htree, conc_input):
+        """Inference of an single concatenated text throw out the tree
         
+        Args:
+            htree (XMRTree): Trained tree
+            conc_input (np.array): Concatenated text embeddings and transformer embeddings
+            
+        Return:
+            predicted_labels (lst): Predicted labels
+        """
         current_htree = htree
         predicted_labels = []
         
@@ -365,24 +373,39 @@ class XMRPipeline():
         
     @classmethod
     def inference(cls, htree, input_text, transformer_config, n_features, dtype=np.float32):
-        """Inference to know which cluster doest the inputs or input"""
+        """Inference to know which cluster doest the inputs or input
+        
+        Args:
+            htree (XMRTree): Trained tree
+            input_text (lst): Text to be predicted by the classifiers
+            transfomrer_config (config): Configuration to run a transformer
+            n_featres (int): Number of features that the new embeddings should have n_features + n_features
+            dtype (np.dtype): type of the embeddings
+            
+        Return:
+            predicted_labels: The predicted_labels by the classifier
+        """
         
         vectorizer = htree.vectorizer
         
+        print(vectorizer.model.model.vocabulary_)
+        
         """Predict Embeddings using stored vectorizer"""
         text_emb = cls.__predict_vectorizer(vectorizer, input_text)
-        text_emb = text_emb.toarray()
         
         print(text_emb)
+        
+        text_emb = text_emb.toarray()
+        
+        # print(text_emb)
         
         """Reduce Dimensions"""
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         
+        # print(text_emb)
+        
         """Normalizing"""
         text_emb = normalize(text_emb, norm='l2', axis=1) 
-        
-        
-        exit()
         
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(input_text, transformer_config, dtype).model
@@ -402,10 +425,4 @@ class XMRPipeline():
         predicted_labels = [cls.__inference_predict_input(htree, conc_input.reshape(1, -1)) for conc_input in concantenated_array]
         
         return predicted_labels
-
-            
-        
-        
-    
-        
     
