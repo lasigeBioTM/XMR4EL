@@ -159,9 +159,10 @@ class XMRPipeline():
         # Changed this
         cluster_labels = clustering_model.model.labels()
         
-        if min(Counter(cluster_labels).values()) <= min_leaf_size:
+        if len(set(cluster_labels)) <= 1 or min(Counter(cluster_labels).values()) <= min_leaf_size:
+            print("Skipping due to insufficient clusters or leaf size constraint.")
             return htree
-        
+                
         """Saving the model in the tree"""
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(text_emb)
