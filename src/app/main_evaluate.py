@@ -37,9 +37,11 @@ def main():
     
     xtree = XMRTree.load()
     
-    predicted_labels = XMRPipeline.inference(xtree, name_list[0:50], transformer_config, n_features, k=k)
     
-    print(predicted_labels)
+    
+    # predicted_labels = XMRPipeline.inference(xtree, name_list[0:50], transformer_config, n_features, k=k)
+    
+    # print(predicted_labels)
     
     # Para gerar ground truth o modelo tem ver o test data, tem de ser processado um novo modelo
     

@@ -38,6 +38,17 @@ def main():
     
     trn_corpus = Preprocessor.load_data_from_file(train_filepath=training_file)
     
+    file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
+    
+    # Read the file and extract unique names
+    with open(file_test_input, "r") as file:
+        unique_names = set(file.read().splitlines())
+        
+    name_list = sorted(unique_names)
+    
+    for name in name_list:
+        trn_corpus.append(name)
+    
     htree = XMRPipeline.execute_pipeline(trn_corpus,
                                          vectorizer_config,
                                          transformer_config,

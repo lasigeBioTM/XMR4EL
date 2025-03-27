@@ -99,7 +99,7 @@ class XMRTree():
         LOGGER.info(f"Model saved successfully at {save_dir}")
     
     @classmethod
-    def load(cls, load_dir=None):
+    def load(cls, load_dir=None, child_tree=False):
         """Load a saved XMRTree model from disk.
 
         Args:
@@ -128,9 +128,12 @@ class XMRTree():
         model.__dict__.update(model_data)
 
         # Load models separately
-        setattr(model, "vectorizer", Vectorizer.load(os.path.join(load_dir, "vectorizer")))
-        setattr(model, "clustering_model", ClusteringModel.load(os.path.join(load_dir, "clustering_model")))
-        setattr(model, "classifier", ClassifierModel.load(os.path.join(load_dir, "classifier_model")))
+        if not child_tree:
+            setattr(model, "vectorizer", Vectorizer.load(os.path.join(load_dir, "vectorizer")))
+                    
+        setattr(model, "clustering_model", ClusteringModel.load(os.path.join(load_dir, "clustering_model")))        
+        setattr(model, "classifier_model", ClassifierModel.load(os.path.join(load_dir, "classifier_model")))
+        
 
         # Load embeddings separately if they exist
         for attr in ["text_embeddings", "transformer_embeddings", "concatenated_embeddings"]:
@@ -155,7 +158,7 @@ class XMRTree():
                         continue  # Ignore folders that don't match 'child_X' format
                     
                     LOGGER.debug(f"Loading child tree from {child_tree_path} as index {child_index}")
-                    child_model = cls.load(child_tree_path)  # Recursively load child
+                    child_model = cls.load(child_tree_path, child_tree=True)  # Recursively load child
                     model.children[child_index] = child_model
 
         LOGGER.info(f"Model loaded successfully from {load_dir}")
