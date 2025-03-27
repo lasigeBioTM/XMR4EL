@@ -56,12 +56,6 @@ def main():
     save_dir = "/xmr4el/data/saved_trees"  # Ensure this path is correct and writable
     htree.save(save_dir)
     
-    # Load the tree from the saved directory
-    htree = XMRTree.load(save_dir)
-    
-    # Print the loaded tree structure
-    print(htree)
-    
     end = time.time()
     print(f"{end - start} secs of running")
 
