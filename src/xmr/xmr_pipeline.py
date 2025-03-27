@@ -159,10 +159,16 @@ class XMRPipeline():
         # Changed this
         cluster_labels = clustering_model.model.labels()
         
-        if len(set(cluster_labels)) <= 1 or min(Counter(cluster_labels).values()) <= min_leaf_size:
-            print("Skipping due to insufficient clusters or leaf size constraint.")
-            return htree
+        if len(set(cluster_labels)) <= 1:
+            print("Skipping: Only one cluster formed.")
+            return htree  # Stop early
+
+        if min(Counter(cluster_labels).values()) <= min_leaf_size:
+            print("Skipping: Cluster size is too small.")
+            return htree  # Stop early
                 
+        print(Counter(cluster_labels))
+        
         """Saving the model in the tree"""
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(text_emb)
@@ -328,6 +334,8 @@ class XMRPipeline():
         
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
+        
+        exit()
         
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(trn_corpus, transformer_config, dtype)
