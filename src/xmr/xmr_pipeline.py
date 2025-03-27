@@ -335,8 +335,6 @@ class XMRPipeline():
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(htree, text_emb, clustering_config, min_leaf_size, depth, dtype)
         
-        exit()
-        
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(trn_corpus, transformer_config, dtype)
         transformer_emb = transformer_model.embeddings()
