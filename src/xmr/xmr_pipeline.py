@@ -330,7 +330,7 @@ class XMRPipeline():
         
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(trn_corpus, transformer_config, dtype)
-        transformer_emb = transformer_model.embeddings
+        transformer_emb = transformer_model.embeddings()
         del transformer_model # Delete the model when no longer needed
         
         """Reduce the dimension of the transformer to the dimension of the vectorizer"""
