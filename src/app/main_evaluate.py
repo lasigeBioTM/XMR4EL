@@ -37,7 +37,7 @@ def main():
     
     xtree = XMRTree.load()
     
-    
+    """XMRTREE, 27-03, 10-25-01, Training with only training data"""
     
     # predicted_labels = XMRPipeline.inference(xtree, name_list[0:50], transformer_config, n_features, k=k)
     

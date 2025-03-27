@@ -27,17 +27,30 @@ class XMRTuner():
                 }, 
                 dtype=dtype
             ).model.model
-            labels = model.labels_            
+            labels = model.labels_ 
+            
+            num_clusters = len(set(labels))  # Count unique clusters
+            
+            if num_clusters <= 1:  # Clustering failed or resulted in only 1 cluster
+                print(f"Warning: Only {num_clusters} clusters found for k={k}, skipping...")
+                return k, np.inf, 0, np.inf  # Return bad scores
             
             inertia = model.inertia_
-            sil_score = silhouette_score(trn_corpus, labels, metric='cosine', random_state=0) if k > 1 else 0
-            db_score = davies_bouldin_score(trn_corpus, labels) if k > 1 else np.inf
+            sil_score = silhouette_score(trn_corpus, labels, metric='cosine', random_state=0) if num_clusters > 1 else 0
+            db_score = davies_bouldin_score(trn_corpus, labels) if num_clusters > 1 else np.inf
         
             return k, inertia, sil_score, db_score
         
-        results = Parallel(n_jobs=-1)(delayed(evaluate_k)(k) for k in range(k_range[0], k_range[1] + 1))
-            
-        # Extract results
+        results = Parallel(n_jobs=-1)(
+            delayed(evaluate_k)(k) for k in range(k_range[0], k_range[1] + 1)
+        )
+
+        # Extract valid results (filter out np.inf)
+        results = [res for res in results if res[1] != np.inf]
+        if not results:  # If all k values failed, return default
+            print("No valid clustering found, returning k=2")
+            return 2, np.zeros(len(k_range))  # Default k
+        
         ks, inertia_scores, silhouette_scores, davies_bouldin_scores = zip(*results)
         inertia_scores, silhouette_scores, davies_bouldin_scores = map(np.array, 
             [inertia_scores, silhouette_scores, davies_bouldin_scores])
