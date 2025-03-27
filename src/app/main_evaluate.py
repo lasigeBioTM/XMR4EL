@@ -35,17 +35,29 @@ def main():
         
     name_list = sorted(unique_names)
     
-    xtree = XMRTree.load()
+    # embeddings tfdif -> clustering
+    # transformer emb +  embeddings tfit -> classifier
+    
+    # train_disease_100
+    trained_xtree = XMRTree.load("data/saved_trees/XMRTree_2025-03-27_11-30-24-TRAIN_DATA")
+    
+    # train_disease_100 + test_data == true_labels
+    test_xtree = XMRTree.load("data/saved_trees/XMRTree_2025-03-27_11-39-26-TEST-DATA")
     
     """XMRTREE, 27-03, 10-25-01, Training with only training data"""
     
-    # predicted_labels = XMRPipeline.inference(xtree, name_list[0:50], transformer_config, n_features, k=k)
+    true_labels = XMRPipeline.inference(test_xtree, name_list, transformer_config, n_features, k=1)
+    true_labels = XMRPipeline.format_true_labels(true_labels)
     
-    # print(predicted_labels)
+    print(true_labels)
     
-    # Para gerar ground truth o modelo tem ver o test data, tem de ser processado um novo modelo
+    predicted_labels = XMRPipeline.inference(trained_xtree, name_list, transformer_config, n_features, k=1)
     
-    # save_predicted_labels(predicted_labels, filename="predicted_labels.txt")
+    print(predicted_labels)
+    
+    top_k_scores = XMRPipeline.compute_top_k_accuracy(true_labels, predicted_labels, k=k)
+    
+    print(top_k_scores)
     
     end = time.time()
     

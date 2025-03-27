@@ -145,7 +145,7 @@ class XMRPipeline():
             return htree
         
         """Evaluating best K according to elbow method, and some more weighted statistics"""
-        k_range = (2, 6) # Hardcode for now
+        k_range = (2, 6) # Hardcode for now MUDAR PARA (5, 16) ter pelo menos 5 clusters
         k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range)
         clustering_config['kwargs']['n_clusters'] = k
         
@@ -396,7 +396,6 @@ class XMRPipeline():
                 break  # Stop if there are no more children
 
         return predicted_labels
-            
         
     @classmethod
     def inference(cls, htree, input_text, transformer_config, n_features, k=3, dtype=np.float32):
@@ -450,28 +449,37 @@ class XMRPipeline():
         
         return predicted_labels
     
-    def compute_top_k_accuracy(true_labels, predicted_labels, k=5):
+    def format_true_labels(true_labels):
         """
-        Compute the top-k accuracy for a set of predictions.
-
+        Formats true labels
+        
         Args:
-            true_labels (list): List of true labels (ground truth) for each sample.
-            predicted_labels (list): List of top-k predicted labels (for each sample).
-            k (int): The number of top predictions to consider.
-
+            true_labels (list): The list of true labels, potentially nested.
         Returns:
-            float: The top-k accuracy score.
+            list: A correctly formatted list of true labels.
         """
-        correct_predictions = 0
-        total_samples = len(true_labels)
-
-        # Iterate over each sample
-        for true_label, pred_labels in zip(true_labels, predicted_labels):
-            # Check if the true label is within the top-k predicted labels
-            if true_label in pred_labels[:k]:
-                correct_predictions += 1
-
-        # Calculate top-k accuracy
-        top_k_accuracy = correct_predictions / total_samples
-        return top_k_accuracy
+        return [[item for sublist in group for item in sublist] for group in true_labels]# Flatten list
+    
+    def compute_top_k_accuracy(ground_truth, predictions, k=1):
+        """
+        Compute top-k accuracy.
+        
+        :param ground_truth: List of true labels, e.g., [[3, 0], [3, 0], [2, 1]]
+        :param predictions: List of predicted top-k lists, e.g., [[[2, 3, 0], [0, 1, 2]], ...]
+        :param k: Top-k value to consider
+        :return: Accuracy score (percentage of correct predictions)
+        """
+        correct = 0
+        total = len(ground_truth)
+        
+        for gt_labels, pred_k in zip(ground_truth, predictions):
+            # Flatten predicted top-k lists
+            pred_flat = [label for sublist in pred_k for label in sublist]
+            top_k_preds = set(pred_flat[:k])  # Take only top-k
+            
+            # Check if at least one ground truth label is in top-k predictions
+            if any(gt in top_k_preds for gt in gt_labels):
+                correct += 1
+        
+        return correct / total
     

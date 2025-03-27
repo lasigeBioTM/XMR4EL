@@ -1,0 +1,6 @@
+.DS_store
+
+# Cache Folders
+__pycache__/
+/.venv
+*.pyc
