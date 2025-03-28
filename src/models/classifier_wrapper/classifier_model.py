@@ -11,6 +11,7 @@ import numpy as np
 from abc import ABCMeta
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 
 from src.gpu_availability import is_cuda_available
 
@@ -339,7 +340,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
 
         try:
             config = {**defaults, **config}
-            model = LogisticRegression(**config)
+            model = RandomForestClassifier(**config)
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnAgglomerativeClustering"
