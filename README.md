@@ -1,6 +1,6 @@
 ## eXtreme Multi-Label Ranking for Entity Linking - XMR4EL
 
-Following PECOS(https://github.com/amzn/pecos/tree/mainline) pipeline, this project tries to implement any kind of model into it. 
+Following PECOS (https://github.com/amzn/pecos/tree/mainline) pipeline, this project tries to implement any kind of model into it. 
 
 With the use of an Hierarchical Tree, we can try different options of vectorizers, transformers, clustering and classifier models to test our data.
 
