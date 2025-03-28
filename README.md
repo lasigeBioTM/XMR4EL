@@ -1,23 +1,23 @@
-Para dar setup no python3.11.10
+## eXtreme Multi-Label Ranking for Entity Linking - XMR4EL
 
-apt-get update && apt-get install -y software-properties-common
-add-apt-repository ppa:deadsnakes/ppa
-apt-get update
+Following PECOS(https://github.com/amzn/pecos/tree/mainline) pipeline, this project tries to implement any kind of model into it. 
 
-apt install python3.11 -y
+With the use of an Hierarchical Tree, we can try different options of vectorizers, transformers, clustering and classifier models to test our data.
 
-apt-get install -y python3.11-venv python3.11-dev
+Even thou this project has as main vision the use of it in Entity Linking, it can be used with any data, that uses as tool eXtreme Multi-Label Ranking (XMR) to work.
 
-pip install --upgrade pip
+Paper: (Not made yet)
 
-NVIDIA DOCKER 
+### Requirements and Installation
 
-apt-get install nvidia-container-runtime
+* Python (3.12)
 
-pip install \
-    --extra-index-url=https://pypi.nvidia.com \
-    cudf-cu12==24.10.* dask-cudf-cu12==24.10.* cuml-cu12==24.10.* \
-    cugraph-cu12==24.10.* nx-cugraph-cu12==24.10.* cuspatial-cu12==24.10.* \
-    cuproj-cu12==24.10.* cuxfilter-cu12==24.10.* cucim-cu12==24.10.* \
-    pylibraft-cu12==24.10.* raft-dask-cu12==24.10.* cuvs-cu12==24.10.* \
-    nx-cugraph-cu12==24.10.*
+All the packages used are displayed in the requirements.txt.
+
+### CUDA Version
+
+* CUDA (11.4 - 11.8)
+
+Right now all the gpu models are from rapids.ai, and are tested in an docker enviroment, given in the dockerfile.
+
+
