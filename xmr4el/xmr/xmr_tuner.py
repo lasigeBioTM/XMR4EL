@@ -57,6 +57,11 @@ class XMRTuner:
 
             return k, inertia, sil_score, db_score
 
+        corpus_len = len(trn_corpus)
+
+        if k_range[1] > corpus_len:
+            k_range[1] = corpus_len
+            
         results = Parallel(n_jobs=-1)(
             delayed(evaluate_k)(k) for k in range(k_range[0], k_range[1] + 1)
         )
