@@ -180,6 +180,7 @@ class XMRPipeline:
             new_child_htree = cls.__execute_first_pipeline(
                 new_child_htree_instance,
                 text_points,
+                k_range,
                 clustering_config,
                 min_leaf_size,
                 depth - 1,

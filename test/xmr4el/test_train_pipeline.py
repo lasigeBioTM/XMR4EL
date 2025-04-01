@@ -58,9 +58,9 @@ def main():
         transformer_config,
         clustering_config,
         classifier_config,
-        n_features,  # Number of Features
-        min_leaf_size,
-        depth,
+        n_features=n_features,  # Number of Features
+        min_leaf_size=min_leaf_size,
+        depth=depth,
         k_range=(5, 16),
         dtype=np.float32,
     )
