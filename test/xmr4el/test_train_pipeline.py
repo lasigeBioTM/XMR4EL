@@ -1,6 +1,7 @@
 # import pytest  # noqa: F401; pylint: disable=unused-variable
 # from pytest import approx
 
+import os
 import time
 
 import numpy as np
@@ -23,7 +24,7 @@ from xmr4el.xmr.xmr_pipeline import XMRPipeline
 
 def main():
 
-    onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
+    onnx_directory = "test/test_data/processed/vectorizer/biobert_onnx_cpu.onnx"
 
     start = time.time()
 
@@ -47,22 +48,9 @@ def main():
     min_leaf_size = 10
     depth = 1
 
-    training_file = "data/train/disease/train_Disease_100.txt"
+    training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
 
     trn_corpus = Preprocessor.load_data_from_file(train_filepath=training_file)
-
-    """
-    file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
-    
-    # Read the file and extract unique names
-    with open(file_test_input, "r") as file:
-        unique_names = set(file.read().splitlines())
-        
-    name_list = sorted(unique_names)
-    
-    for name in name_list:
-        trn_corpus.append(name)
-    """
 
     htree = XMRPipeline.execute_pipeline(
         trn_corpus,
@@ -80,7 +68,7 @@ def main():
     print(htree)
 
     # Save the tree
-    save_dir = "/xmr4el/data/saved_trees"  # Ensure this path is correct and writable
+    save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable
     htree.save(save_dir)
 
     end = time.time()
