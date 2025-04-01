@@ -135,7 +135,7 @@ class XMRPipeline:
     # Tested, Working
     @classmethod
     def __execute_first_pipeline(
-        cls, htree, text_emb, clustering_config, min_leaf_size, depth, dtype=np.float32
+        cls, htree, text_emb, k_range, clustering_config, min_leaf_size, depth, dtype=np.float32
     ):
         """Create an Tree Structure using the text embeddings"""
 
@@ -144,10 +144,6 @@ class XMRPipeline:
             return htree
 
         """Evaluating best K according to elbow method, and some more weighted statistics"""
-        k_range = (
-            2,
-            6,
-        )  # Hardcode for now MUDAR PARA (5, 16) ter pelo menos 5 clusters
         k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range)
         clustering_config["kwargs"]["n_clusters"] = k
 
@@ -308,6 +304,7 @@ class XMRPipeline:
         n_features,  # Number of Features
         min_leaf_size,
         depth,
+        k_range,
         dtype=np.float32,
     ):
         """Executes the full pipelin, tree initialization, and classifier training
@@ -346,7 +343,7 @@ class XMRPipeline:
 
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(
-            htree, text_emb, clustering_config, min_leaf_size, depth, dtype
+            htree, text_emb, k_range, clustering_config, min_leaf_size, depth, dtype
         )
 
         """Predict embeddings using Transformer"""

@@ -46,7 +46,7 @@ def main():
     }
 
     min_leaf_size = 10
-    depth = 1
+    depth = 3
 
     training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
 
@@ -61,6 +61,7 @@ def main():
         n_features,  # Number of Features
         min_leaf_size,
         depth,
+        k_range=(5, 16),
         dtype=np.float32,
     )
 
