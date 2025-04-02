@@ -1,1 +1,0 @@
-{"type": "sklearnminibatchkmeans", "kwargs": {"n_clusters": 2, "init": "k-means++", "max_iter": 300, "batch_size": 454, "verbose": 0, "compute_labels": true, "random_state": 0, "tol": 0.0, "max_no_improvement": 10, "init_size": null, "n_init": "auto", "reassignment_ratio": 0.01}}
