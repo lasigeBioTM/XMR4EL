@@ -59,9 +59,10 @@ def main():
         clustering_config,
         classifier_config,
         n_features=n_features,  # Number of Features
+        max_n_clusters=16,
+        min_n_clusters=6,
         min_leaf_size=min_leaf_size,
         depth=depth,
-        k_range=(5, 16),
         dtype=np.float32,
     )
 

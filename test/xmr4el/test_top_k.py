@@ -5,7 +5,7 @@ from sklearn.metrics import top_k_accuracy_score
 
 def main():
     # train_disease_100 + test_data == true_labels
-    test_xtree = XMRTree.load("test/test_data/saved_trees/XMRTree_2025-03-27_11-30-24-TRAIN_DATA")
+    test_xtree = XMRTree.load("test/test_data/saved_trees/XMRTree_2025-04-01_15-02-26")
     
     k = 3
     
@@ -30,8 +30,6 @@ def main():
         top_k_acc = top_k_accuracy_score(y_test, y_pred_proba, k=k)
         print(f"Top-{k} accuracy at depth {xtree.depth}: {top_k_acc}")
         
-        exit()
-        
         # If there are children, compute top-k accuracy for each child recursively
         if xtree.children:
             for child_key, child in xtree.children.items():
@@ -39,6 +37,8 @@ def main():
                 print(f"Top-{k} accuracy for child {child_key} at depth {child.depth}: {child_top_k_acc}")
         
         return top_k_acc
+    
+    print("\n\n\n\n\n",test_xtree)
     
     test_top_k(test_xtree, k=k)
 

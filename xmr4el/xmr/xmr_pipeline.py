@@ -134,9 +134,16 @@ class XMRPipeline:
 
     # Tested, Working
     @classmethod
-    def __execute_first_pipeline(
-        cls, htree, text_emb, k_range, clustering_config, min_leaf_size, depth, dtype=np.float32
-    ):
+    def __execute_first_pipeline(cls, 
+                                 htree, 
+                                 text_emb, 
+                                 clustering_config, 
+                                 max_n_clusters, 
+                                 min_n_clusters,
+                                 min_leaf_size, 
+                                 depth, 
+                                 dtype=np.float32
+                                 ):
         """Create an Tree Structure using the text embeddings"""
 
         """Check depth"""
@@ -144,26 +151,33 @@ class XMRPipeline:
             return htree
 
         """Evaluating best K according to elbow method, and some more weighted statistics"""
-        k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range)
-        clustering_config["kwargs"]["n_clusters"] = k
+        k_range = (min_n_clusters, max_n_clusters)
+        optimal_k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range)
+        n_clusters = optimal_k
+        clustering_config["kwargs"]["n_clusters"] = n_clusters
 
-        """Training Clustering Model"""
-        clustering_model = cls.__train_clustering(
-            text_emb, clustering_config, dtype
-        )  # Returns the Model (ClusteringModel)
+        while True:
+            """Training Clustering Model"""
+            clustering_model = cls.__train_clustering(
+                text_emb, clustering_config, dtype
+            )  # Returns the Model (ClusteringModel)
 
-        # Changed this
-        cluster_labels = clustering_model.model.labels()
+            # Changed this
+            cluster_labels = clustering_model.model.labels()
 
-        if len(set(cluster_labels)) <= 1:
-            print("Skipping: Only one cluster formed.")
-            return htree  # Stop early
+            """If clustering model has enough data points"""
+            if min(Counter(cluster_labels).values()) <= min_leaf_size:
+                LOGGER.warning("Skipping: Cluster size is too small.")
+                
+                if n_clusters == min_n_clusters:
+                    LOGGER.warning("Skipping: No more clusters to reduce.")
+                    return htree
+                
+                n_clusters -= 1
+                clustering_config["kwargs"]["n_clusters"] = n_clusters
+                continue
 
-        if min(Counter(cluster_labels).values()) <= min_leaf_size:
-            print("Skipping: Cluster size is too small.")
-            return htree  # Stop early
-
-        print(Counter(cluster_labels))
+            break # Valid clustering found, exit loop
 
         """Saving the model in the tree"""
         htree.set_clustering_model(clustering_model)
@@ -180,8 +194,9 @@ class XMRPipeline:
             new_child_htree = cls.__execute_first_pipeline(
                 new_child_htree_instance,
                 text_points,
-                k_range,
                 clustering_config,
+                max_n_clusters,
+                min_n_clusters,
                 min_leaf_size,
                 depth - 1,
                 dtype,
@@ -303,9 +318,10 @@ class XMRPipeline:
         clustering_config,
         classifier_config,
         n_features,  # Number of Features
+        max_n_clusters,
+        min_n_clusters,
         min_leaf_size,
         depth,
-        k_range,
         dtype=np.float32,
     ):
         """Executes the full pipelin, tree initialization, and classifier training
@@ -317,6 +333,8 @@ class XMRPipeline:
             clustering_config,
             classifier_config,
             n_features,
+            max_n_clusters,
+            min_n_clusters,
             min_leaf_size,
             depth,
             dtype
@@ -344,7 +362,7 @@ class XMRPipeline:
 
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(
-            htree, text_emb, k_range, clustering_config, min_leaf_size, depth, dtype
+            htree, text_emb, clustering_config, max_n_clusters, min_n_clusters, min_leaf_size, depth, dtype
         )
 
         """Predict embeddings using Transformer"""

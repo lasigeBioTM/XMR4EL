@@ -6,6 +6,7 @@ import glob
 import numpy as np
 
 from datetime import datetime
+from collections import Counter
 
 from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
@@ -232,14 +233,33 @@ class XMRTree:
     def is_leaf(self):
         return self.children is None
 
-    def __str__(self):
-        """String representation of XMRTree."""
-        return (
-            f"XMRTree(depth={self.depth}, "
-            f"num_children={len(self.children)}, "
-            f"clustering_model={type(self.clustering_model).__name__ if self.clustering_model else None}, "
-            f"classifier_model={type(self.classifier_model).__name__ if self.classifier_model else None}, "
-            f"text_embedding_shape={self.text_embeddings.shape if self.text_embeddings is not None else None}, "
-            f"transformer_embedding_shape={self.transformer_embeddings.shape if self.transformer_embeddings is not None else None}, "
-            f"concatenated_embedding_shape={self.concatenated_embeddings.shape if self.concatenated_embeddings is not None else None})"
-        )
+    def __str__(self, level=0):
+        """Recursively generates a string representation of the tree with all attribute states."""
+        indent = "  " * level  # Indentation for hierarchy visualization
+        """
+        attributes = {
+            "text_embeddings": self.text_embeddings is not None,
+            "transformer_embeddings": self.transformer_embeddings is not None,
+            "concatenated_embeddings": self.concatenated_embeddings is not None,
+            "vectorizer": self.vectorizer is not None,
+            "clustering_model": self.clustering_model is not None,
+            "classifier_model": self.classifier_model is not None,
+            "test_split": self.test_split is not None,
+        }
+        """
+
+        attributes = {
+            "labels": Counter(self.clustering_model.labels())
+        }
+
+        tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"
+
+        # Recursively add children
+        for key, child in self.children.items():
+            tree_str += f"{indent}  |- Child: {key}\n{child.__str__(level + 1)}"
+
+        return tree_str
+
+    def __repr__(self):
+        """Short representation for debugging."""
+        return f"XMRTree(depth={self.depth}, children={len(self.children)})"
