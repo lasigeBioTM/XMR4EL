@@ -1,4 +1,6 @@
 /data
+/test/test_data/saved_trees
+/test/test_data
 
 .DS_store
 
@@ -6,4 +8,5 @@
 __pycache__/
 /.venv
 *.pyc
+*.onnx
 
