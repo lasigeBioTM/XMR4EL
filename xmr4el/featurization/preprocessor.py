@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-import numpy as np
+from scipy.sparse import csr_matrix
 
 class Preprocessor:
     """Preprocess text to numerical values"""
@@ -47,7 +47,7 @@ class Preprocessor:
             label_filepath (str): Path to the labels data
 
         Returns:
-            corpus (dict): Dictionary with the lists of labels and corpus,
+            corpus (dict): Dictionary with an sparse matrix of labels and corpus,
             the corpus is a list of concatenated strings
         """
         
@@ -61,6 +61,6 @@ class Preprocessor:
         
         train_data = self.load_data_from_file(train_filepath)
         
-        return {'corpus': train_data, 'labels_matrix': np.array(labels_data)}
+        return {'corpus': train_data, 'labels_matrix': csr_matrix(labels_data)}
         
         
