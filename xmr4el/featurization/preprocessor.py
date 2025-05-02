@@ -61,6 +61,6 @@ class Preprocessor:
         
         train_data = self.load_data_from_file(train_filepath)
         
-        return {'corpus': train_data, 'labels_matrix': csr_matrix(labels_data)}
+        return {'corpus': train_data, 'labels_matrix': csr_matrix([labels_data])}
         
         
