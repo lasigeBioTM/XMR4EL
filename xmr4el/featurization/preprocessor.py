@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-
+import numpy as np
 
 class Preprocessor:
     """Preprocess text to numerical values"""
@@ -61,6 +61,6 @@ class Preprocessor:
         
         train_data = self.load_data_from_file(train_filepath)
         
-        return {'corpus': train_data, 'labels': labels_data}
+        return {'corpus': train_data, 'labels_matrix': np.array(labels_data)}
         
         
