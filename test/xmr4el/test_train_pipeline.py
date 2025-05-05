@@ -1,8 +1,6 @@
-# import pytest  # noqa: F401; pylint: disable=unused-variable
-# from pytest import approx
-
 import os
 import time
+import copy
 
 import numpy as np
 
@@ -49,11 +47,23 @@ def main():
     depth = 3
 
     training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
-
-    trn_corpus = Preprocessor.load_data_from_file(train_filepath=training_file)
+    labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
+    
+    train_data = Preprocessor().load_data_labels_from_file(
+        train_filepath=training_file,
+        labels_filepath=labels_file
+        )
+    
+    Y_train = train_data["labels_matrix"]
+    X_train = train_data["corpus"]
+    
+    label_enconder = train_data["label_encoder"]
+    
+    R_train = copy.deepcopy(Y_train)
 
     htree = XMRPipeline.execute_pipeline(
-        trn_corpus,
+        X_train,
+        Y_train,
         vectorizer_config,
         transformer_config,
         clustering_config,
@@ -76,6 +86,6 @@ def main():
     end = time.time()
     print(f"{end - start} secs of running")
 
-
+# Here is code
 if __name__ == "__main__":
     main()

@@ -313,6 +313,7 @@ class XMRPipeline:
     def execute_pipeline(
         cls,
         trn_corpus,
+        labels_matrix,
         vectorizer_config,
         transformer_config,
         clustering_config,
@@ -350,20 +351,29 @@ class XMRPipeline:
         """Text Vectorizer Embeddings"""
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
         text_emb = cls.__predict_vectorizer(vectorizer_model, trn_corpus)
-
-        """Saving the vectorizer"""
         htree.set_vectorizer(vectorizer_model)
-        del vectorizer_model
+        
+        """PIFA"""
+        labels_embeddings = labels_matrix.T @ text_emb
+
+        """Normalize PIFA embeddings"""
+        labels_embeddings = normalize(labels_embeddings, norm="l2", axis=1)
+        # print(text_emb, type(text_emb))
 
         """Normalize the text embeddings"""
-        text_emb = text_emb.toarray()
+        text_emb = text_emb.toarray() # Needed for PCA
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         text_emb = normalize(text_emb, norm="l2", axis=1)
 
+        """Combine the embeddings"""
+        combined_emb = np.hstack((text_emb, labels_embeddings.toarray()))
+        # final_embeddings = cls.__reduce_dimensionality(combined_emb, n_features)
+
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(
-            htree, text_emb, clustering_config, max_n_clusters, min_n_clusters, min_leaf_size, depth, dtype
+            htree, combined_emb, clustering_config, max_n_clusters, min_n_clusters, min_leaf_size, depth, dtype
         )
+        
 
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(
