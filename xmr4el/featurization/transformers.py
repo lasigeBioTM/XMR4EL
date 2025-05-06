@@ -264,8 +264,10 @@ class BioBert(Transformer):
 
         if gpu_availability:
             config.pop("onnx_directory", None)
+            LOGGER.info("Training on GPU")
             embeddings = cls.__predict_gpu(trn_corpus=trn_corpus, dtype=dtype, **config)
         else:
+            LOGGER.info("Training on CPU")
             embeddings = cls.__predict_cpu(trn_corpus=trn_corpus, dtype=dtype, **config)
 
         return cls(config, embeddings=embeddings)

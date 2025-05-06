@@ -26,7 +26,7 @@ def main():
 
     start = time.time()
 
-    n_features = 12
+    n_features = 500
 
     vectorizer_config = {"type": "tfidf", "kwargs": {"max_features": n_features}}
     
