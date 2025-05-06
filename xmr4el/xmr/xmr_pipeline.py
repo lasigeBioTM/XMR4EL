@@ -1,3 +1,4 @@
+import gc
 import logging
 
 import numpy as np
@@ -122,15 +123,34 @@ class XMRPipeline:
         """
         Predicts what label it will correspond with the use of the
         classifier model.
-
-        classifier_model (ClassifierModel): The Classifier Model
-        data_point (np.array or sparse matrix): Point to be predicted
+        
+        Args:
+            classifier_model: (ClassifierModel): The Classifier Model
+            data_point: (np.array or sparse matrix): Point to be predicted
 
         Return:
-        predicted_label (): Predicted Label
+            predicted_label (): Predicted Label
         """
 
         return classifier_model.predict_proba(data_points)
+
+    @staticmethod
+    def __compute_pifa(X_tfidf, Y_train):
+        """
+        Compute PIFA embeddings for labels.
+        
+        Args:
+            X_tfidf: (n_samples, tfidf_dim) Tfidf Matrix
+            Y_train: (n_samples, n_labels) Binary label matrix
+            
+        Return:
+            pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings
+        """
+        Y_train = Y_train.astype(np.float32)
+        pifa_embeddings = Y_train @ X_tfidf
+        labels_counts = Y_train.sum(axis=0)
+        pifa_embeddings = pifa_embeddings / labels_counts[:, None]
+        return pifa_embeddings
 
     # Tested, Working
     @classmethod
@@ -344,6 +364,8 @@ class XMRPipeline:
             htree: The tree stucture with the classifiers at each level
         """
 
+        gc.collect()
+        
         # Force garbage collection
         """Initializing tree structure"""
         htree = XMRTree(depth=0)
@@ -352,28 +374,30 @@ class XMRPipeline:
         vectorizer_model = cls.__train_vectorizer(trn_corpus, vectorizer_config, dtype)
         text_emb = cls.__predict_vectorizer(vectorizer_model, trn_corpus)
         htree.set_vectorizer(vectorizer_model)
-        
-        """PIFA"""
-        labels_embeddings = labels_matrix.T @ text_emb
 
-        """Normalize PIFA embeddings"""
-        labels_embeddings = normalize(labels_embeddings, norm="l2", axis=1)
-        # print(text_emb, type(text_emb))
-
-        """Normalize the text embeddings"""
+        """Normalize, reduce the text embeddings"""
         text_emb = text_emb.toarray() # Needed for PCA
-        text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         text_emb = normalize(text_emb, norm="l2", axis=1)
+        text_emb = cls.__reduce_dimensionality(text_emb, n_features)
+        
+        """Create, normalize and reduce the PIFA embeddings"""
+        pifa_emb = cls.__compute_pifa(text_emb, labels_matrix)
+        pifa_emb = pifa_emb.toarray()
+        pifa_emb = normalize(pifa_emb, norm="l2", axis=1)
+        pifa_emb = cls.__reduce_dimensionality(pifa_emb, n_features)
 
         """Combine the embeddings"""
-        combined_emb = np.hstack((text_emb, labels_embeddings.toarray()))
-        # final_embeddings = cls.__reduce_dimensionality(combined_emb, n_features)
+        combined_emb = np.hstack((text_emb, pifa_emb))
+        combined_emb = normalize(combined_emb, norm="l2", axis=1)
 
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(
             htree, combined_emb, clustering_config, max_n_clusters, min_n_clusters, min_leaf_size, depth, dtype
         )
         
+        # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF]
+        
+        """Normalizing and dimensionality ?"""
 
         """Predict embeddings using Transformer"""
         transformer_model = cls.__predict_transformer(
@@ -382,11 +406,11 @@ class XMRPipeline:
         transformer_emb = transformer_model.embeddings()
         del transformer_model  # Delete the model when no longer needed
 
-        """Reduce the dimension of the transformer to the dimension of the vectorizer"""
-        transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
-
         """Normalize the transformer embeddings"""
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
+
+        """Reduce the dimension of the transformer to the dimension of the vectorizer"""
+        transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
 
         """Executing the second pipeline, Training the classifiers"""
         cls.__execute_second_pipeline(

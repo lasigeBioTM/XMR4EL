@@ -53,6 +53,7 @@ nvidia-ml-py==12.570.86
 nvidia-nvcomp-cu11==4.2.0.11
 nvtx==0.2.11
 onnxruntime==1.21.0
+onnx==1.17.0
 packaging==24.2
 pandas==2.2.3
 partd==1.4.2
