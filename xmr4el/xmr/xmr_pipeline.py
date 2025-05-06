@@ -146,11 +146,13 @@ class XMRPipeline:
         Return:
             pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings
         """
-        Y_train = Y_train.astype(np.float32)
-        pifa_embeddings = Y_train @ X_tfidf
-        labels_counts = Y_train.sum(axis=0)
-        pifa_embeddings = pifa_embeddings / labels_counts[:, None]
-        return pifa_embeddings
+        labels_matrix = Y_train.tocsc()
+        pifa_emb = labels_matrix @ X_tfidf
+        
+        label_counts = np.array(labels_matrix.sum(axis=0)).flatten()  # (n_labels,)
+        label_counts = np.maximum(label_counts, 1.0)  # Prevent div/0
+        pifa_emb = pifa_emb / label_counts[:, None]  # Broadcasting
+        return pifa_emb
 
     # Tested, Working
     @classmethod
@@ -375,16 +377,17 @@ class XMRPipeline:
         text_emb = cls.__predict_vectorizer(vectorizer_model, trn_corpus)
         htree.set_vectorizer(vectorizer_model)
 
+        """Turn to an dense array"""
+        text_emb = text_emb.toarray() 
+
         """Create PIFA embeddings"""
         pifa_emb = cls.__compute_pifa(text_emb, labels_matrix)
 
         """Normalize, reduce the text embeddings"""
-        text_emb = text_emb.toarray() # Needed for PCA
         text_emb = normalize(text_emb, norm="l2", axis=1)
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         
-        """Normalize and reduce the PIFA embeddings"""
-        pifa_emb = pifa_emb.toarray()
+        """Normalize and reduce the PIFA embeddings, already an dense array"""
         pifa_emb = normalize(pifa_emb, norm="l2", axis=1)
         pifa_emb = cls.__reduce_dimensionality(pifa_emb, n_features)
 
