@@ -247,7 +247,8 @@ class XMRTree:
             "test_split": self.test_split is not None,
         }
         """
-
+        
+        print(self.depth)
         attributes = {
             "labels": Counter(self.clustering_model.labels())
         }
