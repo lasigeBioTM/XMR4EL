@@ -286,6 +286,10 @@ class XMRPipeline:
             # Depth 0, root: Include all indices from the initial embeddings
             match_idx = list(range(len(initial_text_emb)))
 
+        print(concantenated_array, type(concantenated_array))
+        print(partial_transformer_emb, type(partial_transformer_emb))
+        print(partial_text_emb, type(partial_text_emb))
+
         partial_transformer_emb = initial_transformer_emb[match_idx]
         partial_text_emb = initial_text_emb[match_idx]
 
