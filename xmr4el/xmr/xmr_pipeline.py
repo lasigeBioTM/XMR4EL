@@ -154,11 +154,19 @@ class XMRPipeline:
         pifa_emb = pifa_emb / label_counts[:, None]  # Broadcasting
         return pifa_emb
 
+    @staticmethod
+    def __slice_dict_embeddings(emb_dict, cluster, cluster_labels):
+        keys = np.array(list(emb_dict.keys()))
+        mask = cluster_labels[keys] == cluster
+        filtered_keys = keys[mask]
+        filtered_dict = {k: emb_dict[k] for k in filtered_keys}
+        return filtered_dict
+
     # Tested, Working
     @classmethod
     def __execute_first_pipeline(cls, 
                                  htree, 
-                                 text_emb, 
+                                 text_emb_idx, 
                                  clustering_config, 
                                  max_n_clusters, 
                                  min_n_clusters,
@@ -168,13 +176,17 @@ class XMRPipeline:
                                  ):
         """Create an Tree Structure using the text embeddings"""
 
+        """text_emb will be the tf-idf with pifa embeddings, and are indexed, dict(float, int)"""
+        
+        text_emb = text_emb_idx.values()
+        
         """Check depth"""
         if depth < 0:
             return htree
 
         """Evaluating best K according to elbow method, and some more weighted statistics"""
         k_range = (min_n_clusters, max_n_clusters)
-        optimal_k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range)
+        optimal_k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range) #Return all the keys
         n_clusters = optimal_k
         clustering_config["kwargs"]["n_clusters"] = n_clusters
 
@@ -203,19 +215,19 @@ class XMRPipeline:
 
         """Saving the model in the tree"""
         htree.set_clustering_model(clustering_model)
-        htree.set_text_embeddings(text_emb)
+        htree.set_text_embeddings(text_emb_idx)
 
         unique_labels = np.unique(cluster_labels)
 
         """Loop all the clusters processing the Transformer and concatining transformer emb with Text emb"""
         for cluster in unique_labels:
-            idx = cluster_labels == cluster
-            text_points = text_emb[idx]
-
+            
+            filt_dict = cls.__slice_dict_embeddings(text_emb_idx, cluster, cluster_labels)
+            
             new_child_htree_instance = XMRTree(depth=htree.depth + 1)
             new_child_htree = cls.__execute_first_pipeline(
                 new_child_htree_instance,
-                text_points,
+                filt_dict,
                 clustering_config,
                 max_n_clusters,
                 min_n_clusters,
@@ -259,50 +271,40 @@ class XMRPipeline:
         """
 
         """Initializing the htree attributes"""
-        text_emb = htree.text_embeddings
+        text_emb_dict = htree.text_embeddings
         cluster_labels = htree.clustering_model.labels()
 
         """Initialize a list for indexes of the embeddings"""
-        match_idx = []
-
-        """Check depth because the depth 0, has all the text embeddings (root)"""
-        if htree.depth > 0:
-            # Create a dictionary mapping text embeddings to indices
-            embedding_dict = {
-                tuple(initial_emb): idx
-                for idx, initial_emb in enumerate(initial_text_emb)
-            }
-
-            # Iterate over each embedding in text_emb and find its exact match in embedding_dict
-            for emb in text_emb:
-                emb_tuple = tuple(emb)  # Convert the embedding to a tuple for hashing
-                matched_idx = embedding_dict.get(
-                    emb_tuple
-                )  # Get the index of the matching embedding
-                if matched_idx is not None:
-                    match_idx.append(matched_idx)
-
-        else:
-            # Depth 0, root: Include all indices from the initial embeddings
-            match_idx = list(range(len(initial_text_emb)))
-
-        partial_transformer_emb = initial_transformer_emb[match_idx]
-        partial_text_emb = initial_text_emb[match_idx]
+        matched_text_emb = []
+        matched_transformer_emb = []
+        matched_cluster_labels = []
         
-        print(partial_transformer_emb, type(partial_transformer_emb))
-        print(partial_text_emb, type(partial_text_emb))
+        """Match embeddings using dictionary keys"""
+        if htree.depth > 0:
+            # For non-root nodes, use the dictionary keys directly
+            for emb_key, emb_value in text_emb_dict.items():
+                if emb_key in initial_text_emb:  # Check if key exists in initial dict
+                    matched_text_emb.append(initial_text_emb[emb_key])
+                    matched_transformer_emb.append(initial_transformer_emb[emb_key])
+                    matched_cluster_labels.append(cluster_labels[emb_key])
+        else:
+            # For root node, use all initial embeddings
+            for emb_key, emb_value in initial_text_emb.items():
+                matched_text_emb.append(emb_value)
+                matched_transformer_emb.append(initial_transformer_emb[emb_key])
+                matched_cluster_labels.append(cluster_labels[emb_key])
 
-        """Concatenates the transformer embeddings with the text embeddings"""
-        concantenated_array = np.hstack((partial_transformer_emb, partial_text_emb))
+        """Convert to numpy arrays"""
+        partial_text_emb = np.array(matched_text_emb)
+        partial_transformer_emb = np.array(matched_transformer_emb)
+        cluster_labels = np.array(matched_cluster_labels)
 
-        print(concantenated_array, type(concantenated_array))
-
-        htree.set_transformer_embeddings(partial_transformer_emb)
-        htree.set_concatenated_embeddings(concantenated_array)
+        """Concatenate embeddings"""
+        concatenated_array = np.hstack((partial_transformer_emb, partial_text_emb))
 
         """Train the classifier with the concatenated embeddings with cluster labels"""
         X_train, X_test, y_train, y_test = train_test_split(
-            concantenated_array,
+            concatenated_array,
             cluster_labels,
             test_size=0.2,
             random_state=42,
@@ -322,6 +324,8 @@ class XMRPipeline:
         }
 
         """Save the classifier model and test_split"""
+        htree.set_transformer_embeddings(partial_transformer_emb)
+        htree.set_concatenated_embeddings(concatenated_array)
         htree.set_classifier_model(classifier_model)
         htree.set_test_split(test_split)
 
@@ -399,10 +403,20 @@ class XMRPipeline:
         """Combine the embeddings"""
         combined_emb = np.hstack((text_emb, pifa_emb))
         combined_emb = normalize(combined_emb, norm="l2", axis=1)
+        
+        """Indexing the embeddings"""
+        combined_emb_index = {idx: emb for idx, emb in enumerate(combined_emb)}
 
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(
-            htree, combined_emb, clustering_config, max_n_clusters, min_n_clusters, min_leaf_size, depth, dtype
+            htree, 
+            combined_emb_index, 
+            clustering_config, 
+            max_n_clusters, 
+            min_n_clusters, 
+            min_leaf_size, 
+            depth, 
+            dtype
         )
         
         # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF]
@@ -421,10 +435,17 @@ class XMRPipeline:
 
         """Reduce the dimension of the transformer to the dimension of the vectorizer"""
         transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
+        
+        text_emb_idx = {idx: emb for idx, emb in enumerate(text_emb)}
 
         """Executing the second pipeline, Training the classifiers"""
         cls.__execute_second_pipeline(
-            htree, classifier_config, text_emb, transformer_emb, n_features, dtype
+            htree, 
+            classifier_config, 
+            text_emb_idx, 
+            transformer_emb, 
+            n_features, 
+            dtype
         )
 
         return htree
