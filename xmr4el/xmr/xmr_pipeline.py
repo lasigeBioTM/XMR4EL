@@ -154,14 +154,6 @@ class XMRPipeline:
         pifa_emb = pifa_emb / label_counts[:, None]  # Broadcasting
         return pifa_emb
 
-    @staticmethod
-    def __slice_dict_embeddings(emb_dict, cluster, cluster_labels):
-        keys = np.array(list(emb_dict.keys()))
-        mask = cluster_labels[keys] == cluster
-        filtered_keys = keys[mask]
-        filtered_dict = {k: emb_dict[k] for k in filtered_keys}
-        return filtered_dict
-
     # Tested, Working
     @classmethod
     def __execute_first_pipeline(cls, 
@@ -178,7 +170,9 @@ class XMRPipeline:
 
         """text_emb will be the tf-idf with pifa embeddings, and are indexed, dict(float, int)"""
         
-        text_emb = text_emb_idx.values()
+        indices = sorted(text_emb_idx.keys())
+        text_emb_array = np.array([text_emb_idx[idx] for idx in indices])
+    
         
         """Check depth"""
         if depth < 0:
@@ -186,14 +180,14 @@ class XMRPipeline:
 
         """Evaluating best K according to elbow method, and some more weighted statistics"""
         k_range = (min_n_clusters, max_n_clusters)
-        optimal_k, _ = XMRTuner.tune_k(text_emb, clustering_config, dtype, k_range=k_range) #Return all the keys
+        optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, dtype, k_range=k_range) #Return all the keys
         n_clusters = optimal_k
         clustering_config["kwargs"]["n_clusters"] = n_clusters
 
         while True:
             """Training Clustering Model"""
             clustering_model = cls.__train_clustering(
-                text_emb, clustering_config, dtype
+                text_emb_array, clustering_config, dtype
             )  # Returns the Model (ClusteringModel)
 
             # Changed this
@@ -221,8 +215,12 @@ class XMRPipeline:
 
         """Loop all the clusters processing the Transformer and concatining transformer emb with Text emb"""
         for cluster in unique_labels:
+            # Get indices of points in this cluster
+            cluster_indices = [idx for idx, label in zip(indices, cluster_labels) 
+                            if label == cluster]
             
-            filt_dict = cls.__slice_dict_embeddings(text_emb_idx, cluster, cluster_labels)
+            # Create filtered dict
+            filt_dict = {idx: text_emb_idx[idx] for idx in cluster_indices}
             
             new_child_htree_instance = XMRTree(depth=htree.depth + 1)
             new_child_htree = cls.__execute_first_pipeline(
