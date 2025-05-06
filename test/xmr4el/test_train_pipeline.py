@@ -29,6 +29,7 @@ def main():
     n_features = 500
 
     vectorizer_config = {"type": "tfidf", "kwargs": {"max_features": n_features}}
+    # vectorizer_config = {"type": "tfidf", "kwargs": {}}
     
     transformer_config = {
         "type": "biobert",
@@ -51,11 +52,12 @@ def main():
     
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
-        labels_filepath=labels_file
+        labels_filepath=labels_file,
+        truncate_data=16
         )
     
-    Y_train = train_data["labels_matrix"]
-    X_train = train_data["corpus"]
+    Y_train = train_data["labels_matrix"] # csr.matrix
+    X_train = train_data["corpus"] # List
     
     label_enconder = train_data["label_encoder"]
     
@@ -70,7 +72,7 @@ def main():
         classifier_config,
         n_features=n_features,  # Number of Features
         max_n_clusters=16,
-        min_n_clusters=6,
+        min_n_clusters=2, # Changed to 2, must be 6
         min_leaf_size=min_leaf_size,
         depth=depth,
         dtype=np.float32,

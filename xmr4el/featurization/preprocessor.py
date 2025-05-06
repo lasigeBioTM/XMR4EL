@@ -41,20 +41,24 @@ class Preprocessor:
 
         return grouped_train_df["corpus_name"].tolist()  # Returns a list of concatenated strings
         
-    def load_data_labels_from_file(self, train_filepath, labels_filepath):
-        # Load and group texts (unchanged)
+    def load_data_labels_from_file(self, train_filepath, labels_filepath, truncate_data=0):
+        # Load and group texts
         train_df = pd.read_csv(
             train_filepath, 
             header=None,
             names=["id", "text"],
-            delimiter="\t"
-            )
+            delimiter="\t",
+        )
         
         train_df["text"] = train_df["text"].astype(str).fillna("")
         
         grouped_texts = train_df.groupby("id")["text"].apply(lambda x: " ".join(x)).reset_index()
 
-        # Load labels and truncate to match ID count
+        # Apply truncation if requested
+        if truncate_data > 0:
+            grouped_texts = grouped_texts.head(truncate_data)
+        
+        # Load labels and truncate to match ID count (either original or truncated)
         with open(labels_filepath, 'r') as f:
             labels = [line.strip() for line in f if line.strip()][:len(grouped_texts)]  # Truncate here
         

@@ -3,11 +3,14 @@ import logging
 
 import numpy as np
 
+
 from typing import Counter
 
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import normalize
+
+from scipy.sparse import csr_matrix
 
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
@@ -82,10 +85,16 @@ class XMRPipeline:
         Returns:
             np.array
         """
-
-        pca = PCA(
-            n_components=n_features, random_state=random_state
-        )  # Limit to 300 dimensions
+        n_samples, n_features_emb = emb.shape
+        max_possible = min(n_samples-1, n_features_emb)  # PCA limitation
+        effective_dim = min(n_features, max_possible)
+        
+        if effective_dim <= 0:
+            LOGGER.info("Maintaining original number of features," 
+                        f"impossible to reduce, min({n_samples}, {n_features})={max_possible}")
+            return emb  # Return original if reduction not possible
+        
+        pca = PCA(n_components=effective_dim)
         return pca.fit_transform(emb)
 
     @staticmethod
@@ -140,13 +149,15 @@ class XMRPipeline:
         Compute PIFA embeddings for labels.
         
         Args:
-            X_tfidf: (n_samples, tfidf_dim) Tfidf Matrix
-            Y_train: (n_samples, n_labels) Binary label matrix
+            X_tfidf: (n_samples, tfidf_dim) Tfidf Matrix, Array
+            Y_train: (n_samples, n_labels) Binary label matrix, Sparse
             
         Return:
             pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings
         """
         labels_matrix = Y_train.tocsc()
+        X_tfidf = csr_matrix(X_tfidf)
+        
         pifa_emb = labels_matrix @ X_tfidf
         
         label_counts = np.array(labels_matrix.sum(axis=0)).flatten()  # (n_labels,)
@@ -178,6 +189,9 @@ class XMRPipeline:
         if depth < 0:
             return htree
 
+        if len(text_emb_array) <= min_n_clusters: # So when the datapoints are less that the min_n_clusters
+            return htree
+
         """Evaluating best K according to elbow method, and some more weighted statistics"""
         k_range = (min_n_clusters, max_n_clusters)
         optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, dtype, k_range=k_range) #Return all the keys
@@ -194,11 +208,13 @@ class XMRPipeline:
             cluster_labels = clustering_model.model.labels()
 
             """If clustering model has enough data points"""
-            if min(Counter(cluster_labels).values()) <= min_leaf_size:
+            if min(Counter(cluster_labels).values()) <= min_leaf_size: # if the depth is 0, create the clustering anyway
                 LOGGER.warning("Skipping: Cluster size is too small.")
                 
                 if n_clusters == min_n_clusters:
                     LOGGER.warning("Skipping: No more clusters to reduce.")
+                    if htree.depth == 0:
+                        break
                     return htree
                 
                 n_clusters -= 1
@@ -392,12 +408,19 @@ class XMRPipeline:
 
         """Normalize, reduce the text embeddings"""
         text_emb = normalize(text_emb, norm="l2", axis=1)
-        text_emb = cls.__reduce_dimensionality(text_emb, n_features)
+        # text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         
         """Normalize and reduce the PIFA embeddings, already an dense array"""
         pifa_emb = normalize(pifa_emb, norm="l2", axis=1)
-        pifa_emb = cls.__reduce_dimensionality(pifa_emb, n_features)
-
+        
+        # print("Text emb actual shape:", text_emb.shape)
+        # print("PIFA emb actual shape:", pifa_emb.shape)
+        # print("Text emb ndim:", text_emb.ndim)
+        # print("PIFA emb ndim:", pifa_emb.ndim)
+        # print(type(text_emb), type(pifa_emb))
+        
+        pifa_emb = pifa_emb.toarray()
+        
         """Combine the embeddings"""
         combined_emb = np.hstack((text_emb, pifa_emb))
         combined_emb = normalize(combined_emb, norm="l2", axis=1)
@@ -416,6 +439,9 @@ class XMRPipeline:
             depth, 
             dtype
         )
+        
+        
+        print(htree)
         
         # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF]
         
