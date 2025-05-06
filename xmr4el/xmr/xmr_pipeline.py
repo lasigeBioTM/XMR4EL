@@ -286,15 +286,16 @@ class XMRPipeline:
             # Depth 0, root: Include all indices from the initial embeddings
             match_idx = list(range(len(initial_text_emb)))
 
-        print(concantenated_array, type(concantenated_array))
+        partial_transformer_emb = initial_transformer_emb[match_idx]
+        partial_text_emb = initial_text_emb[match_idx]
+        
         print(partial_transformer_emb, type(partial_transformer_emb))
         print(partial_text_emb, type(partial_text_emb))
 
-        partial_transformer_emb = initial_transformer_emb[match_idx]
-        partial_text_emb = initial_text_emb[match_idx]
-
         """Concatenates the transformer embeddings with the text embeddings"""
         concantenated_array = np.hstack((partial_transformer_emb, partial_text_emb))
+
+        print(concantenated_array, type(concantenated_array))
 
         htree.set_transformer_embeddings(partial_transformer_emb)
         htree.set_concatenated_embeddings(concantenated_array)
