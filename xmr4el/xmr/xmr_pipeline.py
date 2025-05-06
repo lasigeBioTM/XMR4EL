@@ -375,13 +375,15 @@ class XMRPipeline:
         text_emb = cls.__predict_vectorizer(vectorizer_model, trn_corpus)
         htree.set_vectorizer(vectorizer_model)
 
+        """Create PIFA embeddings"""
+        pifa_emb = cls.__compute_pifa(text_emb, labels_matrix)
+
         """Normalize, reduce the text embeddings"""
         text_emb = text_emb.toarray() # Needed for PCA
         text_emb = normalize(text_emb, norm="l2", axis=1)
         text_emb = cls.__reduce_dimensionality(text_emb, n_features)
         
-        """Create, normalize and reduce the PIFA embeddings"""
-        pifa_emb = cls.__compute_pifa(text_emb, labels_matrix)
+        """Normalize and reduce the PIFA embeddings"""
         pifa_emb = pifa_emb.toarray()
         pifa_emb = normalize(pifa_emb, norm="l2", axis=1)
         pifa_emb = cls.__reduce_dimensionality(pifa_emb, n_features)
