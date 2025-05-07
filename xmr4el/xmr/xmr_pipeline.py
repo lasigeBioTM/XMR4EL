@@ -578,6 +578,7 @@ class XMRPipeline:
             all_kb_indices.append(final_kb_indices[:k])  # Ensure we return at most k indices
         
         # Turn kb_indices into labels
+        all_kb_indices = np.array(all_kb_indices, dtype=np.int64)
         return all_kb_indices
 
     @staticmethod
