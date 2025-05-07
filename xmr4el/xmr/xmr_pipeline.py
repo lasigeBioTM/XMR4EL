@@ -285,36 +285,16 @@ class XMRPipeline:
         """
 
         """Initializing the htree attributes"""
-        text_emb_dict = htree.text_embeddings
+        text_emb_dict = htree.text_embeddings 
         cluster_labels = htree.clustering_model.labels()
-
-        """Initialize a list for indexes of the embeddings"""
-        matched_text_emb = []
-        matched_transformer_emb = []
-        matched_cluster_labels = []
         
-        """Match embeddings using dictionary keys"""
-        if htree.depth > 0:
-            # For non-root nodes, use the dictionary keys directly
-            for emb_key, emb_value in text_emb_dict.items():
-                if emb_key in initial_text_emb:  # Check if key exists in initial dict
-                    matched_text_emb.append(initial_text_emb[emb_key])
-                    matched_transformer_emb.append(initial_transformer_emb[emb_key])
-                    matched_cluster_labels.append(cluster_labels[emb_key])
-        else:
-            # For root node, use all initial embeddings
-            for emb_key, emb_value in initial_text_emb.items():
-                matched_text_emb.append(emb_value)
-                matched_transformer_emb.append(initial_transformer_emb[emb_key])
-                matched_cluster_labels.append(cluster_labels[emb_key])
-
-        """Convert to numpy arrays"""
-        partial_text_emb = np.array(matched_text_emb)
-        partial_transformer_emb = np.array(matched_transformer_emb)
-        cluster_labels = np.array(matched_cluster_labels)
+        text_emb = list(text_emb_dict.values())
+        match_index = list(text_emb_dict.keys())
+        
+        trans_emb = initial_transformer_emb[match_index]
 
         """Concatenate embeddings"""
-        concatenated_array = np.hstack((partial_transformer_emb, partial_text_emb))
+        concatenated_array = np.hstack((trans_emb, text_emb))
 
         """Train the classifier with the concatenated embeddings with cluster labels"""
         X_train, X_test, y_train, y_test = train_test_split(
@@ -338,7 +318,7 @@ class XMRPipeline:
         }
 
         """Save the classifier model and test_split"""
-        htree.set_transformer_embeddings(partial_transformer_emb)
+        htree.set_transformer_embeddings(trans_emb)
         htree.set_concatenated_embeddings(concatenated_array)
         htree.set_classifier_model(classifier_model)
         htree.set_test_split(test_split)
@@ -511,9 +491,7 @@ class XMRPipeline:
             predicted_labels.append(top_k_labels.tolist())
 
             # Move to the best child node if possible
-            best_label = top_k_labels[
-                0
-            ]  # Select the label with the highest probability
+            best_label = top_k_labels[0]  # Select the label with the highest probability
 
             if best_label in current_htree.children:
                 current_htree = current_htree.children[best_label]
