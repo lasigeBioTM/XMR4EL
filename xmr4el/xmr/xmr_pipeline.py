@@ -578,10 +578,10 @@ class XMRPipeline:
             all_kb_indices.append(final_kb_indices[:k])  # Ensure we return at most k indices
         
         # Turn kb_indices into labels
-        return cls.__kb_indices_to_labels(htree, all_kb_indices)
+        return all_kb_indices
 
     @staticmethod
-    def __kb_indices_to_labels(htree, kb_indices):
+    def kb_indices_to_labels(htree, kb_indices):
         
         label_matrix = htree.label_matrix
         label_enconder = htree.label_enconder
