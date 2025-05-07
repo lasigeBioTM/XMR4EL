@@ -271,7 +271,7 @@ class XMRTree:
         
         attributes = {
             "labels": Counter(self.clustering_model.labels()),
-            "kb_indices": "True" if self.kb_indices is not None else "False",
+            "kb_indices": self.kb_indices, # "True" if self.kb_indices is not None else "False",
             "label_matrix": "True" if self.label_matrix is not None else "False",
             "label_enconder": "True" if self.label_enconder is not None else "False",
             "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False"
