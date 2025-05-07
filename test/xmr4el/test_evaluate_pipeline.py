@@ -24,7 +24,6 @@ def main():
 
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
 
-    n_features = 12
     k = 3
 
     transformer_config = {
@@ -46,32 +45,22 @@ def main():
 
     # train_disease_100
     trained_xtree = XMRTree.load(
-        "data/saved_trees/XMRTree_2025-03-27_11-30-24-TRAIN_DATA"
+        "test/test_data/saved_trees/XMRTree_2025-05-07_14-56-38"
     )
 
-    # train_disease_100 + test_data == true_labels
-    test_xtree = XMRTree.load("data/saved_trees/XMRTree_2025-03-27_11-39-26-TEST-DATA")
-
-    """XMRTREE, 27-03, 10-25-01, Training with only training data"""
-
-    true_labels = XMRPipeline.inference(
-        test_xtree, name_list, transformer_config, n_features, k=1
-    )
-    true_labels = XMRPipeline.format_true_labels(true_labels)
-
-    print(true_labels)
+    print(trained_xtree)
 
     predicted_labels = XMRPipeline.inference(
-        trained_xtree, name_list, transformer_config, n_features, k=1
+        trained_xtree, name_list, transformer_config, k=k
     )
 
     print(predicted_labels)
 
-    top_k_scores = XMRPipeline.compute_top_k_accuracy(
-        true_labels, predicted_labels, k=k
-    )
+    # top_k_scores = XMRPipeline.compute_top_k_accuracy(
+    #     true_labels, predicted_labels, k=k
+    # )
 
-    print(top_k_scores)
+    # print(top_k_scores)
 
     end = time.time()
 
