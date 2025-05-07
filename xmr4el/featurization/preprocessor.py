@@ -65,8 +65,6 @@ class Preprocessor:
         # Proceed as before
         labels_list = [[label] for label in labels]
         
-        print(labels_list)
-        
         mlb = MultiLabelBinarizer(sparse_output=True)
         labels_matrix = mlb.fit_transform(labels_list)
         
