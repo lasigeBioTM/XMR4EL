@@ -58,7 +58,6 @@ def main():
     
     Y_train = train_data["labels_matrix"] # csr.matrix
     X_train = train_data["corpus"] # List
-    
     label_enconder = train_data["label_encoder"]
     
     R_train = copy.deepcopy(Y_train)
@@ -66,6 +65,7 @@ def main():
     htree = XMRPipeline.execute_pipeline(
         X_train,
         Y_train,
+        label_enconder, # New
         vectorizer_config,
         transformer_config,
         clustering_config,

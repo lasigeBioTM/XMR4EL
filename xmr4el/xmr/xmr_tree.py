@@ -22,9 +22,13 @@ class XMRTree:
 
     def __init__(
         self,
+        label_matrix=None,
+        label_enconder=None,
+        pifa_embeddings=None,
         text_embeddings=None,
         transformer_embeddings=None,
         concatenated_embeddings=None,
+        kb_indices=None,
         vectorizer=None,
         clustering_model=None,
         classifier_model=None,
@@ -33,10 +37,15 @@ class XMRTree:
         depth=0,
     ):
 
+        self.label_matrix = label_matrix
+        self.label_enconder = label_enconder
+        self.pifa_embeddings = pifa_embeddings
+
         self.text_embeddings = text_embeddings
         self.transformer_embeddings = transformer_embeddings
         self.concatenated_embeddings = concatenated_embeddings
-
+        self.kb_indices = kb_indices
+        
         self.vectorizer = vectorizer
 
         self.clustering_model = clustering_model
@@ -200,6 +209,15 @@ class XMRTree:
         LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
 
+    def set_label_matrix(self, label_matrix):
+        self.label_matrix = label_matrix
+        
+    def set_label_enconder(self, label_enconder):
+        self.label_enconder = label_enconder
+        
+    def set_pifa_embeddings(self, pifa_embeddings):
+        self.pifa_embeddings = pifa_embeddings
+
     def set_text_embeddings(self, text_embeddings):
         self.text_embeddings = text_embeddings
 
@@ -208,6 +226,9 @@ class XMRTree:
 
     def set_concatenated_embeddings(self, concatenated_embeddings):
         self.concatenated_embeddings = concatenated_embeddings
+        
+    def set_kb_indices(self, kb_indices):
+        self.kb_indices = kb_indices
 
     def set_vectorizer(self, vectorizer):
         self.vectorizer = vectorizer
@@ -248,9 +269,12 @@ class XMRTree:
         }
         """
         
-        print(self.depth)
         attributes = {
-            "labels": Counter(self.clustering_model.labels())
+            "labels": Counter(self.clustering_model.labels()),
+            "kb_indices": "True" if self.kb_indices is not None else "False",
+            "label_matrix": "True" if self.label_matrix is not None else "False",
+            "label_enconder": "True" if self.label_enconder is not None else "False",
+            "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False"
         }
 
         tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"

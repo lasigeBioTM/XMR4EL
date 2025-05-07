@@ -169,7 +169,8 @@ class XMRPipeline:
     @classmethod
     def __execute_first_pipeline(cls, 
                                  htree, 
-                                 text_emb_idx, 
+                                 combined_emb_idx, 
+                                 text_emb_idx,
                                  clustering_config, 
                                  max_n_clusters, 
                                  min_n_clusters,
@@ -177,13 +178,13 @@ class XMRPipeline:
                                  depth, 
                                  dtype=np.float32
                                  ):
+        
         """Create an Tree Structure using the text embeddings"""
 
         """text_emb will be the tf-idf with pifa embeddings, and are indexed, dict(float, int)"""
         
-        indices = sorted(text_emb_idx.keys())
-        text_emb_array = np.array([text_emb_idx[idx] for idx in indices])
-    
+        indices = sorted(combined_emb_idx.keys())
+        text_emb_array = np.array([combined_emb_idx[idx] for idx in indices])
         
         """Check depth"""
         if depth < 0:
@@ -236,12 +237,14 @@ class XMRPipeline:
                             if label == cluster]
             
             # Create filtered dict
-            filt_dict = {idx: text_emb_idx[idx] for idx in cluster_indices}
+            filt_combined_dict = {idx: combined_emb_idx[idx] for idx in cluster_indices}
+            filt_text_dict = {idx: text_emb_idx[idx] for idx in cluster_indices}
             
             new_child_htree_instance = XMRTree(depth=htree.depth + 1)
             new_child_htree = cls.__execute_first_pipeline(
                 new_child_htree_instance,
-                filt_dict,
+                filt_combined_dict,
+                filt_text_dict,
                 clustering_config,
                 max_n_clusters,
                 min_n_clusters,
@@ -285,16 +288,18 @@ class XMRPipeline:
         """
 
         """Initializing the htree attributes"""
-        text_emb_dict = htree.text_embeddings 
+        text_emb_idx = htree.text_embeddings 
         cluster_labels = htree.clustering_model.labels()
         
-        text_emb = list(text_emb_dict.values())
-        match_index = list(text_emb_dict.keys())
+        """Get the values and the keys of the text embeddings"""
+        match_index = sorted(text_emb_idx.keys())
+        text_emb_array = np.array([text_emb_idx[idx] for idx in match_index])
         
+        """transformers that equal to the index of the text_embeddings"""
         trans_emb = initial_transformer_emb[match_index]
 
         """Concatenate embeddings"""
-        concatenated_array = np.hstack((trans_emb, text_emb))
+        concatenated_array = np.hstack((trans_emb, text_emb_array))
 
         """Train the classifier with the concatenated embeddings with cluster labels"""
         X_train, X_test, y_train, y_test = train_test_split(
@@ -319,6 +324,7 @@ class XMRPipeline:
 
         """Save the classifier model and test_split"""
         htree.set_transformer_embeddings(trans_emb)
+        htree.set_kb_indices(match_index)
         htree.set_concatenated_embeddings(concatenated_array)
         htree.set_classifier_model(classifier_model)
         htree.set_test_split(test_split)
@@ -339,6 +345,7 @@ class XMRPipeline:
         cls,
         trn_corpus,
         labels_matrix,
+        label_enconder,
         vectorizer_config,
         transformer_config,
         clustering_config,
@@ -385,6 +392,10 @@ class XMRPipeline:
 
         """Create PIFA embeddings"""
         pifa_emb = cls.__compute_pifa(text_emb, labels_matrix)
+        
+        htree.set_label_matrix(labels_matrix) # Set label matrix
+        htree.set_label_enconder(label_enconder) # Set label enconder
+        htree.set_pifa_embeddings(pifa_emb) # Set pifa embeddings
 
         """Normalize, reduce the text embeddings"""
         text_emb = normalize(text_emb, norm="l2", axis=1)
@@ -405,13 +416,17 @@ class XMRPipeline:
         combined_emb = np.hstack((text_emb, pifa_emb))
         combined_emb = normalize(combined_emb, norm="l2", axis=1)
         
-        """Indexing the embeddings"""
+        """Indexing the combined pifa tfidf embeddings"""
         combined_emb_index = {idx: emb for idx, emb in enumerate(combined_emb)}
+        
+        """Indexing the text embeddings"""
+        text_emb_idx = {idx: emb for idx, emb in enumerate(text_emb)}
 
         """Executing the first pipeline"""
         htree = cls.__execute_first_pipeline(
             htree, 
             combined_emb_index, 
+            text_emb_idx,
             clustering_config, 
             max_n_clusters, 
             min_n_clusters, 
@@ -420,10 +435,9 @@ class XMRPipeline:
             dtype
         )
         
-        
         print(htree)
         
-        # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF]
+        # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF] now is [Transfomer] * [TF-IDF] 
         
         """Normalizing and dimensionality ?"""
 
@@ -439,8 +453,6 @@ class XMRPipeline:
 
         """Reduce the dimension of the transformer to the dimension of the vectorizer"""
         transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
-        
-        text_emb_idx = {idx: emb for idx, emb in enumerate(text_emb)}
 
         """Executing the second pipeline, Training the classifiers"""
         cls.__execute_second_pipeline(
@@ -467,6 +479,7 @@ class XMRPipeline:
         """
         current_htree = htree
         predicted_labels = []
+        predicted_kb_indices = []
 
         while True:
             current_classifier = current_htree.classifier_model
@@ -487,8 +500,12 @@ class XMRPipeline:
                 ::-1
             ]  # Sort probabilities and get top-k indices
             top_k_labels = top_k_indices[:k]
-
+            
+            current_kb_indices = htree.kb_indices
+            top_k_kb_indices = [current_kb_indices[label] for label in top_k_labels]
+            
             predicted_labels.append(top_k_labels.tolist())
+            predicted_kb_indices.append(top_k_kb_indices)
 
             # Move to the best child node if possible
             best_label = top_k_labels[0]  # Select the label with the highest probability
@@ -498,11 +515,11 @@ class XMRPipeline:
             else:
                 break  # Stop if there are no more children
 
-        return predicted_labels
+        return predicted_kb_indices, predicted_labels
 
     @classmethod
     def inference(
-        cls, htree, input_text, transformer_config, n_features, k=3, dtype=np.float32
+        cls, htree, input_text, transformer_config, k=3, dtype=np.float32
     ):
         """Inference to know which cluster doest the inputs or input
 
@@ -519,16 +536,16 @@ class XMRPipeline:
         """
 
         vectorizer = htree.vectorizer
+        transfomer_n_features = htree.transformer_embeddings.shape[1]
 
         """Predict Embeddings using stored vectorizer"""
         text_emb = cls.__predict_vectorizer(vectorizer, input_text)
-
         text_emb = text_emb.toarray()
-
+        
         # print(text_emb)
 
         """Reduce Dimensions"""
-        text_emb = cls.__reduce_dimensionality(text_emb, n_features)
+        # text_emb = cls.__reduce_dimensionality(text_emb, n_features)
 
         # print(text_emb)
 
@@ -543,21 +560,46 @@ class XMRPipeline:
         del transformer_model  # Delete the model when no longer needed
 
         """Reduce the dimension of the transformer to the dimension of the vectorizer"""
-        transformer_emb = cls.__reduce_dimensionality(transformer_emb, n_features)
+        if transformer_emb.shape[1] != transfomer_n_features:
+            transformer_emb = cls.__reduce_dimensionality(transformer_emb, transfomer_n_features)
 
         """Normalize the transformer embeddings"""
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
 
         """Concatenates the transformer embeddings with the text embeddings"""
-        concantenated_array = np.hstack((transformer_emb, text_emb))
-
+        concatenated_array = np.hstack((transformer_emb, text_emb))
+        
         # Predict labels for each concatenated input
-        predicted_labels = [
-            cls.__inference_predict_input(htree, conc_input.reshape(1, -1), k=k)
-            for conc_input in concantenated_array
-        ]
+        all_kb_indices = []
+        for conc_input in concatenated_array:
+            kb_indices, _ = cls.__inference_predict_input(htree, conc_input.reshape(1, -1), k=k)
+            # Take the most specific predictions (from the deepest level)
+            final_kb_indices = kb_indices[-1] if kb_indices else []
+            all_kb_indices.append(final_kb_indices[:k])  # Ensure we return at most k indices
+        
+        # Turn kb_indices into labels
+        return cls.__kb_indices_to_labels(htree, all_kb_indices)
 
-        return predicted_labels
+    @staticmethod
+    def __kb_indices_to_labels(htree, kb_indices):
+        
+        label_matrix = htree.label_matrix
+        label_enconder = htree.label_enconder
+        
+        labels_inverse = label_enconder.inverse_transform(label_matrix)
+        
+        kb_codes = []
+        
+        # [[], []]
+        for kb_idx in kb_indices:
+            codes = []
+            for idx in kb_idx:
+                label = labels_inverse[idx][0]
+                codes.append(label)
+            kb_codes.append(codes)
+            
+        return kb_codes
+                
 
     def format_true_labels(true_labels):
         """
