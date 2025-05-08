@@ -490,9 +490,6 @@ class XMRPipeline:
             n_features, 
             dtype
         )
-        
-        """Id the clusters"""
-        htree.enumerate_clusters()
 
         return htree
 
