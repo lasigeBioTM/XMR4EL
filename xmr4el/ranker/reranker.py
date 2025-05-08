@@ -56,7 +56,6 @@ class Reranker():
         Returns:
             Tuple of (indices, scores) for top_k matches
         """
-        # Ensure tensors
         if not torch.is_tensor(input_vec):
             input_vec = torch.FloatTensor(input_vec)
         if not torch.is_tensor(label_vecs):
@@ -64,36 +63,31 @@ class Reranker():
 
         input_vec = input_vec.to(self.device)
         label_vecs = label_vecs.to(self.device)
-        
-        # print(input_vec.shape, label_vecs.shape)
-        
-        # Stage 1: Cosine similarity pre-filtering
-        sim_scores = self.similarity_fn(input_vec, label_vecs)
-        
-        sim_scores = torch.tensor(sim_scores)
-        
-        candidate_indices = torch.topk(sim_scores, min(candidates, label_vecs.size(0))).indices
-        candidate_indices = candidate_indices.squeeze()
-        
-        # Stage 2: Neural reranking
+
+        sim_scores = self.__compute_similarity(input_vec, label_vecs)
+
+        candidate_indices = torch.topk(sim_scores, min(candidates, label_vecs.size(0))).indices.squeeze()
         candidate_vecs = label_vecs[candidate_indices]
         expanded_input = input_vec.expand(candidate_vecs.size(0), -1)
-        
-        # print(candidate_vecs.shape, expanded_input.shape)
 
-        # print(candidate_vecs)
-        # print(expanded_input, expanded_input.shape)
-
-        # Ensure both tensors are 2D
         if expanded_input.dim() == 1:
-            expanded_input = expanded_input.unsqueeze(0)  # shape: (1, embed_dim)
+            expanded_input = expanded_input.unsqueeze(0)
         if candidate_vecs.dim() == 3:
-            candidate_vecs = candidate_vecs.squeeze(1)  # shape: (candidates, embed_dim)
+            candidate_vecs = candidate_vecs.squeeze(1)
 
-        concat = torch.cat([expanded_input, candidate_vecs], dim=1)  # shape: (candidates, 2 * embed_dim)
-
+        concat = torch.cat([expanded_input, candidate_vecs], dim=1)
         scores = self.neural_score(concat).squeeze(1)
         top_scores, top_indices = torch.topk(scores, min(top_k, scores.size(0)))
 
-        # Returns numpy array
-        return candidate_indices[top_indices].cpu().detach().numpy(), top_scores.cpu().detach().numpy()
+        return candidate_indices[top_indices].cpu().numpy(), top_scores.cpu().numpy()
+    
+    def __compute_similarity(self, x, y):
+        """
+        Handles device and format conversions to ensure compatibility with the similarity function.
+        """
+        if self.similarity_fn.__module__.startswith("sklearn"):
+            x_np = x.detach().cpu().numpy() if torch.is_tensor(x) else x
+            y_np = y.detach().cpu().numpy() if torch.is_tensor(y) else y
+            return torch.tensor(self.similarity_fn(x_np, y_np))
+        else:
+            return self.similarity_fn(x, y)
