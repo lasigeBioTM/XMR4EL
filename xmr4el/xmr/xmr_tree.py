@@ -31,6 +31,7 @@ class XMRTree:
         kb_indices=None,
         vectorizer=None,
         clustering_model=None,
+        cluster_id=None,
         classifier_model=None,
         test_split=None,
         children=None,  # Dictionary of XMRTree nodes
@@ -49,12 +50,16 @@ class XMRTree:
         self.vectorizer = vectorizer
 
         self.clustering_model = clustering_model
+        self.cluster_id_look_up = {}
 
         self.classifier_model = classifier_model
         self.test_split = test_split
 
         self.children = children if children is not None else {}
         self.depth = depth
+        
+        # Enumerate the clusters
+        self._cluster_counter = 0
 
     def save(self, save_dir="data/saved_trees", child_tree=False):
         """Save trained XMRTree model to disk.
@@ -253,6 +258,11 @@ class XMRTree:
 
     def is_leaf(self):
         return self.children is None
+    
+    def enumerate_clusters(self):
+        enum = XMRTreeEnumerator()
+        self.cluster_id_look_up = enum.enumerate(self)
+        
 
     def __str__(self, level=0):
         """Recursively generates a string representation of the tree with all attribute states."""
@@ -271,10 +281,11 @@ class XMRTree:
         
         attributes = {
             "labels": Counter(self.clustering_model.labels()),
-            "kb_indices": self.kb_indices, # "True" if self.kb_indices is not None else "False",
+            "kb_indices": "Not yet initialized" if self.kb_indices is None else len(self.kb_indices), # "True" if self.kb_indices is not None else "False",
             "label_matrix": "True" if self.label_matrix is not None else "False",
             "label_enconder": "True" if self.label_enconder is not None else "False",
-            "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False"
+            "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False",
+            "cluster_id_look_up": "Only in root" if self.cluster_id_look_up is None else self.cluster_id_look_up
         }
 
         tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"
@@ -288,3 +299,22 @@ class XMRTree:
     def __repr__(self):
         """Short representation for debugging."""
         return f"XMRTree(depth={self.depth}, children={len(self.children)})"
+
+
+class XMRTreeEnumerator:
+    
+    def __init__(self):
+        self.counter = 0
+        self.id_to_node = {}
+        
+    def enumerate(self, root):
+        self._enumerate_recursive(root)
+        print(self.id_to_node)
+        return self.id_to_node
+            
+    def _enumerate_recursive(self, node):
+        node.cluster_id = self.counter
+        self.id_to_node[self.counter] = node
+        self.counter += 1
+        for child in node.children:
+            self._enumerate_recursive(child)
