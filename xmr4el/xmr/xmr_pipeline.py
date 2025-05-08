@@ -463,11 +463,14 @@ class XMRPipeline:
             n_features, 
             dtype
         )
+        
+        """Id the clusters"""
+        htree.enumerate_clusters()
 
         return htree
 
     @classmethod
-    def __inference_predict_input(cls, htree, conc_input, k):
+    def __inference_predict_input(cls, htree, conc_input, k=10):
         """Inference of an single concatenated text throw out the tree
 
         Args:
@@ -496,16 +499,18 @@ class XMRPipeline:
             top_k_probs = cls.__predict_proba_classifier(
                 current_classifier, conc_input.reshape(1, -1)
             )[0]
+            
+            print(top_k_probs)
+            
             top_k_indices = np.argsort(top_k_probs)[-k:][
                 ::-1
             ]  # Sort probabilities and get top-k indices
             top_k_labels = top_k_indices[:k]
             
-            current_kb_indices = htree.kb_indices
-            top_k_kb_indices = [current_kb_indices[label] for label in top_k_labels]
+            print(top_k_indices)
+            print(top_k_labels)
             
-            predicted_labels.append(top_k_labels.tolist())
-            predicted_kb_indices.append(top_k_kb_indices)
+            exit()
 
             # Move to the best child node if possible
             best_label = top_k_labels[0]  # Select the label with the highest probability
@@ -513,8 +518,10 @@ class XMRPipeline:
             if best_label in current_htree.children:
                 current_htree = current_htree.children[best_label]
             else:
+                # print(current_htree)
                 break  # Stop if there are no more children
-
+        
+        exit()
         return predicted_kb_indices, predicted_labels
 
     @classmethod
