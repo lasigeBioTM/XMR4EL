@@ -507,7 +507,13 @@ class XMRPipeline:
             ]  # Sort probabilities and get top-k indices
             top_k_labels = top_k_indices[:k]
             
+            # Cluster indices
             print(top_k_indices)
+
+            
+            
+            
+            
             print(top_k_labels)
             
             exit()
