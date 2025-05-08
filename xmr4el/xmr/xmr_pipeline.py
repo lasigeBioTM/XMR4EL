@@ -1,9 +1,10 @@
+import os
 import gc
 import logging
 
 import numpy as np
 
-
+from joblib import Parallel, delayed, parallel_backend
 from typing import Counter
 
 from sklearn.decomposition import PCA
@@ -504,6 +505,7 @@ class XMRPipeline:
         Return:
             predicted_labels (lst): Predicted labels
         """
+        LOGGER.info(f"[PID {os.getpid()}] Processing input with shape {conc_input.shape}")
         current_htree = htree
 
         while True:
@@ -610,11 +612,12 @@ class XMRPipeline:
         # Predict labels for each concatenated input
         all_kb_indices = []
         LOGGER.info(f"Starting to predict an array with shape -> {concatenated_array.shape}")
-        for conc_input in concatenated_array:
-            kb_indices = cls.__inference_predict_input(htree, conc_input.reshape(1, -1), k=k)
-            LOGGER.info(f"Kb indice -> {kb_indices}")
-            all_kb_indices.append(kb_indices)  # Ensure we return at most k indices
         
+        with parallel_backend("threading"):
+            all_kb_indices = Parallel(n_jobs=-1)(
+                delayed(cls.__inference_predict_input)(htree, conc_input.reshape(1, -1), k=k)
+                for conc_input in concatenated_array
+            )
         # print(all_kb_indices)
         # Turn kb_indices into labels
         return cls.__convert_predictions_into_csr(all_kb_indices)
