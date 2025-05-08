@@ -609,8 +609,10 @@ class XMRPipeline:
         
         # Predict labels for each concatenated input
         all_kb_indices = []
+        LOGGER.info(f"Starting to predict an array with shape -> {concatenated_array.shape}")
         for conc_input in concatenated_array:
             kb_indices = cls.__inference_predict_input(htree, conc_input.reshape(1, -1), k=k)
+            LOGGER.info(f"Kb indice -> {kb_indices}")
             all_kb_indices.append(kb_indices)  # Ensure we return at most k indices
         
         # print(all_kb_indices)
