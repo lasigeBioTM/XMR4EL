@@ -45,7 +45,7 @@ def main():
 
     # train_disease_100
     trained_xtree = XMRTree.load(
-        "data/saved_trees/XMRTree_2025-05-08_10-09-45"
+        "data/saved_trees/XMRTree_2025-05-08_15-16-22"
     )
 
     print(trained_xtree)
