@@ -24,7 +24,7 @@ def main():
 
     onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
 
-    k = 3
+    k = 5
 
     transformer_config = {
         "type": "biobert",
@@ -45,7 +45,7 @@ def main():
 
     # train_disease_100
     trained_xtree = XMRTree.load(
-        "data/saved_trees/XMRTree_2025-05-07_15-26-50"
+        "data/saved_trees/XMRTree_2025-05-08_10-09-45"
     )
 
     print(trained_xtree)
