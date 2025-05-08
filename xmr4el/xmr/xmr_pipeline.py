@@ -18,6 +18,7 @@ from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
+from xmr4el.ranker.reranker import Reranker
 from xmr4el.xmr.xmr_tuner import XMRTuner
 from xmr4el.xmr.xmr_tree import XMRTree
 
@@ -164,6 +165,32 @@ class XMRPipeline:
         label_counts = np.maximum(label_counts, 1.0)  # Prevent div/0
         pifa_emb = pifa_emb / label_counts[:, None]  # Broadcasting
         return pifa_emb
+    
+    @staticmethod
+    def __reranker(input_vec, labels_vec, k=5, candidates=100):
+        reranker = Reranker(embed_dim=labels_vec.shape[1])
+        indices, scores = reranker.match(
+            input_vec=input_vec,
+            label_vecs=labels_vec,
+            top_k=k,
+            candidates=candidates,
+        )
+        return indices, scores
+    
+    @staticmethod
+    def __convert_predictions_into_csr(data, num_labels=None):
+        rows, cols, vals = [], [], []
+
+        for row_idx, instance in enumerate(data):
+            for col_idx, score in instance:
+                rows.append(row_idx)
+                cols.append(col_idx)
+                vals.append(np.float32(score))
+
+        if num_labels is None:
+            num_labels = max(cols) + 1  # infer if not provided
+
+        return csr_matrix((vals, (rows, cols)), shape=(len(data), num_labels), dtype=np.float32)
 
     # Tested, Working
     @classmethod
@@ -435,7 +462,7 @@ class XMRPipeline:
             dtype
         )
         
-        print(htree)
+        # print(htree)
         
         # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF] now is [Transfomer] * [TF-IDF] 
         
@@ -481,8 +508,6 @@ class XMRPipeline:
             predicted_labels (lst): Predicted labels
         """
         current_htree = htree
-        predicted_labels = []
-        predicted_kb_indices = []
 
         while True:
             current_classifier = current_htree.classifier_model
@@ -500,35 +525,38 @@ class XMRPipeline:
                 current_classifier, conc_input.reshape(1, -1)
             )[0]
             
-            print(top_k_probs)
-            
             top_k_indices = np.argsort(top_k_probs)[-k:][
                 ::-1
             ]  # Sort probabilities and get top-k indices
+        
             top_k_labels = top_k_indices[:k]
-            
-            # Cluster indices
-            print(top_k_indices)
-
-            
-            
-            
-            
-            print(top_k_labels)
-            
-            exit()
 
             # Move to the best child node if possible
             best_label = top_k_labels[0]  # Select the label with the highest probability
 
             if best_label in current_htree.children:
                 current_htree = current_htree.children[best_label]
-            else:
-                # print(current_htree)
-                break  # Stop if there are no more children
-        
-        exit()
-        return predicted_kb_indices, predicted_labels
+                
+            else: # Get the topk kb indexes
+                
+                cluster_labels = current_htree.clustering_model.labels()
+                indices = cluster_labels == best_label
+                
+                conc_emb = current_htree.concatenated_embeddings[indices]
+                
+                # Conc input, embeddings from the input
+                # Conc emb, embeddings of the cluster
+                
+                # Gives trhow similarity an partion of the embeddings
+                (indices, scores) = cls.__reranker(conc_input, conc_emb, k=k, candidates=100)
+                
+                kb_indices = []
+                counter = 0
+                for idx in indices:
+                    kb_indices.append((current_htree.kb_indices[idx], scores[counter]))
+                    counter +=1
+                
+                return kb_indices # Stop if there are no more children
 
     @classmethod
     def inference(
@@ -585,14 +613,12 @@ class XMRPipeline:
         # Predict labels for each concatenated input
         all_kb_indices = []
         for conc_input in concatenated_array:
-            kb_indices, _ = cls.__inference_predict_input(htree, conc_input.reshape(1, -1), k=k)
-            # Take the most specific predictions (from the deepest level)
-            final_kb_indices = kb_indices[-1] if kb_indices else []
-            all_kb_indices.append(final_kb_indices[:k])  # Ensure we return at most k indices
+            kb_indices = cls.__inference_predict_input(htree, conc_input.reshape(1, -1), k=k)
+            all_kb_indices.append(kb_indices)  # Ensure we return at most k indices
         
+        # print(all_kb_indices)
         # Turn kb_indices into labels
-        all_kb_indices = np.array(all_kb_indices, dtype=np.int64)
-        return all_kb_indices
+        return cls.__convert_predictions_into_csr(all_kb_indices)
 
     @staticmethod
     def kb_indices_to_labels(htree, kb_indices):
