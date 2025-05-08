@@ -50,6 +50,7 @@ class XMRTree:
         self.vectorizer = vectorizer
 
         self.clustering_model = clustering_model
+        self.cluster_id = cluster_id
         self.cluster_id_look_up = {}
 
         self.classifier_model = classifier_model
@@ -285,6 +286,7 @@ class XMRTree:
             "label_matrix": "True" if self.label_matrix is not None else "False",
             "label_enconder": "True" if self.label_enconder is not None else "False",
             "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False",
+            "cluster_id": "Not decided yet" if self.cluster_id is None else self.cluster_id,
             "cluster_id_look_up": "Only in root" if self.cluster_id_look_up is None else self.cluster_id_look_up
         }
 
@@ -299,7 +301,7 @@ class XMRTree:
     def __repr__(self):
         """Short representation for debugging."""
         return f"XMRTree(depth={self.depth}, children={len(self.children)})"
-
+        
 
 class XMRTreeEnumerator:
     
