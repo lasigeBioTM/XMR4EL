@@ -256,12 +256,7 @@ class XMRTree:
         return self.clustering_model is None
 
     def is_leaf(self):
-        return self.children is None
-    
-    def enumerate_clusters(self):
-        enum = XMRTreeEnumerator()
-        self.cluster_id_look_up = enum.enumerate(self)
-        
+        return self.children is None        
 
     def __str__(self, level=0):
         """Recursively generates a string representation of the tree with all attribute states."""
@@ -283,9 +278,7 @@ class XMRTree:
             "kb_indices": "Not yet initialized" if self.kb_indices is None else len(self.kb_indices), # "True" if self.kb_indices is not None else "False",
             "label_matrix": "True" if self.label_matrix is not None else "False",
             "label_enconder": "True" if self.label_enconder is not None else "False",
-            "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False",
-            "cluster_id": "Not decided yet" if self.cluster_id is None else self.cluster_id,
-            "cluster_id_look_up": "Only in root" if self.cluster_id_look_up is None else self.cluster_id_look_up
+            "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False"
         }
 
         tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"
