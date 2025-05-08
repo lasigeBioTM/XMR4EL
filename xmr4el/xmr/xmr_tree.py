@@ -50,8 +50,6 @@ class XMRTree:
         self.vectorizer = vectorizer
 
         self.clustering_model = clustering_model
-        self.cluster_id = cluster_id
-        self.cluster_id_look_up = {}
 
         self.classifier_model = classifier_model
         self.test_split = test_split
