@@ -1,9 +1,10 @@
 import os
 import logging
+import torch
 
 import numpy as np
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, issparse
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
 from joblib import Parallel, delayed, parallel_backend
@@ -117,7 +118,7 @@ class XMRPredict():
         return csr_matrix((vals, (rows, cols)), shape=(len(data), num_labels), dtype=np.float32)
     
     @classmethod
-    def __inference_predict_input(cls, htree, conc_input, k=10):
+    def _predict_input(cls, htree, conc_input, k=10):
         """Inference of an single concatenated text throw out the tree
 
         Args:
@@ -127,57 +128,40 @@ class XMRPredict():
         Return:
             predicted_labels (lst): Predicted labels
         """
-        LOGGER.info(f"[PID {os.getpid()}] Processing input with shape {conc_input.shape}")
+        
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
         current_htree = htree
+        input_tensor = torch.FloatTensor(conc_input).to(device)
 
         while True:
-            current_classifier = current_htree.classifier_model
-
+            classifier = current_htree.classifier_model
             n_labels = len(current_htree.clustering_model.labels())
-
-            if n_labels < k:
-                k = n_labels
-                LOGGER.warning(
-                    "Children number is '< k', k value will be the number of children"
-                )
-
-            # Get top-k predictions from the classifier model
-            top_k_probs = cls.__predict_proba_classifier(
-                current_classifier, conc_input.reshape(1, -1)
-            )[0]
+            k = min(k, n_labels)
             
-            top_k_indices = np.argsort(top_k_probs)[-k:][
-                ::-1
-            ]  # Sort probabilities and get top-k indices
-        
-            top_k_labels = top_k_indices[:k]
+            with torch.no_grad():
+                probs = cls.__predict_proba_classifier(classifier, input_tensor)[0]
+            
+            top_label = np.argmax(probs)
 
-            # Move to the best child node if possible
-            best_label = top_k_labels[0]  # Select the label with the highest probability
-
-            if best_label in current_htree.children:
-                current_htree = current_htree.children[best_label]
+            if top_label in current_htree.children:
+                current_htree = current_htree.children[top_label]
                 
             else: # Get the topk kb indexes
-                
-                cluster_labels = current_htree.clustering_model.labels()
-                indices = cluster_labels == best_label
-                
-                conc_emb = current_htree.concatenated_embeddings[indices]
-                
-                # Conc input, embeddings from the input
-                # Conc emb, embeddings of the cluster
+                cluster_mask = current_htree.clustering_model.labels() == top_label
+                conc_emb = current_htree.concatenated_embeddings[cluster_mask]
                 
                 # Gives trhow similarity an partion of the embeddings
-                (indices, scores) = cls.__reranker(conc_input, conc_emb, k=k, candidates=100)
+                indices, scores = cls.__reranker(
+                    conc_input, 
+                    conc_emb, 
+                    k=k, 
+                    candidates=min(100, len(conc_emb))
+                )
                 
-                kb_indices = []
-                counter = 0
-                for idx in indices:
-                    kb_indices.append((current_htree.kb_indices[idx], scores[counter]))
-                    counter +=1
-                
-                return kb_indices # Stop if there are no more children
+                return [
+                    (current_htree.kb_indices[idx], float(score))
+                    for idx, score in zip(indices, scores)
+                ]
 
     @classmethod
     def inference(
@@ -196,50 +180,51 @@ class XMRPredict():
         Return:
             predicted_labels: The predicted_labels by the classifier
         """
-
-        vectorizer = htree.vectorizer
-        transfomer_n_features = htree.transformer_embeddings.shape[1]
-
-        """Predict Embeddings using stored vectorizer"""
-        text_emb = cls.__predict_vectorizer(vectorizer, input_text)
-        text_emb = text_emb.toarray()
         
-        # print(text_emb)
+        """Predict Embeddings using stored vectorizer"""
+        text_emb = cls.__predict_vectorizer(htree.vectorizer, input_text)
 
-        """Reduce Dimensions"""
-        # text_emb = cls.__reduce_dimensionality(text_emb, n_features)
-
-        # print(text_emb)
-
-        """Normalizing"""
-        text_emb = normalize(text_emb, norm="l2", axis=1)
-
-        """Predict embeddings using Transformer"""
+        """Normalize in-place if sparse """
+        if hasattr(text_emb, 'data'):
+            text_emb.data = normalize(text_emb.data.reshape(1, -1)).ravel()
+        else:
+            text_emb = normalize(text_emb, norm='l2', axis=1)
+        
+        """Transformer step with memory management"""
         transformer_model = cls.__predict_transformer(
-            input_text, transformer_config, dtype
-        ).model
-        transformer_emb = transformer_model.embeddings
-        del transformer_model  # Delete the model when no longer needed
-
-        """Reduce the dimension of the transformer to the dimension of the vectorizer"""
+            input_text, 
+            transformer_config, 
+            dtype
+        )
+        transformer_emb = transformer_model.model.embeddings
+        
+        """Dimensionality reduction if needed"""
+        transfomer_n_features = htree.transformer_embeddings.shape[1]
         if transformer_emb.shape[1] != transfomer_n_features:
-            transformer_emb = cls.__reduce_dimensionality(transformer_emb, transfomer_n_features)
+            transformer_emb = cls.__reduce_dimensionality(
+                transformer_emb, 
+                transfomer_n_features
+            )
 
-        """Normalize the transformer embeddings"""
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
 
-        """Concatenates the transformer embeddings with the text embeddings"""
-        concatenated_array = np.hstack((transformer_emb, text_emb))
+        """Concatenate effienciently"""
+        if issparse(text_emb):
+            text_emb = text_emb.toarray()
+        concat_emb = np.hstack((
+            transformer_emb.astype(dtype),
+            text_emb.astype(dtype)
+        ))
         
-        # Predict labels for each concatenated input
-        all_kb_indices = []
-        LOGGER.info(f"Starting to predict an array with shape -> {concatenated_array.shape}")
-        
-        with parallel_backend("threading"):
-            all_kb_indices = Parallel(n_jobs=-1)(
-                delayed(cls.__inference_predict_input)(htree, conc_input.reshape(1, -1), k=k)
-                for conc_input in concatenated_array
+        """Parallel predictions with batch size tunign"""
+        batch_size = max(1, len(input_text) // os.cpu_count() or 1)
+        results = Parallel(n_jobs=-1, batch_size=batch_size)(
+                delayed(cls._predict_input)(
+                    htree, 
+                    emb.reshape(1, -1), 
+                    k
+                )
+                for emb in concat_emb
             )
-        # print(all_kb_indices)
-        # Turn kb_indices into labels
-        return cls.__convert_predictions_into_csr(all_kb_indices)
+        
+        return cls.__convert_predictions_into_csr(results)
