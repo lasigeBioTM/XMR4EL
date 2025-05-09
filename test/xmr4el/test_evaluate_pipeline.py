@@ -3,7 +3,7 @@
 
 import time
 
-from xmr4el.xmr.xmr_pipeline import XMRPipeline
+from xmr4el.predict.predict import XMRPredict
 from xmr4el.xmr.xmr_tree import XMRTree
 
 """
@@ -50,7 +50,7 @@ def main():
 
     print(trained_xtree)
 
-    predicted_labels = XMRPipeline.inference(
+    predicted_labels = XMRPredict.inference(
         trained_xtree, name_list, transformer_config, k=k
     )
 
