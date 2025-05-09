@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from xmr4el.gpu_availability import is_cuda_available
 
 
-class Reranker():
+class XMRReranker():
     
     def __init__(self, embed_dim, hidden_dim=128):
         """
