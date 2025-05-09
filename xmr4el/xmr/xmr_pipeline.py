@@ -4,7 +4,6 @@ import logging
 
 import numpy as np
 
-from joblib import Parallel, delayed, parallel_backend
 from typing import Counter
 
 from sklearn.decomposition import PCA
@@ -19,7 +18,6 @@ from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
-from xmr4el.ranker.reranker import Reranker
 from xmr4el.xmr.xmr_tuner import XMRTuner
 from xmr4el.xmr.xmr_tree import XMRTree
 
