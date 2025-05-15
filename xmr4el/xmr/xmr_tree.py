@@ -19,7 +19,14 @@ logging.basicConfig(
 
 
 class XMRTree:
-
+    """
+    A hierarchical tree structure for Extreme Multi-label Ranking (XMR) that stores:
+    - Embeddings at each level (text, transformer, concatenated)
+    - Trained models (vectorizer, clustering, classifier)
+    - Label information and PIFA embeddings
+    - Child nodes for hierarchical structure
+    """
+    
     def __init__(
         self,
         label_matrix=None,
@@ -31,53 +38,70 @@ class XMRTree:
         kb_indices=None,
         vectorizer=None,
         clustering_model=None,
-        cluster_id=None,
         classifier_model=None,
         test_split=None,
         children=None,  # Dictionary of XMRTree nodes
         depth=0,
     ):
-
+        """
+        Initialize an XMRTree node with optional components.
+        
+        Args:
+            label_matrix: Binary label matrix for the node's data
+            label_enconder: Label encoder for converting between indices and labels
+            pifa_embeddings: PIFA label embeddings for this node
+            text_embeddings: Text (e.g., TF-IDF) embeddings
+            transformer_embeddings: Transformer model embeddings
+            concatenated_embeddings: Combined feature embeddings
+            kb_indices: Indices mapping to knowledge base entries
+            vectorizer: Text vectorizer model
+            clustering_model: Clustering model for this node
+            classifier_model: Classifier model for this node
+            test_split: Train/test split data for evaluation
+            children: Dictionary of child nodes (key=cluster ID, value=XMRTree)
+            depth: Current depth in the hierarchy (0=root)
+        """
+        # Label information
         self.label_matrix = label_matrix
         self.label_enconder = label_enconder
         self.pifa_embeddings = pifa_embeddings
 
+        # Embeddings storage
         self.text_embeddings = text_embeddings
         self.transformer_embeddings = transformer_embeddings
         self.concatenated_embeddings = concatenated_embeddings
-        self.kb_indices = kb_indices
+        self.kb_indices = kb_indices # Indices of data points in this node
         
+        # Models
         self.vectorizer = vectorizer
-
         self.clustering_model = clustering_model
-
         self.classifier_model = classifier_model
-        self.test_split = test_split
+        self.test_split = test_split # Evaluation Data
 
-        self.children = children if children is not None else {}
-        self.depth = depth
-        
-        # Enumerate the clusters
-        self._cluster_counter = 0
+        # Tree Structure
+        self.children = children if children is not None else {} # Child Nodes
+        self.depth = depth # Depth in hierarchy
 
     def save(self, save_dir="data/saved_trees", child_tree=False):
-        """Save trained XMRTree model to disk.
-
+        """
+        Save trained XMRTree model to disk with proper organization.
+        
         Args:
-            save_dir (str): Folder to store serialized object in.
-            child_tree (bool): If True, saves the tree without the timestamp (for child trees).
+            save_dir (str): Base directory for saving
+            child_tree (bool): If True, skips timestamp directory creation
+                             (used when saving child trees recursively)
         """
         if not child_tree:
-            # Generate a timestamped directory for the main tree
+            # For main tree, create timestamped directory
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             save_dir = os.path.join(save_dir, f"{self.__class__.__name__}_{timestamp}")
 
         os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
 
-        # Prepare state dictionary without embeddings
+        # Prepare state dictionary (excluding large objects saved separately)
         state = self.__dict__.copy()
 
-        # Save models separately
+        # Save models individually (vectorizer, clustering, classifier)
         models = ["vectorizer", "clustering_model", "classifier_model"]
         models_data = [getattr(self, model_name, None) for model_name in models]
 
@@ -86,11 +110,11 @@ class XMRTree:
                 print(type(model))
                 model.save(os.path.join(save_dir, models[idx]))
 
-        # Remove saved models from state dictionary
+        # Remove models from state to avoid duplicate saving
         for model in models:
             state.pop(model, None)
 
-        # Save embeddings separately (if they exist)
+        # Save large embeddings as numpy files
         for attr in [
             "text_embeddings",
             "transformer_embeddings",
@@ -99,13 +123,12 @@ class XMRTree:
             emb_data = getattr(self, attr, None)
             if emb_data is not None:
                 np.save(os.path.join(save_dir, f"{attr}.npy"), emb_data)
-                state.pop(attr, None)  # Remove from state to avoid duplication
+                state.pop(attr, None) # Remove from state dict
             else:
                 LOGGER.warning(f"{attr} is None and will not be saved.")
 
-        state.pop("children", {})
-
-        # Save child trees only if there are children
+        # Handle child trees recursively
+        state.pop("children", {}) # Children saved separately
         if self.children:
             children_dir = os.path.join(save_dir, "children")
             os.makedirs(children_dir, exist_ok=True)
@@ -115,7 +138,7 @@ class XMRTree:
                 )  # Unique directory for each child
                 child.save(child_save_dir, child_tree=True)
 
-        # Save the metadata using pickle
+        # Save remaining metadata as pickle
         with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
             pickle.dump(state, fout)
 
@@ -123,16 +146,18 @@ class XMRTree:
 
     @classmethod
     def load(cls, load_dir=None, child_tree=False):
-        """Load a saved XMRTree model from disk.
-
+        """
+        Load a saved XMRTree from disk.
+        
         Args:
-            load_dir (str): Specific folder to load from. If None, loads the latest saved model.
-
+            load_dir (str): Directory to load from. If None, loads most recent.
+            child_tree (bool): If True, indicates loading a child tree.
+            
         Returns:
-            XMRTree: The loaded object.
+            XMRTree: The reconstructed tree structure
         """
         if load_dir is None:
-            # Find the most recent directory
+            # Find most recent save if no directory specified
             all_saves = sorted(
                 glob.glob(os.path.join("data/saved_trees", f"{cls.__name__}_*")),
                 reverse=True,
@@ -143,19 +168,18 @@ class XMRTree:
                 )
             load_dir = all_saves[0]  # Load the most recent one
             LOGGER.info(f"Loading latest model from: {load_dir}")
-
-        # Path to the main tree's metadata
+            
+        # Load main metadata
         tree_path = os.path.join(load_dir, "xmrtree.pkl")
         assert os.path.exists(tree_path), f"XMRTree path {tree_path} does not exist"
 
-        # Load metadata from pickle
         with open(tree_path, "rb") as fin:
             model_data = pickle.load(fin)
 
         model = cls()
         model.__dict__.update(model_data)
 
-        # Load models separately
+        # Load models (skip vectorizer for child trees)
         if not child_tree:
             setattr(
                 model,
@@ -174,7 +198,7 @@ class XMRTree:
             ClassifierModel.load(os.path.join(load_dir, "classifier_model")),
         )
 
-        # Load embeddings separately if they exist
+        # Load embeddings if they exist
         for attr in [
             "text_embeddings",
             "transformer_embeddings",
@@ -188,97 +212,106 @@ class XMRTree:
                 pass
                 LOGGER.debug(f"{attr} not found at {emb_path}")
 
-        # Load children trees if present
+        # Recursively load child trees
         children_dir = os.path.join(load_dir, "children")
         if os.path.exists(children_dir):
             for child_name in os.listdir(children_dir):
                 child_tree_path = os.path.join(children_dir, child_name)
                 if os.path.isdir(child_tree_path):  # Make sure it's a directory
                     try:
-                        child_index = int(
-                            child_name.replace("child_", "")
-                        )  # Convert 'child_0' -> 0
+                        child_index = int(child_name.replace("child_", ""))  # Convert 'child_0' -> 0
+                        child_model = cls.load(child_tree_path, child_tree=True)  # Recursively load child
+                        model.children[child_index] = child_model
+                        LOGGER.debug(
+                        f"Loading child tree from {child_tree_path} as index {child_index}"
+                        )
                     except ValueError:
                         LOGGER.debug(f"Skipping unexpected child folder: {child_name}")
-                        continue  # Ignore folders that don't match 'child_X' format
-
-                    LOGGER.debug(
-                        f"Loading child tree from {child_tree_path} as index {child_index}"
-                    )
-                    child_model = cls.load(
-                        child_tree_path, child_tree=True
-                    )  # Recursively load child
-                    model.children[child_index] = child_model
 
         LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
 
+    # Setters methods for tree attributes
     def set_label_matrix(self, label_matrix):
+        """Set the binary label matrix for this node."""
         self.label_matrix = label_matrix
         
     def set_label_enconder(self, label_enconder):
+        """Set the label encoder for this node."""
         self.label_enconder = label_enconder
         
     def set_pifa_embeddings(self, pifa_embeddings):
+        """Set PIFA label embeddings for this node."""
         self.pifa_embeddings = pifa_embeddings
 
     def set_text_embeddings(self, text_embeddings):
+        """Set text embeddings (e.g., TF-IDF) for this node."""
         self.text_embeddings = text_embeddings
 
     def set_transformer_embeddings(self, transformer_embeddings):
+        """Set transformer model embeddings for this node."""
         self.transformer_embeddings = transformer_embeddings
 
     def set_concatenated_embeddings(self, concatenated_embeddings):
+        """Set concatenated feature embeddings for this node."""
         self.concatenated_embeddings = concatenated_embeddings
         
     def set_kb_indices(self, kb_indices):
+        """Set knowledge base indices for this node's data points."""
         self.kb_indices = kb_indices
 
     def set_vectorizer(self, vectorizer):
+        """Set the text vectorizer model (typically only at root)."""
         self.vectorizer = vectorizer
 
     def set_clustering_model(self, clustering_model):
+        """Set the clustering model for this node."""
         self.clustering_model = clustering_model
 
     def set_classifier_model(self, classifier_model):
+        """Set the classifier model for this node."""
         self.classifier_model = classifier_model
 
     def set_test_split(self, test_split):
+        """Set train/test split data for evaluation."""
         self.test_split = test_split
 
     def set_children(self, idx, child_tree):
+        """Add a child node at the specified index."""
         self.children[idx] = child_tree
 
     def set_depth(self, depth):
+        """Set the depth of this node in the hierarchy."""
         self.depth = depth
 
     def is_empty(self):
+        """Check if this node is empty (no clustering model)."""
         return self.clustering_model is None
 
     def is_leaf(self):
+        """Check if this node is a leaf (no children)."""
         return self.children is None        
 
     def __str__(self, level=0):
-        """Recursively generates a string representation of the tree with all attribute states."""
-        indent = "  " * level  # Indentation for hierarchy visualization
         """
-        attributes = {
-            "text_embeddings": self.text_embeddings is not None,
-            "transformer_embeddings": self.transformer_embeddings is not None,
-            "concatenated_embeddings": self.concatenated_embeddings is not None,
-            "vectorizer": self.vectorizer is not None,
-            "clustering_model": self.clustering_model is not None,
-            "classifier_model": self.classifier_model is not None,
-            "test_split": self.test_split is not None,
-        }
+        Generate a human-readable string representation of the tree.
+        
+        Args:
+            level (int): Current indentation level for pretty printing
+            
+        Returns:
+            str: Formatted tree structure with key attributes
         """
         
+        indent = "  " * level
+        
+        # Display key attributes
         attributes = {
-            "labels": Counter(self.clustering_model.labels()),
-            "kb_indices": "Not yet initialized" if self.kb_indices is None else len(self.kb_indices), # "True" if self.kb_indices is not None else "False",
-            "label_matrix": "True" if self.label_matrix is not None else "False",
-            "label_enconder": "True" if self.label_enconder is not None else "False",
-            "pifa_embeddings": "True" if self.pifa_embeddings is not None else "False"
+            "labels": Counter(self.clustering_model.labels()) if self.clustering_model else None,
+            "kb_indices": len(self.kb_indices) if self.kb_indices else "None",
+            "label_matrix": bool(self.label_matrix),
+            "label_enconder": bool(self.label_enconder),
+            "pifa_embeddings": bool(self.pifa_embeddings)
         }
 
         tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"
@@ -290,24 +323,5 @@ class XMRTree:
         return tree_str
 
     def __repr__(self):
-        """Short representation for debugging."""
+        """Compact representation for debugging."""
         return f"XMRTree(depth={self.depth}, children={len(self.children)})"
-        
-
-class XMRTreeEnumerator:
-    
-    def __init__(self):
-        self.counter = 0
-        self.id_to_node = {}
-        
-    def enumerate(self, root):
-        self._enumerate_recursive(root)
-        print(self.id_to_node)
-        return self.id_to_node
-            
-    def _enumerate_recursive(self, node):
-        node.cluster_id = self.counter
-        self.id_to_node[self.counter] = node
-        self.counter += 1
-        for child in node.children:
-            self._enumerate_recursive(child)
