@@ -90,7 +90,8 @@ class XMRPipeline:
             random_state (int): Random seed for reproducibility
             
         Returns:
-            Reduced dimensionality embeddings (nd.array)
+            np.array: Reduced embeddings with shape (n_samples, n_features)
+                     or original if reduction not possible
         """
         n_samples, n_features_emb = emb.shape
         # PCA cannot have more components than min(n_samples, n_features)
