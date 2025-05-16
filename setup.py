@@ -15,5 +15,5 @@ setup(
     author='João Vedor',
     author_email='fc56311@alunos.fc.ul.pt',
     url='https://github.com/lasigeBioTM/XMR4EL',
-    python_requires="3.13",
+    python_requires=">=3.13"
 )
