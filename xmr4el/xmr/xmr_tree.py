@@ -307,11 +307,11 @@ class XMRTree:
         
         # Display key attributes
         attributes = {
-            "labels": Counter(self.clustering_model.labels()) if self.clustering_model else None,
-            "kb_indices": len(self.kb_indices) if self.kb_indices else "None",
-            "label_matrix": bool(self.label_matrix),
-            "label_enconder": bool(self.label_enconder),
-            "pifa_embeddings": bool(self.pifa_embeddings)
+            # "labels": Counter(self.clustering_model.labels()) if self.clustering_model else None,
+            # "kb_indices": len(self.kb_indices) if self.kb_indices else "None",
+            # "label_matrix": "Label matrix loaded" if self.label_matrix else "None",
+            # "label_enconder": "Encoder exists" if self.label_matrix else "None",
+            # "pifa_embeddings": len(self.pifa_embeddings) if self.pifa_embeddings else "None"
         }
 
         tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"

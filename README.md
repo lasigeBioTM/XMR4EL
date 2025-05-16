@@ -128,5 +128,4 @@ predicted_labels = XMRPredict.inference(
 
 Once trained, the model can be used to perform inference and predict labels for new instances.
 
-
-
+pip install --extra-index-url=https://pypi.nvidia.com cuml-cu11==25.2.1

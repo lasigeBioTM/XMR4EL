@@ -7,6 +7,7 @@
 # Cache Folders
 __pycache__/
 /.venv
+/.test_venv
 *.pyc
 *.onnx
 
