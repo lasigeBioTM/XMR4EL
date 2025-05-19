@@ -4,7 +4,7 @@
 import time
 
 from xmr4el.predict.predict import XMRPredict
-from xmr4el.xmr.xmr_tree import XMRTree
+from xmr4el.xmr.tree import XMRTree
 
 """
     Depending on the train file, different number of labels, 

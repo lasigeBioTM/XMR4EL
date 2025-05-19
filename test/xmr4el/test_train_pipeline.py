@@ -5,7 +5,7 @@ import copy
 import numpy as np
 
 from xmr4el.featurization.preprocessor import Preprocessor
-from xmr4el.xmr.xmr_pipeline import XMRPipeline
+from xmr4el.xmr.pipeline import XMRPipeline
 
 
 """

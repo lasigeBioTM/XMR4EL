@@ -17,8 +17,8 @@ from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
-from xmr4el.xmr.xmr_tuner import XMRTuner
-from xmr4el.xmr.xmr_tree import XMRTree
+from xmr4el.xmr.tuner import XMRTuner
+from xmr4el.xmr.tree import XMRTree
 
 
 LOGGER = logging.getLogger(__name__)
