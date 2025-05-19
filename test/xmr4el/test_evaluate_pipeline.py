@@ -22,7 +22,7 @@ def main():
 
     start = time.time()
 
-    onnx_directory = "data/processed/vectorizer/biobert_onnx_cpu.onnx"
+    onnx_directory = "test/test_data/onnx_dir/model.onnx"
 
     k = 5
 
@@ -45,7 +45,8 @@ def main():
 
     # train_disease_100
     trained_xtree = XMRTree.load(
-        "data/saved_trees/XMRTree_2025-05-08_15-16-22"
+        # "data/saved_trees/XMRTree_2025-05-08_15-16-22"
+        "test/test_data/saved_trees/XMRTree_2025-05-19_13-06-17"
     )
 
     print(trained_xtree)

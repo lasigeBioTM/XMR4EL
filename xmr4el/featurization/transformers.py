@@ -275,10 +275,12 @@ class BioBert(Transformer):
     @classmethod
     def __export_to_onnx(cls, directory):
         """Exports BioBERT to ONNX if not already exported."""
-        if os.path.exists(directory):
+        if os.path.exists(directory) and os.path.isfile(directory):
             LOGGER.info("ONNX model already exists. Skipping Export.")
-            return
+            return directory
         else:
+            onnx_file = "model.onnx"
+            directory = os.path.join(directory, onnx_file)
             LOGGER.info("ONNX model doesn't exist. Exporting.")
 
         model = AutoModel.from_pretrained(cls.model_name)
@@ -308,6 +310,8 @@ class BioBert(Transformer):
             opset_version=14,
         )
         LOGGER.info("Export complete.")
+        
+        return directory
 
     @classmethod
     def __predict_cpu(
@@ -333,7 +337,7 @@ class BioBert(Transformer):
         tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
 
         # Ensure ONNX model is exported before running inference
-        cls.__export_to_onnx(onnx_directory)
+        onnx_directory = cls.__export_to_onnx(onnx_directory)
 
         cls.__create_batch_dir(batch_dir)
 

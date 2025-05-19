@@ -46,6 +46,7 @@ Current GPU models are based on RAPIDS.ai and are tested within the provided Doc
 * Linear Models
 
     sklearnlogisticregression: Scikit-learn's Logistic Regression
+    sklearnrandomforestclassifier: Scikit-learn's Random Forest Classifier
 
 ## Model Configuration
 
