@@ -1,4 +1,4 @@
-from xmr4el.xmr.xmr_tree import XMRTree
+from xmr4el.xmr.tree import XMRTree
 
 from sklearn.metrics import top_k_accuracy_score
 
