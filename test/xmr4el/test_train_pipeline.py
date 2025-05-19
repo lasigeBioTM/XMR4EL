@@ -22,7 +22,8 @@ from xmr4el.xmr.pipeline import XMRPipeline
 
 def main():
 
-    onnx_directory = "test/test_data/processed/vectorizer/biobert_onnx_cpu.onnx"
+    # Must create an onnx_directory
+    onnx_directory = "test/test_data/onnx_dir/model.onnx"
 
     start = time.time()
 
@@ -33,23 +34,21 @@ def main():
     
     transformer_config = {
         "type": "biobert",
-        "kwargs": {"batch_size": 400, "onnx_directory": onnx_directory},
+        "kwargs": {"batch_size": 400, "onnx_directory": onnx_directory}
     }
     
-    # clustering_config = {
-    #     "type": "sklearnminibatchkmeans",
-    #     "kwargs": {"random_state": 0},
-    # }
-    
     clustering_config = {
-        "type": "cumlkmeans",
+        "type": "sklearnminibatchkmeans",
         "kwargs": {"random_state": 0},
     }
 
     classifier_config = {
-        "type": "sklearnlogisticregression",
+        # "type": "sklearnlogisticregression",
+        "type": "sklearnrandomforestclassifier",
         "kwargs": {"n_jobs": -1, "random_state": 0},
     }
+    
+    
 
     min_leaf_size = 10
     depth = 3
@@ -60,7 +59,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=16
+        truncate_data=150
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix
