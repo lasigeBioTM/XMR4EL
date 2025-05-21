@@ -173,7 +173,7 @@ class XMRPredict():
         """
         
         LOGGER.info(F"NUMBER OF PREDICT: {cls.COUNTER}")
-        COUNTER += 1
+        cls.COUNTER += 1
         
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         current_htree = htree
