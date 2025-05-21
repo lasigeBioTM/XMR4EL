@@ -29,7 +29,7 @@ class XMRReranker():
         ).to(self.device)
         
         # Similarity metric
-        self.similarity_fn = self.__fast_cosine_similarity
+        self.similarity_fn = self._fast_cosine_similarity
         
     @staticmethod
     def _fast_cosine_similarity(x, y):
