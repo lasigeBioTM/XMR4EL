@@ -33,20 +33,21 @@ Current GPU models are based on RAPIDS.ai and are tested within the provided Doc
 
 * Vectorizers
 
-    tfidf: Scikit-learn's TF-IDF Vectorizer
+    - tfidf: Scikit-learn's TF-IDF Vectorizer
 
 * Transformers
 
-    biobert: BioBERT Transformer
+    - biobert: BioBERT Transformer
 
 * Clustering Models
 
-    sklearnminibatchkmeans: Scikit-learn's MiniBatchKMeans
+    - sklearnminibatchkmeans: Scikit-learn's MiniBatchKMeans
 
 * Linear Models
 
-    sklearnlogisticregression: Scikit-learn's Logistic Regression
-    sklearnrandomforestclassifier: Scikit-learn's Random Forest Classifier
+    - sklearnlogisticregression: Scikit-learn's Logistic Regression
+    
+    - sklearnrandomforestclassifier: Scikit-learn's Random Forest Classifier
 
 ## Model Configuration
 

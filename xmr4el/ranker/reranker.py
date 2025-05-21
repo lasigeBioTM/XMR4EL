@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from sklearn.metrics.pairwise import cosine_similarity
+from torch.cuda.amp import autocast
 
 from xmr4el.gpu_availability import is_cuda_available
 
@@ -11,22 +11,14 @@ class XMRReranker():
     
     def __init__(self, embed_dim, hidden_dim=128):
         """
-        Combined cosine + neural reranker
+        Optimized combined cosine + neural reranker.
         
         Args:
             embed_dim: Dimension of input embeddings
             hidden_dim: Hidden layer size for neural scorer
-            device: 'cpu' or 'cuda'
         """
         
-        gpu_availability = is_cuda_available()
-        
-        if gpu_availability:
-            device = 'cuda'
-        else:
-            device = 'cpu'
-        
-        self.device = device
+        self.device = 'cuda' if is_cuda_available() else 'cpu'
         self.embed_dim = embed_dim
         
         # Neural scoring component
@@ -34,12 +26,16 @@ class XMRReranker():
             nn.Linear(embed_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
-        )
-        
-        self.neural_score.to(device)
+        ).to(self.device)
         
         # Similarity metric
-        self.similarity_fn = cosine_similarity
+        self.similarity_fn = self.__fast_cosine_similarity
+        
+    def __fast_cosine_similarity(x, y):
+        """Optimized cosine similarity using PyTorch"""
+        x_norm = torch.nn.functional.normalize(x, p=2, dim=-1)
+        y_norm = torch.nn.functional.normalize(y, p=2, dim=-1)
+        return torch.mm(x_norm, y_norm.T)
         
     def match(self, input_vec, label_vecs, top_k=10, candidates=100):
         """
@@ -55,36 +51,32 @@ class XMRReranker():
             Tuple of (indices, scores) for top_k matches (always CPU numpy arrays)
         """
         # Convert inputs to tensors and match device
-        input_tensor = self._ensure_tensor(input_vec)
-        label_tensor = self._ensure_tensor(label_vecs)
+        input_tensor = torch.as_tensor(input_vec, dtype=torch.float32, device=self.device)
+        label_tensor = torch.as_tensor(label_vecs, dtype=torch.float32, device=self.device)
         
         # Stage 1: Candidate selection
         with torch.no_grad():
-            sim_scores = self._compute_similarity(input_tensor, label_tensor)
+            sim_scores = self.similarity_fn(input_tensor.unsqueeze(0), label_tensor)
             candidate_indices = torch.topk(
-                sim_scores, 
-                min(candidates, label_tensor.size(0))
-            ).indices.squeeze()
+                sim_scores.squeeze(0), 
+                min(candidates, len(label_tensor))
+            ).indices
             
         # Stage 2: Neural reranking
-        candidate_vecs = label_tensor[candidate_indices].to(self.device)
-        expanded_input = input_tensor.expand_as(candidate_vecs).to(self.device)
+        candidate_vecs = label_tensor[candidate_indices]
+        expanded_input = input_tensor.unsqueeze(0).expand_as(candidate_vecs)
         
         # Score candidates
-        scores = self.neural_score(
-            torch.cat([expanded_input, candidate_vecs], dim=1)
-        ).squeeze(1)
+        with autocast(enabled=(self.device.type == 'cuda')):  # Mixed precision
+            scores = self.neural_score(
+                torch.cat([expanded_input, candidate_vecs], dim=1)
+            ).squeeze(1)
         
-        # Get top-k predictions
-        top_scores, top_indices = torch.topk(
-            scores, 
-            min(top_k, scores.size(0))
-        )
-        
-        # Return as numpy arrays on CPU
+        # Get top-k predictions and return as numpy
+        top_scores, top_indices = torch.topk(scores, min(top_k, len(scores)))
         return (
             candidate_indices[top_indices].cpu().numpy(),
-            top_scores.cpu().detach().numpy()
+            top_scores.cpu().numpy()
         )
 
     def _ensure_tensor(self, x):
