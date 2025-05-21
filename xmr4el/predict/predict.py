@@ -3,6 +3,7 @@ import logging
 import torch
 
 import numpy as np
+import multiprocessing as mp
 
 from scipy.sparse import csr_matrix, issparse
 from sklearn.preprocessing import normalize
@@ -182,6 +183,7 @@ class XMRPredict():
         while True:
             # Get classifier and number of possible labels at current level
             classifier = current_htree.classifier_model
+            classifier.model.model.n_jobs = 1
             n_labels = len(current_htree.clustering_model.labels())
             k = min(k, n_labels) # Ensure k doesn't exceed available labels
             
@@ -218,8 +220,25 @@ class XMRPredict():
                 ]
 
     @classmethod
+    def _process_batch(cls, args):
+        """
+        Batch processing wrapper for multiprocessing
+        Args:
+            args: Tuple of (htree, batch_embeddings, k)
+        """
+        htree, batch, k = args
+        return [cls._predict_input(htree, emb.reshape(1, -1), k) for emb in batch]
+
+    @classmethod
+    def _init_worker(cls):
+        """Worker initialization for CUDA and thread management"""
+        torch.set_num_threads(1)  # Crucial for CPU-bound tasks
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+    @classmethod
     def inference(
-        cls, htree, input_text, transformer_config, k=3, dtype=np.float32
+        cls, htree, input_text, transformer_config, k=3, dtype=np.float32, n_workers=None
     ):
         """
         Main prediction pipeline for XMR system.
@@ -270,16 +289,23 @@ class XMRPredict():
             text_emb.astype(dtype)
         ))
         
-        # Step 5: Parallel predictions with dynamic batching
-        batch_size = max(1, len(input_text) // os.cpu_count() or 1)
-        results = Parallel(n_jobs=4, batch_size=batch_size)(
-                delayed(cls._predict_input)(
-                    htree, 
-                    emb.reshape(1, -1), 
-                    k
-                )
-                for emb in concat_emb
-            )
+        n_workers = n_workers or min(mp.cpu_count(), 8)
+        ctx = mp.get_context("spawn")
         
-        # Convert results to sparse matrix format
-        return cls.__convert_predictions_into_csr(results)
+        # Dynamic batching
+        batch_size = max(1, len(concat_emb) // (n_workers * 2))
+        batches = np.array_split(concat_emb, max(1, len(concat_emb)//batch_size))
+        
+        # Prepare arguments
+        args = [(htree, batch, k) for batch in batches]
+        
+        # Process with pool
+        with ctx.Pool(
+            processes=n_workers,
+            initializer=cls._init_worker
+        ) as pool:
+            results = pool.map(cls._process_batch, args)
+        
+        # Convert results
+        flat_results = [item for sublist in results for item in sublist]
+        return cls.__convert_predictions_into_csr(flat_results)
