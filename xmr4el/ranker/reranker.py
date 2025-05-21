@@ -1,105 +1,129 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-
-from torch.cuda.amp import autocast
-from sklearn.metrics.pairwise import cosine_similarity
-
-from xmr4el.gpu_availability import is_cuda_available
+from torch.amp import autocast
 
 
-class XMRReranker():
-
-    def __init__(self, embed_dim, hidden_dim=128):
+class XMRReranker:
+    def __init__(self, embed_dim, hidden_dim=128, batch_size=256, alpha=0.0):
         """
-        Combined cosine + neural reranker
-        
+        Batched reranker using cosine + neural scoring.
+
         Args:
-            embed_dim: Dimension of input embeddings
-            hidden_dim: Hidden layer size for neural scorer
-            device: 'cpu' or 'cuda'
+            embed_dim (int): Dimension of embeddings
+            hidden_dim (int): Hidden layer size for neural scoring
+            batch_size (int): Neural reranking batch size
+            alpha (float): Weight for cosine similarity vs neural score (0 = neural only, 1 = cosine only)
         """
-
-        gpu_availability = is_cuda_available()
-
-        if gpu_availability:
-            device = 'cuda'
-        else:
-            device = 'cpu'
-
-        self.device = device
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.embed_dim = embed_dim
+        self.batch_size = batch_size
+        self.alpha = alpha
 
-        # Neural scoring component
         self.neural_score = nn.Sequential(
             nn.Linear(embed_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
-        )
+        ).to(self.device)
+        self.neural_score.eval()
 
-        self.neural_score.to(device)
-
-        # Similarity metric
-        self.similarity_fn = cosine_similarity
-
-    def match(self, input_vec, label_vecs, top_k=10, candidates=100):
+    def _to_tensor(self, array: np.ndarray) -> torch.Tensor:
         """
-        Two-stage retrieval with automatic device handling.
-        
-        Args:
-            input_vec: (embed_dim,) numpy array or torch tensor (any device)
-            label_vecs: (num_labels, embed_dim) numpy array or torch tensor (any device)
-            top_k: Final number of predictions to return
-            candidates: Number of candidates for neural reranking
-            
+        Converts a numpy array to a float tensor on the correct device.
+        """
+        if not isinstance(array, np.ndarray):
+            raise TypeError("Expected input to be a numpy.ndarray")
+        tensor = torch.from_numpy(array).float().to(self.device)
+        if tensor.ndim == 1:
+            tensor = tensor.unsqueeze(0)
+        if tensor.shape[-1] != self.embed_dim:
+            raise ValueError(f"Expected last dimension to be {self.embed_dim}, got {tensor.shape[-1]}")
+        return tensor
+
+    def _fast_cosine_similarity(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """
+        Computes cosine similarity between x and y.
+        """
+        x = torch.nn.functional.normalize(x, dim=-1)
+        y = torch.nn.functional.normalize(y, dim=-1)
+        return torch.matmul(x, y.T)
+
+    def match(self, input_vec: np.ndarray, label_vecs: np.ndarray, top_k=10, candidates=100):
+        """
+        Single input reranking.
+
         Returns:
-            Tuple of (indices, scores) for top_k matches (always CPU numpy arrays)
+            Tuple of (top_indices, top_scores), both numpy arrays.
         """
-        # Convert inputs to tensors and match device
-        input_tensor = self._ensure_tensor(input_vec)
-        label_tensor = self._ensure_tensor(label_vecs)
+        x = self._to_tensor(input_vec)
+        y = self._to_tensor(label_vecs)
 
-        # Stage 1: Candidate selection
         with torch.no_grad():
-            sim_scores = self._compute_similarity(input_tensor, label_tensor)
-            candidate_indices = torch.topk(
-                sim_scores, 
-                min(candidates, label_tensor.size(0))
-            ).indices.squeeze()
+            sim_scores = self._fast_cosine_similarity(x, y).squeeze(0)
+            candidate_indices = torch.topk(sim_scores, min(candidates, y.size(0))).indices
+            candidate_vecs = y[candidate_indices]
+            x_expanded = x.expand_as(candidate_vecs)
 
-        # Stage 2: Neural reranking
-        candidate_vecs = label_tensor[candidate_indices].to(self.device)
-        expanded_input = input_tensor.expand_as(candidate_vecs).to(self.device)
+            scores = []
+            with autocast(self.device.type):
+                for i in range(0, len(candidate_vecs), self.batch_size):
+                    x_batch = x_expanded[i:i + self.batch_size]
+                    y_batch = candidate_vecs[i:i + self.batch_size]
+                    features = torch.cat([x_batch, y_batch], dim=1)
+                    batch_scores = self.neural_score(features).squeeze(1)
+                    scores.append(batch_scores)
 
-        # Score candidates
-        scores = self.neural_score(
-            torch.cat([expanded_input, candidate_vecs], dim=1)
-        ).squeeze(1)
+            scores = torch.cat(scores)
 
-        # Get top-k predictions
-        top_scores, top_indices = torch.topk(
-            scores, 
-            min(top_k, scores.size(0))
-        )
+            if self.alpha > 0:
+                cosine_part = sim_scores[candidate_indices]
+                final_scores = self.alpha * cosine_part + (1 - self.alpha) * scores
+            else:
+                final_scores = scores
 
-        # Return as numpy arrays on CPU
-        return (
-            candidate_indices[top_indices].cpu().numpy(),
-            top_scores.cpu().detach().numpy()
-        )
+            top_scores, top_indices = torch.topk(final_scores, min(top_k, final_scores.size(0)))
+            return candidate_indices[top_indices].cpu().numpy(), top_scores.cpu().numpy()
 
-    def _ensure_tensor(self, x):
-        """Convert input to tensor on correct device"""
-        if not torch.is_tensor(x):
-            x = torch.FloatTensor(x)
-        return x.to(self.device)
+    def match_batch(self, input_vecs: np.ndarray, label_vecs: np.ndarray, top_k=10, candidates=100):
+        """
+        Batch input reranking.
 
-    def _compute_similarity(self, x, y):
-        """Compute similarity with automatic device handling"""
-        if self.similarity_fn.__module__.startswith("sklearn"):
-            # For sklearn functions (requires CPU numpy)
-            x_np = x.cpu().numpy()
-            y_np = y.cpu().numpy()
-            return torch.from_numpy(
-                self.similarity_fn(x_np, y_np)
-            ).to(x.device)
+        Returns:
+            List of (top_indices, top_scores) tuples for each input.
+        """
+        input_tensor = self._to_tensor(input_vecs)
+        label_tensor = self._to_tensor(label_vecs)
+
+        results = []
+
+        with torch.no_grad():
+            for x in input_tensor:
+                sim_scores = self._fast_cosine_similarity(x.unsqueeze(0), label_tensor).squeeze(0)
+                candidate_indices = torch.topk(sim_scores, min(candidates, label_tensor.size(0))).indices
+                candidate_vecs = label_tensor[candidate_indices]
+                x_expanded = x.unsqueeze(0).expand_as(candidate_vecs)
+
+                scores = []
+                with autocast(self.device.type):
+                    for i in range(0, len(candidate_vecs), self.batch_size):
+                        x_batch = x_expanded[i:i + self.batch_size]
+                        y_batch = candidate_vecs[i:i + self.batch_size]
+                        features = torch.cat([x_batch, y_batch], dim=1)
+                        batch_scores = self.neural_score(features).squeeze(1)
+                        scores.append(batch_scores)
+
+                scores = torch.cat(scores)
+
+                if self.alpha > 0:
+                    cosine_part = sim_scores[candidate_indices]
+                    final_scores = self.alpha * cosine_part + (1 - self.alpha) * scores
+                else:
+                    final_scores = scores
+
+                top_scores, top_indices = torch.topk(final_scores, min(top_k, final_scores.size(0)))
+                results.append((
+                    candidate_indices[top_indices].cpu().numpy(),
+                    top_scores.cpu().numpy()
+                ))
+
+        return results

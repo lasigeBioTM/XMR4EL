@@ -114,14 +114,21 @@ class XMRPredict():
         Returns:
             tuple: (indices of top matches, similarity scores)
         """
-        reranker = XMRReranker(embed_dim=labels_vec.shape[1])
-        indices, scores = reranker.match(
+        reranker = XMRReranker(
+            embed_dim=labels_vec.shape[1],
+            hidden_dim=128, 
+            batch_size=400,
+            alpha=0.2
+            )
+
+        top_indices, top_scores = reranker.match(
             input_vec=input_vec,
             label_vecs=labels_vec,
             top_k=k,
             candidates=candidates,
         )
-        return indices, scores
+        
+        return top_indices, top_scores
     
     @staticmethod
     def __convert_predictions_into_csr(data, num_labels=None):
