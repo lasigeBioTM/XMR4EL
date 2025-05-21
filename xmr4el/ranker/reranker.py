@@ -3,51 +3,45 @@ import torch.nn as nn
 import numpy as np
 
 from torch.cuda.amp import autocast
+from sklearn.metrics.pairwise import cosine_similarity
 
 from xmr4el.gpu_availability import is_cuda_available
 
 
 class XMRReranker():
-    
+
     def __init__(self, embed_dim, hidden_dim=128):
         """
-        Optimized combined cosine + neural reranker.
+        Combined cosine + neural reranker
         
         Args:
             embed_dim: Dimension of input embeddings
             hidden_dim: Hidden layer size for neural scorer
+            device: 'cpu' or 'cuda'
         """
-        
-        self.device = 'cuda' if is_cuda_available() else 'cpu'
+
+        gpu_availability = is_cuda_available()
+
+        if gpu_availability:
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+        self.device = device
         self.embed_dim = embed_dim
-        
+
         # Neural scoring component
         self.neural_score = nn.Sequential(
             nn.Linear(embed_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
-        ).to(self.device)
-        
+        )
+
+        self.neural_score.to(device)
+
         # Similarity metric
-        self.similarity_fn = self._fast_cosine_similarity
-        
-    @staticmethod
-    def _fast_cosine_similarity(x, y):
-        """Optimized cosine similarity using PyTorch with shape handling."""
-        # Ensure x is 2D (even if single vector)
-        if x.dim() == 1:
-            x = x.unsqueeze(0)  # [embed_dim] -> [1, embed_dim]
-        
-        # Ensure y is 2D
-        if y.dim() == 1:
-            y = y.unsqueeze(0)  # [embed_dim] -> [1, embed_dim]
-        
-        # Normalize and compute similarity
-        x_norm = torch.nn.functional.normalize(x, p=2, dim=-1)
-        y_norm = torch.nn.functional.normalize(y, p=2, dim=-1)
-        
-        return torch.mm(x_norm, y_norm.T)  # [1, embed_dim] @ [embed_dim, n_labels] -> [1, n_labels]
-        
+        self.similarity_fn = cosine_similarity
+
     def match(self, input_vec, label_vecs, top_k=10, candidates=100):
         """
         Two-stage retrieval with automatic device handling.
@@ -62,29 +56,33 @@ class XMRReranker():
             Tuple of (indices, scores) for top_k matches (always CPU numpy arrays)
         """
         # Convert inputs to tensors and match device
-        input_tensor = torch.as_tensor(input_vec, dtype=torch.float32, device=self.device)
-        label_tensor = torch.as_tensor(label_vecs, dtype=torch.float32, device=self.device)
-        
+        input_tensor = self._ensure_tensor(input_vec)
+        label_tensor = self._ensure_tensor(label_vecs)
+
         # Stage 1: Candidate selection
         with torch.no_grad():
-            sim_scores = self.similarity_fn(input_tensor.unsqueeze(0), label_tensor)
+            sim_scores = self._compute_similarity(input_tensor, label_tensor)
             candidate_indices = torch.topk(
-                sim_scores.squeeze(0), 
-                min(candidates, len(label_tensor))
-            ).indices
-            
+                sim_scores, 
+                min(candidates, label_tensor.size(0))
+            ).indices.squeeze()
+
         # Stage 2: Neural reranking
-        candidate_vecs = label_tensor[candidate_indices]
-        expanded_input = input_tensor.unsqueeze(0).expand_as(candidate_vecs)
-        
+        candidate_vecs = label_tensor[candidate_indices].to(self.device)
+        expanded_input = input_tensor.expand_as(candidate_vecs).to(self.device)
+
         # Score candidates
-        with autocast(enabled=(self.device.type == 'cuda')):  # Mixed precision
-            scores = self.neural_score(
-                torch.cat([expanded_input, candidate_vecs], dim=1)
-            ).squeeze(1)
-        
-        # Get top-k predictions and return as numpy
-        top_scores, top_indices = torch.topk(scores, min(top_k, len(scores)))
+        scores = self.neural_score(
+            torch.cat([expanded_input, candidate_vecs], dim=1)
+        ).squeeze(1)
+
+        # Get top-k predictions
+        top_scores, top_indices = torch.topk(
+            scores, 
+            min(top_k, scores.size(0))
+        )
+
+        # Return as numpy arrays on CPU
         return (
             candidate_indices[top_indices].cpu().numpy(),
             top_scores.cpu().detach().numpy()
@@ -105,4 +103,3 @@ class XMRReranker():
             return torch.from_numpy(
                 self.similarity_fn(x_np, y_np)
             ).to(x.device)
-        return self.similarity_fn(x, y)
