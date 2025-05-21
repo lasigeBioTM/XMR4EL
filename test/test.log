@@ -4,9 +4,7 @@ Result: Top-1 Accuracy: 0.7189797794117647, 0.7210477941176471
 
 Top-1 Accuracy: 0.7233455882352942 # Random Forest, depth=2
 
-Top-1 Accuracy: 0.7240349264705882 # Random Forest, depth=2
 
-Top-1 Accuracy: 0.7233455882352942 # Random Forest, depth=2, tweaked
 
 python src/python/xlinker/evaluate.py -dataset bc5cdr -ent_type Chemical -kb ctd_chemicals -model_dir test/test_data/saved_trees/TreeDisease100 -top_k 5 --abbrv --pipeline  --ppr
 
