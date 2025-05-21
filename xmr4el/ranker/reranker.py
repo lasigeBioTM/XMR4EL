@@ -31,11 +31,22 @@ class XMRReranker():
         # Similarity metric
         self.similarity_fn = self.__fast_cosine_similarity
         
-    def __fast_cosine_similarity(self, x, y):
-        """Optimized cosine similarity using PyTorch"""
+    @staticmethod
+    def _fast_cosine_similarity(x, y):
+        """Optimized cosine similarity using PyTorch with shape handling."""
+        # Ensure x is 2D (even if single vector)
+        if x.dim() == 1:
+            x = x.unsqueeze(0)  # [embed_dim] -> [1, embed_dim]
+        
+        # Ensure y is 2D
+        if y.dim() == 1:
+            y = y.unsqueeze(0)  # [embed_dim] -> [1, embed_dim]
+        
+        # Normalize and compute similarity
         x_norm = torch.nn.functional.normalize(x, p=2, dim=-1)
         y_norm = torch.nn.functional.normalize(y, p=2, dim=-1)
-        return torch.mm(x_norm, y_norm.T)
+        
+        return torch.mm(x_norm, y_norm.T)  # [1, embed_dim] @ [embed_dim, n_labels] -> [1, n_labels]
         
     def match(self, input_vec, label_vecs, top_k=10, candidates=100):
         """
