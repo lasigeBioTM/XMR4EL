@@ -266,8 +266,15 @@ class XMRPredict():
         ))
         
         # Step 5: Parallel predictions with dynamic batching
-        batch_size = max(1, 400)
-        results = [cls._predict_input(htree, emb.reshape(1, -1), k) for emb in concat_emb]
+        batch_size = max(1, len(input_text) // os.cpu_count() or 1)
+        results = Parallel(n_jobs=6, batch_size=batch_size)(
+                delayed(cls._predict_input)(
+                    htree, 
+                    emb.reshape(1, -1), 
+                    k
+                )
+                for emb in concat_emb
+            )
         
         # Convert results to sparse matrix format
         return cls.__convert_predictions_into_csr(results)
