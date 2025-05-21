@@ -175,7 +175,11 @@ class XMRPredict():
             
             # Get class probabilities
             with torch.no_grad():
-                probs = cls.__predict_proba_classifier(classifier, input_tensor)[0]
+                if torch.is_tensor(input_tensor):
+                    input_cpu = input_tensor.cpu().numpy()
+                else:
+                    input_cpu = input_tensor
+                probs = cls.__predict_proba_classifier(classifier, input_cpu)[0]
             
             top_label = np.argmax(probs)
 

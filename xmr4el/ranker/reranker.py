@@ -76,7 +76,7 @@ class XMRReranker():
         top_scores, top_indices = torch.topk(scores, min(top_k, len(scores)))
         return (
             candidate_indices[top_indices].cpu().numpy(),
-            top_scores.cpu().numpy()
+            top_scores.cpu().detach().numpy()
         )
 
     def _ensure_tensor(self, x):
