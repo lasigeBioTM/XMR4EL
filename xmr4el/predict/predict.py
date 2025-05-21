@@ -29,6 +29,7 @@ class XMRPredict():
     - Efficient batch prediction
     """
     
+    COUNTER = 0
     
     @staticmethod
     def __reduce_dimensionality(emb, n_features, random_state=0):
@@ -170,6 +171,10 @@ class XMRPredict():
         Returns:
             list: Predicted (kb_index, score) pairs
         """
+        
+        LOGGER.info(F"NUMBER OF PREDICT: {cls.COUNTER}")
+        COUNTER += 1
+        
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         current_htree = htree
         input_tensor = torch.FloatTensor(conc_input).to(device)
@@ -267,7 +272,7 @@ class XMRPredict():
         
         # Step 5: Parallel predictions with dynamic batching
         batch_size = max(1, len(input_text) // os.cpu_count() or 1)
-        results = Parallel(n_jobs=6, batch_size=batch_size)(
+        results = Parallel(n_jobs=4, batch_size=batch_size)(
                 delayed(cls._predict_input)(
                     htree, 
                     emb.reshape(1, -1), 
