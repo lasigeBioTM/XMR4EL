@@ -31,7 +31,7 @@ class XMRReranker():
         # Similarity metric
         self.similarity_fn = self.__fast_cosine_similarity
         
-    def __fast_cosine_similarity(x, y):
+    def __fast_cosine_similarity(self, x, y):
         """Optimized cosine similarity using PyTorch"""
         x_norm = torch.nn.functional.normalize(x, p=2, dim=-1)
         y_norm = torch.nn.functional.normalize(y, p=2, dim=-1)
