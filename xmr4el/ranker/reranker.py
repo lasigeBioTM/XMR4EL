@@ -25,6 +25,7 @@ class XMRReranker:
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
         ).to(self.device)
+        
         self.neural_score.eval()
 
     def _to_tensor(self, array: np.ndarray) -> torch.Tensor:

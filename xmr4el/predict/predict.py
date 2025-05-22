@@ -120,7 +120,7 @@ class XMRPredict():
             embed_dim=labels_vec.shape[1],
             hidden_dim=128, 
             batch_size=400,
-            alpha=0.2
+            alpha=0.1
             )
 
         top_indices, top_scores = reranker.match(
