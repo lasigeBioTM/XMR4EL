@@ -8,7 +8,7 @@ import multiprocessing as mp
 from scipy.sparse import csr_matrix, issparse
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
-from joblib import Parallel, delayed, parallel_backend
+from joblib import Parallel, delayed
 
 
 from xmr4el.featurization.transformers import Transformer
@@ -29,8 +29,6 @@ class XMRPredict():
     - Reranking of candidate labels
     - Efficient batch prediction
     """
-    
-    COUNTER = 0
     
     @staticmethod
     def __reduce_dimensionality(emb, n_features, random_state=0):
@@ -160,6 +158,21 @@ class XMRPredict():
                           dtype=np.float32)
     
     @classmethod
+    def _rank_indices(cls, htree, conc_input, conc_emb, k=10):
+        # Get top-k matches from candidates in this cluster
+        indices, scores = cls.__reranker(
+            conc_input, 
+            conc_emb, 
+            k=k, 
+            candidates=min(100, len(conc_emb))
+        )
+                
+        return [
+            (htree.kb_indices[idx], float(score))
+            for idx, score in zip(indices, scores)
+        ]    
+    
+    @classmethod
     def _predict_input(cls, htree, conc_input, k=10):
         """
         Recursively traverses the hierarchical tree to make predictions.
@@ -172,9 +185,6 @@ class XMRPredict():
         Returns:
             list: Predicted (kb_index, score) pairs
         """
-        
-        LOGGER.info(F"NUMBER OF PREDICT: {cls.COUNTER}")
-        cls.COUNTER += 1
         
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         current_htree = htree
@@ -203,38 +213,11 @@ class XMRPredict():
                 
             else: 
                 # Reached leaf node - perform reranking
-                cluster_mask = current_htree.clustering_model.labels() == top_label
-                conc_emb = current_htree.concatenated_embeddings[cluster_mask]
+                mask = current_htree.clustering_model.labels() == top_label
+                conc_emb = current_htree.concatenated_embeddings[mask]
                 
-                # Get top-k matches from candidates in this cluster
-                indices, scores = cls.__reranker(
-                    conc_input, 
-                    conc_emb, 
-                    k=k, 
-                    candidates=min(100, len(conc_emb))
-                )
-                
-                return [
-                    (current_htree.kb_indices[idx], float(score))
-                    for idx, score in zip(indices, scores)
-                ]
-
-    @classmethod
-    def _process_batch(cls, args):
-        """
-        Batch processing wrapper for multiprocessing
-        Args:
-            args: Tuple of (htree, batch_embeddings, k)
-        """
-        htree, batch, k = args
-        return [cls._predict_input(htree, emb.reshape(1, -1), k) for emb in batch]
-
-    @classmethod
-    def _init_worker(cls):
-        """Worker initialization for CUDA and thread management"""
-        torch.set_num_threads(1)  # Crucial for CPU-bound tasks
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+                LOGGER.info(f"Predicted {current_htree} to the concatenated input {conc_input.shape}")
+                return (current_htree, conc_input, conc_emb)
             
     @classmethod
     def inference(
@@ -284,28 +267,27 @@ class XMRPredict():
         # Step 4: Concatenate features efficiently
         if issparse(text_emb):
             text_emb = text_emb.toarray()
+            
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
             text_emb.astype(dtype)
         ))
         
-        n_workers = n_workers or min(mp.cpu_count(), 8)
-        ctx = mp.get_context("spawn")
+        batch_size = max(1, len(input_text) // os.cpu_count() or 1)
+        results = Parallel(n_jobs=-1, batch_size=batch_size)(
+            delayed(cls._predict_input)(
+                htree, 
+                emb.reshape(1, -1),
+                k
+            )
+            for emb in concat_emb
+        )
         
-        # Dynamic batching
-        batch_size = max(1, len(concat_emb) // (n_workers * 2))
-        batches = np.array_split(concat_emb, max(1, len(concat_emb)//batch_size))
+        # results is (htree, conc_input, conc_emb)
         
-        # Prepare arguments
-        args = [(htree, batch, k) for batch in batches]
+        predictions = []
+        for result in results:
+            htree, conc_input, conc_emb = result
+            predictions.append(cls._rank_indices(htree, conc_input, conc_emb))
         
-        # Process with pool
-        with ctx.Pool(
-            processes=n_workers,
-            initializer=cls._init_worker
-        ) as pool:
-            results = pool.map(cls._process_batch, args)
-        
-        # Convert results
-        flat_results = [item for sublist in results for item in sublist]
-        return cls.__convert_predictions_into_csr(flat_results)
+        return cls.__convert_predictions_into_csr(predictions)
