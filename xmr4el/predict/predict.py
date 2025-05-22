@@ -1,6 +1,7 @@
 import os
 import logging
 import torch
+import gc
 
 import numpy as np
 import multiprocessing as mp
@@ -9,6 +10,7 @@ from scipy.sparse import csr_matrix, issparse
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 
 from xmr4el.featurization.transformers import Transformer
@@ -158,7 +160,7 @@ class XMRPredict():
                           dtype=np.float32)
     
     @classmethod
-    def _rank_indices(cls, htree, conc_input, conc_emb, k=10):
+    def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=10):
         # Get top-k matches from candidates in this cluster
         indices, scores = cls.__reranker(
             conc_input, 
@@ -168,7 +170,7 @@ class XMRPredict():
         )
                 
         return [
-            (htree.kb_indices[idx], float(score))
+            (kb_indices[idx], float(score))
             for idx, score in zip(indices, scores)
         ]    
     
@@ -216,8 +218,7 @@ class XMRPredict():
                 mask = current_htree.clustering_model.labels() == top_label
                 conc_emb = current_htree.concatenated_embeddings[mask]
                 
-                LOGGER.info(f"Predicted {current_htree} to the concatenated input {conc_input.shape}")
-                return (current_htree, conc_input, conc_emb)
+                return (current_htree.kb_indices, conc_input, conc_emb)
             
     @classmethod
     def inference(
@@ -272,22 +273,18 @@ class XMRPredict():
             transformer_emb.astype(dtype),
             text_emb.astype(dtype)
         ))
-        
-        batch_size = max(1, len(input_text) // os.cpu_count() or 1)
-        results = Parallel(n_jobs=-1, batch_size=batch_size)(
-            delayed(cls._predict_input)(
-                htree, 
-                emb.reshape(1, -1),
-                k
-            )
-            for emb in concat_emb
+
+        concat_emb = [emb.reshape(1, -1) for emb in concat_emb]
+
+        def task(emb):
+            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k)
+            return cls._rank_indices(kb_indices, conc_input, conc_emb)
+
+        # Use threads instead of processes
+        predictions = Parallel(n_jobs=-1, prefer="threads", batch_size=1)(
+            delayed(task)(emb) for emb in tqdm(concat_emb)
         )
         
-        # results is (htree, conc_input, conc_emb)
-        
-        predictions = []
-        for result in results:
-            htree, conc_input, conc_emb = result
-            predictions.append(cls._rank_indices(htree, conc_input, conc_emb))
+        gc.collect()
         
         return cls.__convert_predictions_into_csr(predictions)
