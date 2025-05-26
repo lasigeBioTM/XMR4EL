@@ -4,7 +4,6 @@ import torch
 import gc
 
 import numpy as np
-import multiprocessing as mp
 
 from scipy.sparse import csr_matrix, issparse
 from sklearn.preprocessing import normalize
@@ -14,7 +13,7 @@ from tqdm import tqdm
 
 
 from xmr4el.featurization.transformers import Transformer
-from xmr4el.ranker.reranker import XMRReranker
+from xmr4el.ranker.reranker import ReRanker
 
 
 LOGGER = logging.getLogger(__name__)
@@ -116,14 +115,14 @@ class XMRPredict():
         Returns:
             tuple: (indices of top matches, similarity scores)
         """
-        reranker = XMRReranker(
+        rr = ReRanker(
             embed_dim=labels_vec.shape[1],
             hidden_dim=128, 
             batch_size=400,
-            alpha=0.1
+            alpha=0
             )
 
-        top_indices, top_scores = reranker.match(
+        top_indices, top_scores = rr.match(
             input_vec=input_vec,
             label_vecs=labels_vec,
             top_k=k,
@@ -154,7 +153,7 @@ class XMRPredict():
 
         if num_labels is None:
             num_labels = max(cols) + 1  # infer if not provided
-
+        
         return csr_matrix((vals, (rows, cols)), 
                           shape=(len(data), num_labels), 
                           dtype=np.float32)

@@ -29,8 +29,6 @@ class XMRTree:
     
     def __init__(
         self,
-        label_matrix=None,
-        label_enconder=None,
         pifa_embeddings=None,
         text_embeddings=None,
         transformer_embeddings=None,
@@ -62,8 +60,6 @@ class XMRTree:
             depth: Current depth in the hierarchy (0=root)
         """
         # Label information
-        self.label_matrix = label_matrix
-        self.label_enconder = label_enconder
         self.pifa_embeddings = pifa_embeddings
 
         # Embeddings storage
@@ -230,15 +226,6 @@ class XMRTree:
 
         LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
-
-    # Setters methods for tree attributes
-    def set_label_matrix(self, label_matrix):
-        """Set the binary label matrix for this node."""
-        self.label_matrix = label_matrix
-        
-    def set_label_enconder(self, label_enconder):
-        """Set the label encoder for this node."""
-        self.label_enconder = label_enconder
         
     def set_pifa_embeddings(self, pifa_embeddings):
         """Set PIFA label embeddings for this node."""
@@ -307,11 +294,8 @@ class XMRTree:
         
         # Display key attributes
         attributes = {
-            # "labels": Counter(self.clustering_model.labels()) if self.clustering_model else None,
-            # "kb_indices": len(self.kb_indices) if self.kb_indices else "None",
-            # "label_matrix": "Label matrix loaded" if self.label_matrix else "None",
-            # "label_enconder": "Encoder exists" if self.label_matrix else "None",
-            # "pifa_embeddings": len(self.pifa_embeddings) if self.pifa_embeddings else "None"
+            "kb_indices": len(self.kb_indices) if self.kb_indices else None,
+            "labels": Counter(self.clustering_model.labels()) if self.clustering_model else None,
         }
 
         tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"
