@@ -1,10 +1,11 @@
-import numpy as np
 import torch
+import numpy as np
 import torch.nn as nn
+
 from torch.amp import autocast
 
 
-class XMRReranker:
+class ReRanker:
     def __init__(self, embed_dim, hidden_dim=128, batch_size=256, alpha=0.0):
         """
         Batched reranker using cosine + neural scoring.
@@ -83,7 +84,7 @@ class XMRReranker:
                 final_scores = scores
 
             top_scores, top_indices = torch.topk(final_scores, min(top_k, final_scores.size(0)))
-            return candidate_indices[top_indices].cpu().numpy(), top_scores.cpu().numpy()
+            return candidate_indices[top_indices].cpu().numpy(), top_scores.float().cpu().numpy()
 
     def match_batch(self, input_vecs: np.ndarray, label_vecs: np.ndarray, top_k=10, candidates=100):
         """
@@ -124,7 +125,7 @@ class XMRReranker:
                 top_scores, top_indices = torch.topk(final_scores, min(top_k, final_scores.size(0)))
                 results.append((
                     candidate_indices[top_indices].cpu().numpy(),
-                    top_scores.cpu().numpy()
+                    top_scores.float().cpu().numpy()
                 ))
 
         return results

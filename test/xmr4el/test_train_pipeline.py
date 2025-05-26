@@ -5,7 +5,7 @@ import copy
 import numpy as np
 
 from xmr4el.featurization.preprocessor import Preprocessor
-from xmr4el.xmr.pipeline import XMRPipeline
+from xmr4el.xmr.skeleton_construction import SkeletonConstruction
 
 
 """
@@ -27,10 +27,10 @@ def main():
 
     start = time.time()
 
-    n_features = 500
-
-    vectorizer_config = {"type": "tfidf", "kwargs": {"max_features": n_features}}
-    # vectorizer_config = {"type": "tfidf", "kwargs": {}}
+    vectorizer_config = {
+        "type": "tfidf", 
+        "kwargs": {}
+        }
     
     transformer_config = {
         "type": "biobert",
@@ -39,20 +39,30 @@ def main():
     
     clustering_config = {
         "type": "sklearnminibatchkmeans",
-        "kwargs": {"random_state": 0},
+        "kwargs": {
+            "random_state": 0, 
+            "max_iter": 300
+            },
     }
-
+    
     classifier_config = {
-        # "type": "sklearnlogisticregression",
-        "type": "sklearnrandomforestclassifier",
-        "kwargs": {"n_jobs": -1, "random_state": 0},
+        "type": "sklearnlogisticregression",
+        "kwargs": {
+            "n_jobs": -1, 
+            "random_state": 0,
+            "penalty":"l2",           
+            "C": 1.0,               
+            "solver":"lbfgs",    
+            "max_iter":1000
+            },
     }
-    
-    
 
     min_leaf_size = 10
     depth = 3
-
+    n_features = 100
+    max_n_clusters = 16
+    min_n_clusters = 6
+    
     training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
     
@@ -66,22 +76,24 @@ def main():
     X_train = train_data["corpus"] # List
     label_enconder = train_data["label_encoder"]
     
-    R_train = copy.deepcopy(Y_train)
+    # R_train = copy.deepcopy(Y_train)
 
-    htree = XMRPipeline.execute_pipeline(
+    pipe = SkeletonConstruction(
+        vectorizer_config,
+        transformer_config, 
+        clustering_config, 
+        classifier_config, 
+        n_features, 
+        max_n_clusters, 
+        min_n_clusters, 
+        min_leaf_size, 
+        depth, 
+        dtype=np.float32)
+
+    htree = pipe.execute(
         X_train,
         Y_train,
         label_enconder, # New
-        vectorizer_config,
-        transformer_config,
-        clustering_config,
-        classifier_config,
-        n_features=n_features,  # Number of Features
-        max_n_clusters=16,
-        min_n_clusters=2, # Changed to 2, must be 6
-        min_leaf_size=min_leaf_size,
-        depth=depth,
-        dtype=np.float32,
     )
 
     # Print the tree structure
