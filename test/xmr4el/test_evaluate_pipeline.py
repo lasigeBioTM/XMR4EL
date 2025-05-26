@@ -4,7 +4,7 @@
 import time
 
 from xmr4el.predict.predict import XMRPredict
-from xmr4el.xmr.tree import XMRTree
+from xmr4el.xmr.skeleton import Skeleton
 
 """
     Depending on the train file, different number of labels, 
@@ -44,7 +44,7 @@ def main():
     # transformer emb +  embeddings tfit -> classifier
 
     # train_disease_100
-    trained_xtree = XMRTree.load(
+    trained_xtree = Skeleton.load(
         # "data/saved_trees/XMRTree_2025-05-08_15-16-22"
         "test/test_data/saved_trees/TreeDisease100_LG"
     )

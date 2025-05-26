@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 
 
-class XMRTree:
+class Skeleton:
     """
     A hierarchical tree structure for Extreme Multi-label Ranking (XMR) that stores:
     - Embeddings at each level (text, transformer, concatenated)
@@ -295,10 +295,12 @@ class XMRTree:
         # Display key attributes
         attributes = {
             "kb_indices": len(self.kb_indices) if self.kb_indices else None,
-            "labels": Counter(self.clustering_model.labels()) if self.clustering_model else None,
+            "labels": dict(Counter(self.clustering_model.labels())) if self.clustering_model else None,
         }
 
-        tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={len(self.children)}) [{attributes}]\n"
+        children_str = "leaf" if len(self.children) == 0 else len(self.children)
+
+        tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={children_str}) [{attributes}]\n"
 
         # Recursively add children
         for key, child in self.children.items():

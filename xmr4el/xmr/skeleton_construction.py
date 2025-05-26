@@ -5,18 +5,9 @@ import numpy as np
 
 from typing import Counter
 
-from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import normalize
-
-from scipy.sparse import csr_matrix
-
-from xmr4el.featurization.transformers import Transformer
-from xmr4el.featurization.vectorizers import Vectorizer
-
-from xmr4el.xmr.skeleton_formation import SkeletonFormation
-from xmr4el.xmr.skeleton_training import SkeletonTraining
-from xmr4el.xmr.tree import XMRTree
+from xmr4el.xmr.skeleton import Skeleton
+from xmr4el.xmr.tuner import XMRTuner 
+from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
 
 LOGGER = logging.getLogger(__name__)
@@ -26,243 +17,138 @@ logging.basicConfig(
 
 
 class SkeletonConstruction():
-    """
-    Pipeline for Extreme Multi-label Ranking (XMR) system that combines:
-    - Text vectorization
-    - Dimensionality reduction
-    - Hierarchical clustering
-    - Classification
-    """
-
-    def __init__(self,
-                 vectorizer_config,
-                 transformer_config,
-                 clustering_config,
-                 classifier_config, 
-                 n_features=1000,  # Number of Features
-                 max_n_clusters=16,
-                 min_n_clusters=6,
-                 min_leaf_size=10,
-                 depth=3,
+    
+    def __init__(self, 
+                 max_n_clusters, 
+                 min_n_clusters,
+                 min_leaf_size, 
                  dtype=np.float32):
         
         """
-        Init
-            vectorizer_config (dict): Text vectorizer config
-            transformer_config (dict): Transformer config
-            clustering_config (dict): Clustering config
-            classifier_config (dict): Classifier config
-            n_features (int): Target feature dimension
-            max_n_clusters (int): Max clusters per node
-            min_n_clusters (int): Min clusters per node
-            min_leaf_size (int): Min points per cluster
-            depth (int): Max tree depth
-            dtype (np.type): Data type
+        Init:
+            max_n_clusters (int): Maximum number of clusters to consider
+            min_n_clusters (int): Minimum number of clusters to consider
+            min_leaf_size (int): Minimum size for a cluster to be valid
+            dtype: Data type for computations
         """
-        
         # Configs
-        self.vectorizer_config = vectorizer_config
-        self.transformer_config = transformer_config
-        self.clustering_config = clustering_config
-        self.classifier_config = classifier_config
-        
-        # Params
-        self.n_features = n_features
         self.max_n_clusters = max_n_clusters
         self.min_n_clusters = min_n_clusters
         self.min_leaf_size = min_leaf_size
-        self.depth = depth
         
         self.dtype = dtype
-
+    
     @staticmethod
-    def _train_vectorizer(trn_corpus, config, dtype=np.float32):
-        """Trains the vectorizer model with the training data
+    def _train_clustering(trn_corpus, config, dtype=np.float32):
+        """Trains the clustering model with the training data
 
         Args:
-            trn_corpus (np.array): Training Data, sparse or dense array
-            config (dict): Configurations of the vectorizer model
+            trn_corpus (np.array): Trainign data as a Dense Array
+            config (dict): Configurations of the clustering model
             dtype (np.float): Type of the data inside the array
 
         Return:
-            TextVectorizer (Vectorizer): Trained Vectorizer
+            ClusteringModel (ClusteringModel): Trained Clustering Model
         """
-        # Delegate training to Vectorizer class with given configuration
-        return Vectorizer.train(trn_corpus, config, dtype)
+        # Delegate training to ClusteringModel class
+        return ClusteringModel.train(trn_corpus, config, dtype)    
 
-    @staticmethod
-    def _predict_vectorizer(text_vec, corpus):
-        """Predicts the training data with the Vectorizer model
-
-        Args:
-            text_vec (Vectorizer): The Vectorizer Model
-            corpus (np.array or sparse ?): The data array to be predicted
-
-        Return:
-            Transformed text embeddings (nd.array or scipy.sparse)
+    def execute(self, 
+                htree,
+                comb_emb_idx, 
+                emb_idx,
+                depth, 
+                clustering_config
+                ):
+        
         """
-        # Use trained vectorizer to transform input corpus
-        return text_vec.predict(corpus)
-
-    @staticmethod
-    def _predict_transformer(trn_corpus, config, dtype=np.float32):
-        """Predicts the training data with the transformer model
-
+        Recursively builds hierarchical clustering tree structure using text embeddings
+        
         Args:
-            trn_corpus (np.array): Training Data, sparse or dense array
-            config (dict): Configurations of the vectorizer model
-            dtype (np.float): Type of the data inside the array
-
-        Return:
-            Transformed Embeddings (np.array): Predicted Embeddings
-        """
-        # Delegate training to Transformer class with given configuration
-        return Transformer.train(trn_corpus, config, dtype)
-
-    @staticmethod
-    def _reduce_dimensionality(emb, n_features, random_state=0):
-        """Reduces the dimensionality of embeddings
-
-        Args:
-            emb (np.array): Embeddings to reduce
-            n_features (int): Target number of features
-            random_state (int): Random seed for reproducibility
+            htree (XMRTree): Current tree node
+            combined_emb_idx (dict): Indexed combined embeddings (text + PIFA)
+            emb_idx (dict): Indexed text embeddings
+            depth (int): Remaining recursion depth
+            clustering_config (dict): Configuration for clustering
             
         Returns:
-            np.array: Reduced embeddings with shape (n_samples, n_features)
-                     or original if reduction not possible
+            XMRTree: Constructed hierarchical tree
         """
-        n_samples, n_features_emb = emb.shape
-        # PCA cannot have more components than min(n_samples, n_features)
-        max_possible = min(n_samples-1, n_features_emb)  # PCA limitation
-        effective_dim = min(n_features, max_possible)
         
-        if effective_dim <= 0:
-            LOGGER.info("Maintaining original number of features," 
-                        f"impossible to reduce, min({n_samples}, {n_features})={max_possible}")
-            return emb  # Return original if reduction not possible
-        
-        # Perform PCA with effective dimension
-        pca = PCA(n_components=effective_dim, random_state=random_state)
-        return pca.fit_transform(emb)
-
-    @staticmethod
-    def _compute_pifa(X_tfidf, Y_train):
-        """
-        Compute PIFA (Positive Instance Feature Aggregation) embeddings for labels.
-        This creates label embeddings by averaging the feature of positive instances.
-        
-        Args:
-            X_tfidf: (n_samples, tfidf_dim) Tfidf Matrix, (sparse or dense)
-            Y_train: (n_samples, n_labels) Binary label matrix, (sparse)
-            
-        Return:
-            pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings
-        """
-        # Convert matrices to efficient sparse formats for computation
-        labels_matrix = Y_train.tocsc() # CSC for efficient column operations
-        X_tfidf = csr_matrix(X_tfidf) # CSR for efficient row operations
-        
-        # Matrix multiplications: sum features of positive instances per label
-        pifa_emb = labels_matrix @ X_tfidf
-        
-        # Normalize by number of positive instances per label
-        label_counts = np.array(labels_matrix.sum(axis=0)).flatten()  # (n_labels,)
-        label_counts = np.maximum(label_counts, 1.0)  # Prevent division by zero
-        pifa_emb = pifa_emb / label_counts[:, None]  # Broadcasting division
-        
-        return pifa_emb
-
-    def execute(
-        self,
-        trn_corpus,
-        labels_matrix,
-        label_enconder,
-    ):
-        """
-        Full XMR pipeline execution:
-        1. Text vectorization
-        2. PIFA label embedding creation
-        3. Hierarchical clustering
-        4. Classifier training at each level
-        
-        Args:
-            trn_corpus: Training text data
-            labels_matrix: Binary label matrix
-            label_enconder: Label encoder
-            
-        Returns:
-            XMRTree: Fully trained hierarchical model
-        """
-
-        # Clean up memory before starting
         gc.collect()
         
-        # Initialize tree structure 
-        htree = XMRTree(depth=0)
-
-        # Step 1: Text vectorization
-        vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
-        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
-        htree.set_vectorizer(vec_model)
-
-        # Convert to dense array if sparse
-        vec_emb = vec_emb.toarray() 
-
-        # Step 2: PIFA embeddings
-        pifa_emb = self._compute_pifa(vec_emb, labels_matrix)
+        # Base case: stop recursion if depth exhausted
+        if depth < 0:
+            return htree
         
-        # Store pifa embeddings information
-        htree.set_pifa_embeddings(pifa_emb) # Set pifa embeddings
+        # Convert indexed embeddings to array (sorted by index)
+        indices = sorted(comb_emb_idx.keys())
+        text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
 
-        # Normalize PIFA embeddings
-        vec_emb = normalize(vec_emb, norm="l2", axis=1) # Need to cap features in kwargs
-        
-        # Normalize PIFA embeddings
-        pifa_emb = normalize(pifa_emb, norm="l2", axis=1)
-        pifa_emb = pifa_emb.toarray() # Ensure dense
-        
-        # Combine text and PIFA embeddings
-        conc_emb = np.hstack((vec_emb, pifa_emb))
-        conc_emb = normalize(conc_emb, norm="l2", axis=1)
-        
-        # Create indexed versions for hierarchical processing
-        conc_emb_index = {idx: emb for idx, emb in enumerate(conc_emb)}
-        vec_emb_idx = {idx: emb for idx, emb in enumerate(vec_emb)}
+        # Base case: stop if too few points to cluster meaningfully
+        if len(text_emb_array) <= self.min_n_clusters:
+            return htree
 
-        # Step 3: Build hierarchical clustering structure 
-        skl_form = SkeletonFormation(
-            max_n_clusters=self.max_n_clusters, 
-            min_n_clusters=self.min_n_clusters, 
-            min_leaf_size=self.min_leaf_size,
-            dtype=self.dtype)
+        # Determine optimal number of clusters using inertia, silhouette and davies bouldin score  
+        k_range = (self.min_n_clusters, self.max_n_clusters)
+        optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, self.dtype, k_range=k_range)
         
-        htree = skl_form.execute(
-            htree, 
-            conc_emb_index, 
-            vec_emb_idx, 
-            depth=self.depth,
-            clustering_config=self.clustering_config
-        )
-        
-        # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF] now is [Transfomer] * [TF-IDF] 
+        n_clusters = optimal_k
+        clustering_config["kwargs"]["n_clusters"] = n_clusters
 
-        # Step 4: Transformer Embeddings
-        transformer_model = self._predict_transformer(
-            trn_corpus, self.transformer_config, self.dtype
-        )
-        transformer_emb = transformer_model.embeddings()
-        del transformer_model  # Clean up memory
+        # Try clustering with decreasing k until valid clusters found
+        while True:
+            # Train clustering model with current configuration
+            clustering_model = self._train_clustering(
+                text_emb_array, clustering_config, self.dtype
+            )  
+            cluster_labels = clustering_model.model.labels()
 
-        # Normalize and reduce transformer embeddings
-        transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
-        transformer_emb = self._reduce_dimensionality(transformer_emb, self.n_features)
+            # Check if any cluster is to small
+            if min(Counter(cluster_labels).values()) <= self.min_leaf_size: # if the depth is 0, create the clustering anyway
+                LOGGER.warning("Skipping: Cluster size is too small.")
+                
+                # If we can't reduce k further, either break (root) or return (because of small X_data)
+                if n_clusters == self.min_n_clusters:
+                    LOGGER.warning("Skipping: No more clusters to reduce.")
+                    if htree.depth == 0:
+                        break
+                    return htree
+                
+                # Try with fewer clusters
+                n_clusters -= 1
+                clustering_config["kwargs"]["n_clusters"] = n_clusters
+                continue
 
-        # Step 5: Train classifiers throughout hierarchy        
-        skl_train = SkeletonTraining(transformer_emb,
-                                     self.classifier_config, 
-                                     dtype=self.dtype)
-        
-        skl_train.execute(htree)
+            break  # Valid clustering found
+
+        # Save model and embeddings to current tree node
+        htree.set_clustering_model(clustering_model)
+        htree.set_text_embeddings(emb_idx)
+
+        # Process each cluster recursively
+        unique_labels = np.unique(cluster_labels)
+        for cluster in unique_labels:
+            # Get indices of points in this cluster
+            cluster_indices = [idx for idx, label in zip(indices, cluster_labels) 
+                            if label == cluster]
+            
+            # Create filtered embeddings for this cluster
+            filt_combined_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}
+            filt_text_dict = {idx: emb_idx[idx] for idx in cluster_indices}
+            
+            # Create child node and recurse
+            new_child_htree_instance = Skeleton(depth=htree.depth + 1)
+            new_child_htree = self.execute(
+                new_child_htree_instance,
+                filt_combined_dict,
+                filt_text_dict,
+                depth - 1,
+                clustering_config,
+            )
+
+            # Only add child if it contains meaningful structure
+            if not new_child_htree.is_empty():
+                htree.set_children(int(cluster), new_child_htree)
 
         return htree

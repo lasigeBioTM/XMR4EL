@@ -6,6 +6,7 @@ import pickle
 import pkgutil
 import sys
 import multiprocessing
+import torch
 
 import numpy as np
 
@@ -14,8 +15,6 @@ from joblib import parallel_backend
 
 from sklearn.cluster import AgglomerativeClustering, KMeans, MiniBatchKMeans
 
-from xmr4el.gpu_availability import is_cuda_available
-
 cluster_dict = {}
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-if is_cuda_available():
+if torch.cuda.is_available():
     from cuml.cluster import KMeans as CUMLKMeans
 
 
