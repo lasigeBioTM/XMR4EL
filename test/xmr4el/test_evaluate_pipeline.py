@@ -3,7 +3,7 @@
 
 import time
 
-from xmr4el.predict.predict import XMRPredict
+from xmr4el.predict.predict import Predict
 from xmr4el.xmr.skeleton import Skeleton
 
 """
@@ -51,7 +51,7 @@ def main():
 
     print(trained_xtree)
 
-    predicted_labels = XMRPredict.inference(
+    predicted_labels = Predict.inference(
         trained_xtree, name_list, transformer_config, k=k
     )
 
