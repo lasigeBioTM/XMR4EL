@@ -5,6 +5,7 @@ import json
 import pickle
 import pkgutil
 import sys
+import torch
 
 import numpy as np
 
@@ -12,8 +13,6 @@ from abc import ABCMeta
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-
-from xmr4el.gpu_availability import is_cuda_available
 
 
 classifier_dict = {}
@@ -23,7 +22,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-if is_cuda_available():
+if torch.cuda.is_available():
     from cuml.linear_model import LogisticRegression as CUMLLogisticRegression
 
 

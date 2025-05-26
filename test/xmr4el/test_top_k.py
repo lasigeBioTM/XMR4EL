@@ -1,11 +1,11 @@
-from xmr4el.xmr.tree import XMRTree
+from xmr4el.xmr.skeleton import Skeleton
 
 from sklearn.metrics import top_k_accuracy_score
 
 
 def main():
     # train_disease_100 + test_data == true_labels
-    test_xtree = XMRTree.load("test/test_data/saved_trees/XMRTree_2025-04-01_15-02-26")
+    test_xtree = Skeleton.load("test/test_data/saved_trees/XMRTree_2025-04-01_15-02-26")
     
     k = 3
     

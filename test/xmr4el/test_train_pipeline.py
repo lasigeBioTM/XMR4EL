@@ -5,7 +5,7 @@ import copy
 import numpy as np
 
 from xmr4el.featurization.preprocessor import Preprocessor
-from xmr4el.xmr.skeleton_construction import SkeletonConstruction
+from xmr4el.xmr.skeleton_builder import SkeletonBuilder
 
 
 """
@@ -78,7 +78,7 @@ def main():
     
     # R_train = copy.deepcopy(Y_train)
 
-    pipe = SkeletonConstruction(
+    pipe = SkeletonBuilder(
         vectorizer_config,
         transformer_config, 
         clustering_config, 
@@ -93,7 +93,6 @@ def main():
     htree = pipe.execute(
         X_train,
         Y_train,
-        label_enconder, # New
     )
 
     # Print the tree structure

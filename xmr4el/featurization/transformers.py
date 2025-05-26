@@ -15,8 +15,6 @@ from pathlib import Path
 from abc import ABCMeta
 from transformers import AutoTokenizer, AutoModel
 
-from xmr4el.gpu_availability import is_cuda_available
-
 
 transformer_dict = {}
 
@@ -260,7 +258,7 @@ class BioBert(Transformer):
             "onnx_directory": None,
         }
         config = {**defaults, **config}
-        gpu_availability = is_cuda_available()
+        gpu_availability = torch.cuda.is_available()
 
         if gpu_availability:
             config.pop("onnx_directory", None)
