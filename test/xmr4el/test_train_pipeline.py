@@ -27,9 +27,15 @@ def main():
 
     start = time.time()
 
+    min_leaf_size = 10
+    depth = 3
+    n_features = 100
+    max_n_clusters = 16
+    min_n_clusters = 6
+
     vectorizer_config = {
         "type": "tfidf", 
-        "kwargs": {}
+        "kwargs": {"max_features": n_features}
         }
     
     transformer_config = {
@@ -56,12 +62,6 @@ def main():
             "max_iter":1000
             },
     }
-
-    min_leaf_size = 10
-    depth = 3
-    n_features = 100
-    max_n_clusters = 16
-    min_n_clusters = 6
     
     training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")

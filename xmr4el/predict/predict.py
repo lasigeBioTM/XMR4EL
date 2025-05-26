@@ -22,7 +22,7 @@ logging.basicConfig(
 )
 
 
-class XMRPredict():
+class Predict():
     """
     Prediction class for Extreme Multi-label Ranking (XMR) system that handles:
     - Feature transformation and dimensionality reduction
