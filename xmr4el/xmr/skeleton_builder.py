@@ -175,7 +175,7 @@ class SkeletonBuilder():
     def execute(
         self,
         trn_corpus,
-        labels_matrix,
+        labels_matrix
     ):
         """
         Full XMR pipeline execution:

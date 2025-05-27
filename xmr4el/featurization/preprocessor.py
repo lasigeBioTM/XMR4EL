@@ -1,10 +1,13 @@
 import os
+import logging
 import pandas as pd
-
-from collections import defaultdict
 
 from sklearn.preprocessing import MultiLabelBinarizer
 
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 class Preprocessor:
     """Preprocess text to numerical values"""
@@ -67,8 +70,18 @@ class Preprocessor:
         
         # Load labels and truncate to match ID count (either original or truncated)
         with open(labels_filepath, 'r') as f:
-            labels = [line.strip() for line in f if line.strip()][:len(grouped_texts)]  # Truncate here
-        
+            if truncate_data > 0:
+                labels = [line.strip() for line in f if line.strip()][:truncate_data]
+            else:
+                labels = [line.strip() for line in f if line.strip()]
+            
+            if len(labels) > len(grouped_texts):
+                LOGGER.warning("Labels and Train length mismatch, Labels > Train. This could influence results. Truncating Labels"
+                               f"labels length: {len(labels)}, train length: {len(grouped_texts)}")
+                labels = labels[:len(grouped_texts)]  # Truncate here
+            elif len(labels) < len(grouped_texts):
+                raise Exception("Labels and Train lenght, mismatch, Train > Labels. Exiting.")
+                
         # Proceed as before
         labels_list = [[label] for label in labels]
         
