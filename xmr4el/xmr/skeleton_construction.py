@@ -106,11 +106,11 @@ class SkeletonConstruction():
 
             # Check if any cluster is to small
             if min(Counter(cluster_labels).values()) <= self.min_leaf_size: # if the depth is 0, create the clustering anyway
-                LOGGER.warning("Skipping: Cluster size is too small.")
+                # LOGGER.warning("Skipping: Cluster size is too small.")
                 
                 # If we can't reduce k further, either break (root) or return (because of small X_data)
                 if n_clusters == self.min_n_clusters:
-                    LOGGER.warning("Skipping: No more clusters to reduce.")
+                    # LOGGER.warning("Skipping: No more clusters to reduce.")
                     if htree.depth == 0:
                         break
                     return htree
@@ -121,7 +121,9 @@ class SkeletonConstruction():
                 continue
 
             break  # Valid clustering found
-
+        
+        LOGGER.info(f"Saving Clustering Model at depth {depth}, with {n_clusters} clusters")
+        
         # Save model and embeddings to current tree node
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(emb_idx)

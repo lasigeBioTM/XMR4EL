@@ -200,6 +200,7 @@ class SkeletonBuilder():
         htree = Skeleton(depth=0)
 
         # Step 1: Text vectorization
+        LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
         vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
         vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
         htree.set_vectorizer(vec_model)
@@ -208,6 +209,7 @@ class SkeletonBuilder():
         vec_emb = vec_emb.toarray() 
 
         # Step 2: PIFA embeddings
+        LOGGER.info("Computing PIFA")
         pifa_emb = self._compute_pifa(vec_emb, labels_matrix)
         
         # Store pifa embeddings information
@@ -229,12 +231,14 @@ class SkeletonBuilder():
         vec_emb_idx = {idx: emb for idx, emb in enumerate(vec_emb)}
 
         # Step 3: Build hierarchical clustering structure 
+        LOGGER.info("Initializing SkeletonConstruction")
         skl_form = SkeletonConstruction(
             max_n_clusters=self.max_n_clusters, 
             min_n_clusters=self.min_n_clusters, 
             min_leaf_size=self.min_leaf_size,
             dtype=self.dtype)
         
+        LOGGER.info(f"Executing Constructor -> {self.clustering_config}")
         htree = skl_form.execute(
             htree, 
             conc_emb_index, 
@@ -246,6 +250,7 @@ class SkeletonBuilder():
         # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF] now is [Transfomer] * [TF-IDF] 
 
         # Step 4: Transformer Embeddings
+        LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
         transformer_model = self._predict_transformer(
             trn_corpus, self.transformer_config, self.dtype
         )
@@ -256,11 +261,13 @@ class SkeletonBuilder():
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         transformer_emb = self._reduce_dimensionality(transformer_emb, self.n_features)
 
-        # Step 5: Train classifiers throughout hierarchy        
+        # Step 5: Train classifiers throughout hierarchy  
+        LOGGER.info(f"Initializing SkeletonTraining")      
         skl_train = SkeletonTraining(transformer_emb,
                                      self.classifier_config, 
                                      dtype=self.dtype)
         
+        LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         skl_train.execute(htree)
 
         return htree
