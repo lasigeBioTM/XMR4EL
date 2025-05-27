@@ -49,85 +49,34 @@ Current GPU models are based on RAPIDS.ai and are tested within the provided Doc
     
     - sklearnrandomforestclassifier: Scikit-learn's Random Forest Classifier
 
-## Model Configuration
+## Basic Configuration
 
-All models must be defined before running the pipeline.
-
-A model is specified using its type, and any optional kwargs (hyperparameters) the model supports.
-
-If kwargs is omitted or partially specified, default parameters will be used.
+To train the model
 
 ```bash
-    # Example Configuration
-    vectorizer_config = {
-        {"type": "tfidf", 
-        "kwargs": {"ngram_range": [1, 2], 
-                    "max_features": 500, 
-                    "min_df": 0.0, 
-                    "max_df": 0.98, 
-                    "binary": false, 
-                    "use_idf": true, 
-                    "smooth_idf": true, 
-                    "sublinear_tf": false, 
-                    "norm": "l2", 
-                    "analyzer": "word", 
-                    "stop_words": null}}
-    }
+>>> import os
+>>> import numpy as np
+>>> from xmr4el.featurization.preprocessor import Preprocessor
+>>> from xmr4el.xmr.skeleton_builder import SkeletonBuilder
+>>> onnx_directory = "test/test_data/onnx_dir/model.onnx"
+>>> min_leaf_size = 10
+>>> depth = 3
+>>> n_features = 100
+>>> max_n_clusters = 16
+>>> min_n_clusters = 6
+>>> vectorizer_config = {"type": "tfidf","kwargs": {"max_features":n_features}}
+>>> transformer_config = {"type": "biobert","kwargs": {"batch_size": 400, "onnx_directory": onnx_directory}}
+>>> clustering_config = {"type": "sklearnminibatchkmeans","kwargs": {"random_state": 0,"max_iter": 300}}
+>>> classifier_config = {"type": "sklearnlogisticregression","kwargs": {"n_jobs": -1,"random_state": 0,"penalty":"l2","C": 1.0,"solver":"lbfgs","max_iter":1000}}
+>>> training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
+>>> labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
+# No need to truncate data if we want to test all the data
+>>> train_data = Preprocessor().load_data_labels_from_file(train_filepath=training_file,labels_filepath=labels_file,truncate_data=150)
+>>> Y_train = train_data["labels_matrix"]
+>>> X_train = train_data["corpus"]
+>>> pipe = SkeletonBuilder(vectorizer_config,transformer_config,clustering_config,classifier_config,n_features,max_n_clusters,min_n_clusters,min_leaf_size,depth,dtype=np.float32)
+>>> htree = pipe.execute(X_train,Y_train)
+# Omiting logging
+>>> save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable
+>>> htree.save(save_dir)
 ```
-
-1. *Training Pipeline* 
-
-```bash
-from xmr4el.featurization.preprocessor import Preprocessor
-from xmr4el.xmr.xmr_pipeline import XMRPipeline
-
-train_data = Preprocessor().load_data_labels_from_file(
-    train_filepath=training_file,
-    labels_filepath=labels_file,
-    truncate_data=16
-    )
-
-htree = XMRPipeline.execute_pipeline(
-    X_train,
-    Y_train,
-    label_enconder, # New
-    vectorizer_config,
-    transformer_config,
-    clustering_config,
-    classifier_config,
-    n_features=n_features,
-    max_n_clusters=16,
-    min_n_clusters=2,
-    min_leaf_size=min_leaf_size,
-    depth=depth,
-    dtype=np.float32,
-    )
-
-save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")
-htree.save(save_dir)
-```
-
-The 'execute_pipeline' method compromises two stages:
-
-1. Hierarchical Tree Construction - builds a tree of label clusters
-
-2. Linear Classification - applies linear models to map instances embeddings to cluster labels
-
-2. *Evaluate Pipeline*
-
-```bash
-from xmr4el.predict.predict import XMRPredict
-from xmr4el.xmr.xmr_tree import XMRTree
-
-trained_xtree = XMRTree.load(
-    "data/saved_trees/XMRTree_2025-05-08_15-16-22"
-)
-
-predicted_labels = XMRPredict.inference(
-    trained_xtree, name_list, transformer_config, k=k
-)
-```
-
-Once trained, the model can be used to perform inference and predict labels for new instances.
-
-pip install --extra-index-url=https://pypi.nvidia.com cuml-cu11==25.2.1
