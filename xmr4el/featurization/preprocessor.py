@@ -40,7 +40,14 @@ class Preprocessor:
         )
 
         return grouped_train_df["corpus_name"].tolist()  # Returns a list of concatenated strings
-        
+    
+    @staticmethod
+    def enconde_labels(labels_data):
+        labels_list = [[label] for label in labels_data]
+        mlb = MultiLabelBinarizer(sparse_output=True)
+        labels_matrix = mlb.fit_transform(labels_list)
+        return labels_matrix, mlb
+    
     def load_data_labels_from_file(self, train_filepath, labels_filepath, truncate_data=0):
         # Load and group texts
         train_df = pd.read_csv(
