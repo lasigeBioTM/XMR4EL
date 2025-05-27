@@ -78,7 +78,7 @@ class Skeleton:
         self.children = children if children is not None else {} # Child Nodes
         self.depth = depth # Depth in hierarchy
 
-    def save(self, save_dir="data/saved_trees", child_tree=False):
+    def save(self, save_dir="data/saved_trees", save_name=None, child_tree=False, timestamp=True):
         """
         Save trained XMRTree model to disk with proper organization.
         
@@ -88,10 +88,13 @@ class Skeleton:
                              (used when saving child trees recursively)
         """
         if not child_tree:
-            # For main tree, create timestamped directory
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            save_dir = os.path.join(save_dir, f"{self.__class__.__name__}_{timestamp}")
-
+            if save_name is None:
+                # For main tree, create timestamped directory
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                save_dir = os.path.join(save_dir, f"{self.__class__.__name__}_{timestamp}")
+            else:
+                save_dir = os.path.join(save_dir, f"{save_name}")
+                
         os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
 
         # Prepare state dictionary (excluding large objects saved separately)

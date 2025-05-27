@@ -32,7 +32,6 @@ def main():
     }
 
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
-    tree_location = "data/saved_trees"
 
     # Read the file and extract unique names
     with open(file_test_input, "r") as file:

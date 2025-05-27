@@ -72,10 +72,21 @@ def main():
         truncate_data=150
         )
     
+    with open(labels_file, 'r') as f:
+            labels = [line.strip() for line in f]
+    
+    label_matrix, _ = Preprocessor().enconde_labels(labels)
+    print(label_matrix, type(label_matrix))
+    
+    
     Y_train = train_data["labels_matrix"] # csr.matrix
     X_train = train_data["corpus"] # List
     label_enconder = train_data["label_encoder"]
     
+    print(Y_train, type(Y_train))
+    
+    exit()
+        
     # R_train = copy.deepcopy(Y_train)
 
     pipe = SkeletonBuilder(

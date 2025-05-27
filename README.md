@@ -80,3 +80,117 @@ To train the model
 >>> save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable
 >>> htree.save(save_dir)
 ```
+
+To predict using the model
+
+```bash
+>>> from xmr4el.predict.predict import Predict
+>>> from xmr4el.xmr.skeleton import Skeleton
+>>> onnx_directory = "test/test_data/onnx_dir/model.onnx"
+>>> k = 5
+>>> transformer_config = {"type": "biobert","kwargs": {"batch_size": 500, "onnx_directory": onnx_directory}}
+>>> file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
+>>> with open(file_test_input, "r") as file:
+...     unique_names = set(file.read().splitlines())
+...
+>>> name_list = sorted(unique_names)
+>>> trained_xtree = Skeleton.load("test/test_data/saved_trees/TreeDisease100_LG")
+>>> predicted_labels = Predict.inference(trained_xtree, name_list, transformer_config, k=k)
+>>> print(predicted_labels)
+```
+
+## Input Files / Data
+
+To load data using files, you must provide two files:
+
+1. A label file containing one label ID per line.
+2. A test data file where each line starts with an index corresponding to the label ID and a text sample.
+
+* Example Label File
+
+Each line must contain one ID:
+
+```text
+C538288
+C535484
+C579849
+C579850
+C567076
+C537805
+C537806
+```
+
+* Example Test Data File
+
+Each line must begin with an index, followed by a tab (\t) and the corresponding text. The index refers to the label ID in the label file:
+
+```text
+0	10p deletion syndrome (partial)
+0	chromosome 10, 10p- partial
+0	chromosome 10, monosomy 10p
+0	chromosome 10, partial deletion (short arm)
+0	monosomy 10p
+1	13q deletion syndrome
+1	chromosome 13q deletion
+1	chromosome 13q deletion syndrome
+1	chromosome 13q monosomy
+1	chromosome 13q syndrome
+1	deletion 13q
+```
+
+In this case, the label C538288 corresponds to all the lines starting with 0.
+
+# Loading Files with the Preprocessor
+
+To feed the data into the algorithm using files:
+
+```bash
+>>> training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
+>>> labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
+# No need to truncate data if we want to test all the data
+>>> train_data = Preprocessor().load_data_labels_from_file(
+...     train_filepath=training_file,
+...     labels_filepath=labels_file,
+...     truncate_data=150)
+```
+
+# Loading Data Manually
+
+You can also manually open and prepare the files before passing them to the algorithm.
+
+* Test Data Format
+
+The test data should be a list of concatenated strings, where all text samples with the same ID are merged into one string:
+
+```bash
+[
+  "achm2 achromatopsia 2 colorblindness, total rmch2 rod monochromacy 2 ...",
+  ...
+]  # type: List[str]
+```
+
+* Labels Format
+
+The labels should be a list of IDs, and can be encoded using:
+
+```bash
+>>> with open(labels_file, 'r') as f:
+...     labels = [line.strip() for line in f]
+
+>>> label_matrix, _ = Preprocessor().enconde_labels(labels)
+>>> print(label_matrix, type(label_matrix))
+```
+
+# Important
+
+Ensure that label_matrix and the test data list have the same length. If not, the program will exit.
+
+# Truncating Data
+
+When loading from files using Preprocessor().load_data_labels_from_file(...), the method will automatically truncate any labels that do not have corresponding test data entries.
+
+
+
+
+
+
