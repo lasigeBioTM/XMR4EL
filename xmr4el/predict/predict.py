@@ -275,7 +275,7 @@ class Predict():
 
         concat_emb = [emb.reshape(1, -1) for emb in concat_emb]
         
-        transformer_emb = [emb.reshape(1, -1) for emb in transformer_emb].astype(dtype)
+        transformer_emb = [emb.reshape(1, -1) for emb in transformer_emb]
 
         def task(emb):
             kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k)
