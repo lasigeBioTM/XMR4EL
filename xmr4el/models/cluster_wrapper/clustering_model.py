@@ -193,7 +193,7 @@ class SklearnAgglomerativeClustering(ClusteringModel):
             SklearnAgglmerativeClustering: The loaded object.
         """
 
-        LOGGER.info(f"Loading Agglomerative Clustering model from {load_dir}")
+        LOGGER.info(f"Loading Agglomerative Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
@@ -276,7 +276,7 @@ class SklearnKMeans(ClusteringModel):
             SklearnKMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading SklearnKmeans Clustering model from {load_dir}")
+        LOGGER.info(f"Loading Sklearn Kmeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
@@ -372,7 +372,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
             KMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading SklearnMiniBatchKMeans Clustering model from {load_dir}")
+        LOGGER.info(f"Loading Sklearn MiniBatchKMeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
@@ -478,7 +478,7 @@ class CumlKMeans(ClusteringModel):
             CumlKMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading CumlKMeans Clustering model from {load_dir}")
+        LOGGER.info(f"Loading Cuml KMeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path

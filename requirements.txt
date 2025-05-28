@@ -7,3 +7,4 @@ psutil
 scikit_learn
 torch
 transformers
+sentence_transformers
