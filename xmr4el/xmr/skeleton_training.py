@@ -80,7 +80,7 @@ class SkeletonTraining():
 
         # Spit data for classifier training
         X_train, X_test, y_train, y_test = train_test_split(
-            conc_array,
+            trans_emb, # conc_array, Try with transformer embeddings
             cluster_labels,
             test_size=self.test_size,
             random_state=self.random_state,

@@ -76,8 +76,8 @@ class Preprocessor:
                 labels = [line.strip() for line in f if line.strip()]
             
             if len(labels) > len(grouped_texts):
-                LOGGER.warning("Labels and Train length mismatch, Labels > Train. This could influence results. Truncating Labels"
-                               f"labels length: {len(labels)}, train length: {len(grouped_texts)}")
+                LOGGER.warning("Labels and Train length mismatch, Labels > Train. This could influence results. Truncating Labels. "
+                               f"Labels length: {len(labels)}, Train length: {len(grouped_texts)}")
                 labels = labels[:len(grouped_texts)]  # Truncate here
             elif len(labels) < len(grouped_texts):
                 raise Exception("Labels and Train lenght, mismatch, Train > Labels. Exiting.")

@@ -33,18 +33,13 @@ def main():
 
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
 
-    # Read the file and extract unique names
     with open(file_test_input, "r") as file:
         unique_names = set(file.read().splitlines())
 
     name_list = sorted(unique_names)
 
-    # embeddings tfdif -> clustering
-    # transformer emb +  embeddings tfit -> classifier
-
     # train_disease_100
     trained_xtree = Skeleton.load(
-        # "data/saved_trees/XMRTree_2025-05-08_15-16-22"
         "test/test_data/saved_trees/TreeDisease100_LG"
     )
 
@@ -55,12 +50,6 @@ def main():
     )
 
     print(predicted_labels)
-
-    # top_k_scores = XMRPipeline.compute_top_k_accuracy(
-    #     true_labels, predicted_labels, k=k
-    # )
-
-    # print(top_k_scores)
 
     end = time.time()
 
