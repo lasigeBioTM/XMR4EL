@@ -13,8 +13,9 @@ import numpy as np
 
 from pathlib import Path
 from abc import ABCMeta
-from transformers import AutoTokenizer, AutoModel
+# from transformers import AutoTokenizer, AutoModel
 
+from sentence_transformers import SentenceTransformer
 
 transformer_dict = {}
 
@@ -248,253 +249,86 @@ class BioBert(Transformer):
 
         LOGGER.info("Training BioBERT transformer")
         defaults = {
-            "return_tensors": "pt",
-            "padding": True,
-            "truncation": True,
-            "max_length": 512,
             "batch_size": 0,
-            "output_prefix": "onnx_embeddings",
+            "output_prefix": "st_emb",
             "batch_dir": "batch_dir",
-            "onnx_directory": None,
         }
         config = {**defaults, **config}
-        gpu_availability = torch.cuda.is_available()
-
-        if gpu_availability:
-            config.pop("onnx_directory", None)
-            LOGGER.info("Training on GPU")
-            embeddings = cls.__predict_gpu(trn_corpus=trn_corpus, dtype=dtype, **config)
-        else:
-            LOGGER.info("Training on CPU")
-            embeddings = cls.__predict_cpu(trn_corpus=trn_corpus, dtype=dtype, **config)
+        embeddings = cls.__predict(trn_corpus, dtype, **config)
 
         return cls(config, embeddings=embeddings)
 
     @classmethod
-    def __export_to_onnx(cls, directory):
-        """Exports BioBERT to ONNX if not already exported."""
-        if os.path.exists(directory) and os.path.isfile(directory):
-            LOGGER.info("ONNX model already exists. Skipping Export.")
-            return directory
-        else:
-            onnx_file = "model.onnx"
-            directory = os.path.join(directory, onnx_file)
-            LOGGER.info("ONNX model doesn't exist. Exporting.")
-
-        model = AutoModel.from_pretrained(cls.model_name)
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-
-        # Create dummy input
-        dummy_test = ["This is a dummy test sentence for ONNX export."]
-        inputs = tokenizer(
-            dummy_test,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=512,
-        )
-
-        # Export to ONNX
-        torch.onnx.export(
-            model,
-            (inputs["input_ids"], inputs["attention_mask"]),
-            directory,
-            input_names=["input_ids", "attention_mask"],
-            output_names=["logits"],
-            dynamic_axes={
-                "input_ids": {0: "batch", 1: "seq_length"},
-                "attention_mask": {0: "batch", 1: "seq_length"},
-            },
-            opset_version=14,
-        )
-        LOGGER.info("Export complete.")
-        
-        return directory
-
-    @classmethod
-    def __predict_cpu(
+    def __predict(
         cls,
         trn_corpus,
         dtype=np.float32,
-        return_tensors="np",
-        padding=True,
-        truncation=True,
-        max_length=512,
-        batch_size=0,
-        output_prefix="onnx_embeddings",
+        batch_size=400,
         batch_dir="batch_dir",
-        onnx_directory=None,
+        output_prefix="st_emb"
     ):
-        if onnx_directory is None:
-            raise ValueError("ONNX directory must be specified for CPU inference.")
+        """
+        Optimized function for efficient memory usage during CPU or GPU-based embedding extraction.
+        """
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        LOGGER.info(f"Using as device {device}")
 
         batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}"
 
-        """Runs inference using ONNX for faster CPU execution"""
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-
-        # Ensure ONNX model is exported before running inference
-        onnx_directory = cls.__export_to_onnx(onnx_directory)
-
-        cls.__create_batch_dir(batch_dir)
-
+        model = SentenceTransformer(cls.model_name).to(device)
         len_corpus = len(trn_corpus)
-        if batch_size == 0:
-            batch_size, num_batches = cls.__dynamic_cpu_batch_size(
-                len_corpus, max_length
-            )
-        else:
-            num_batches = len_corpus // batch_size + (
-                1 if len_corpus % batch_size != 0 else 0
-            )
+        
+        cls.__create_batch_dir(batch_dir)
+        # os.makedirs(batch_dir, exist_ok=True)
 
-        session = ort.InferenceSession(onnx_directory)
+        if batch_size == 0:
+            batch_size = 32  # A safe default, or you could implement auto-tuning
+
+        num_batches = (len_corpus + batch_size - 1) // batch_size
 
         for batch_idx in range(num_batches):
-            LOGGER.info(f"Processing batch: {batch_idx + 1}/{num_batches}")
-            start, end = batch_idx * batch_size, min(
-                (batch_idx + 1) * batch_size, len_corpus
-            )
-            batch = trn_corpus[start:end]
+            LOGGER.info(f"Processing batch {batch_idx + 1}/{num_batches}")
 
-            # Tokenize input
-            inputs = tokenizer(
-                batch,
-                return_tensors=return_tensors,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-            )
-
-            # Convert tensors to NumPy arrays
-            onnx_inputs = {
-                "input_ids": np.array(inputs["input_ids"], dtype=np.int64),
-                "attention_mask": np.array(inputs["attention_mask"], dtype=np.int64),
-            }
-            del inputs  # Free memory
-            gc.collect()
-
-            # Run inference
-            batch_results = session.run(None, onnx_inputs)[0][:, 0, :]
-
-            # Save batch embeddings
-            batch_filename = f"{emb_file}_batch{batch_idx}.npz"
-            np.savez_compressed(batch_filename, embeddings=batch_results)
-            del batch_results
-            gc.collect()
-
-        # Load and merge embeddings efficiently
-        all_embeddings = []
-        for batch_file in sorted(glob.glob(f"{emb_file}_batch*.npz")):
-            all_embeddings.append(np.load(batch_file)["embeddings"])
-
-        all_embeddings = np.vstack(all_embeddings).astype(dtype)
-
-        cls.__del_batch_dir(batch_dir)
-        return all_embeddings
-
-    @classmethod
-    def __predict_gpu(
-        cls,
-        trn_corpus,
-        dtype=np.float32,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=512,
-        batch_size=0,
-        output_prefix="onnx_embeddings",
-        batch_dir="batch_dir",
-    ):
-        """
-        Optimized function for efficient memory usage during GPU-based embedding extraction.
-        """
-
-        batch_dir = f"{cls.__get_root_directory()}/{batch_dir}"
-        emb_file = f"{batch_dir}/{output_prefix}"
-
-        tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        model = AutoModel.from_pretrained(cls.model_name).eval().to("cuda")
-
-        len_corpus = len(trn_corpus)
-        cls.__create_batch_dir(batch_dir)
-
-        if batch_size == 0:
-            batch_size, num_batches = cls.__dynamic_gpu_batch_size(
-                len_corpus, max_length, model
-            )
-        else:
-            num_batches = (
-                len_corpus + batch_size - 1
-            ) // batch_size  # Ensure rounding up
-
-        LOGGER.info(f"Total of batches: {num_batches} and batch size: {batch_size}")
-
-        batch_idx = 0
-        while batch_idx < num_batches:
-            LOGGER.info(f"Number of the batch: {batch_idx + 1}")
-
-            start, end = batch_idx * batch_size, min(
-                (batch_idx + 1) * batch_size, len_corpus
-            )
+            start, end = batch_idx * batch_size, min((batch_idx + 1) * batch_size, len_corpus)
             batch = trn_corpus[start:end]
 
             try:
-                # Tokenize & move tensors to GPU
-                inputs = tokenizer(
+                batch_results = model.encode(
                     batch,
-                    return_tensors=return_tensors,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
+                    convert_to_tensor=False,
+                    device=device,
+                    batch_size=batch_size,
+                    normalize_embeddings=False,
+                    show_progress_bar=True,
                 )
-                inputs = {k: v.to("cuda") for k, v in inputs.items()}
-
-                with torch.no_grad():
-                    outputs = model(**inputs)  # Forward pass on GPU
-                    batch_results = (
-                        outputs.last_hidden_state[:, 0, :].cpu().numpy()
-                    )  # Move results to CPU
-
-                # Save batch results
+                
                 batch_filename = f"{emb_file}_batch{batch_idx}.npz"
-                np.savez_compressed(batch_filename, embeddings=batch_results)
+                np.savez_compressed(batch_filename, embeddings=np.array(batch_results, dtype=dtype))
 
             except torch.cuda.OutOfMemoryError:
-                LOGGER.error(
-                    f"Out of memory at batch {batch_idx}, reducing batch size and retrying."
-                )
+                LOGGER.error(f"OOM error - reducing batch size")
                 torch.cuda.empty_cache()
                 gc.collect()
                 batch_size = max(1, batch_size - 8)  # Reduce batch size by at least 8
-                num_batches = (
-                    len_corpus + batch_size - 1
-                ) // batch_size  # Recalculate batches
+                num_batches = (len_corpus + batch_size - 1) // batch_size  # Recalculate batches
                 continue  # Retry batch with new size
 
             # Free memory after each batch
-            del batch, inputs, outputs, batch_results
-            torch.cuda.empty_cache()
             gc.collect()
+            torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
 
-            batch_idx += 1  # Move to next batch
-
-        # Free model memory after inference
-        del model
-        torch.cuda.empty_cache()
-        gc.collect()
-
-        # Load embeddings efficiently
-        all_embeddings = []
-        for batch_file in sorted(glob.glob(f"{emb_file}_batch*.npz")):
-            all_embeddings.append(np.load(batch_file)["embeddings"])
-
-        all_embeddings = np.vstack(all_embeddings).astype(dtype)
-
+        # Merge batches
+        all_embeddings = [
+            np.load(file)["embeddings"] for file in sorted(glob.glob(f"{emb_file}_batch*.npz"))
+        ]
+        
         cls.__del_batch_dir(batch_dir)
-        return all_embeddings
+        
+        return np.vstack(all_embeddings).astype(dtype)
 
     def __create_batch_dir(batch_dir):
         """
@@ -512,7 +346,7 @@ class BioBert(Transformer):
 
     def __del_batch_dir(batch_dir):
         """Delete the batch directory"""
-
+        
         shutil.rmtree(batch_dir)
 
     @staticmethod
@@ -523,44 +357,3 @@ class BioBert(Transformer):
         while not (root_dir / "src").exists() and root_dir != root_dir.parent:
             root_dir = root_dir.parent
         return root_dir
-
-    @staticmethod
-    def __dynamic_gpu_batch_size(len_corpus, max_length, model, dtype=torch.float32):
-        """Dynamically calculate batch size based on available GPU memory and model size."""
-
-        # Get total and free GPU memory
-        total_memory, free_memory = torch.cuda.mem_get_info()
-        LOGGER.info(
-            f"Total GPU memory: {total_memory / 1e9:.2f} GB, Free: {free_memory / 1e9:.2f} GB"
-        )
-
-        # Get memory usage per token dynamically based on dtype
-        bytes_per_token = torch.tensor([], dtype=dtype).element_size()
-        estimated_size_per_sample = max_length * bytes_per_token
-
-        # Estimate model memory usage (only count parameters if model exists)
-        model_size = (
-            sum(p.numel() * p.element_size() for p in model.parameters())
-            if model
-            else 0
-        )
-
-        # Adjust available memory allocation (use 50% of free memory for batch processing)
-        estimated_batch_memory = free_memory * 0.5
-
-        # Calculate maximum batch size
-        max_batch_size = max(
-            1,
-            estimated_batch_memory
-            // (estimated_size_per_sample + model_size / len_corpus),
-        )
-
-        # Ensure batch size is within valid range
-        batch_size = min(int(max_batch_size), len_corpus)
-
-        LOGGER.info(f"Auto-calculated batch size: {batch_size}")
-
-        # Calculate the number of batches
-        num_batches = math.ceil(len_corpus / batch_size)
-
-        return batch_size, num_batches

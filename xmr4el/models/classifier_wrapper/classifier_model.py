@@ -199,7 +199,7 @@ class SklearnLogisticRegression(ClassifierModel):
         """
 
         LOGGER.info(
-            f"Loading Sklearn Logistic Regression classifier model from {load_dir}"
+            f"Loading Sklearn Logistic Regression Classifier Model from {load_dir}"
         )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
@@ -289,7 +289,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
             SklearnLogisticRegression: The loaded object.
         """
 
-        LOGGER.info(f"Loading Sklearn Random Forest classifier model from {load_dir}")
+        LOGGER.info(f"Loading Sklearn Random Forest Classifier Model from {load_dir}")
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
             classifier_path
@@ -381,7 +381,7 @@ class CumlLogisticRegression(ClassifierModel):
         """
 
         LOGGER.info(
-            f"Loading Cuml Logistic Regression classifier model from {load_dir}"
+            f"Loading Cuml Logistic Regression Classifier Model from {load_dir}"
         )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
@@ -435,3 +435,23 @@ class CumlLogisticRegression(ClassifierModel):
 
     def predict(self, predict_input):
         return self.model.predict(predict_input)
+    
+class DeepMLPClassifier(ClassifierModel):
+
+    def __init__(self, config, model):
+        self.config = config
+        self.model = model
+        
+    def save(self, save_dir):
+        pass
+    
+    @classmethod
+    def load(cls, load_dir, config):
+        pass
+    
+    @classmethod
+    def train(cls, X_train, y_train, config={}):
+        pass
+    
+    
+    

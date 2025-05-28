@@ -30,8 +30,8 @@ def main():
     min_leaf_size = 10
     depth = 1
     n_features = 100
-    max_n_clusters = 16
-    min_n_clusters = 6
+    max_n_clusters = 6
+    min_n_clusters = 2
 
     vectorizer_config = {
         "type": "tfidf", 
@@ -40,7 +40,7 @@ def main():
     
     transformer_config = {
         "type": "biobert",
-        "kwargs": {"batch_size": 400, "onnx_directory": onnx_directory}
+        "kwargs": {"batch_size": 400}
     }
     
     clustering_config = {
@@ -69,7 +69,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=200
+        truncate_data=150
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix
