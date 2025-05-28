@@ -274,8 +274,6 @@ class Predict():
         ))
 
         concat_emb = [emb.reshape(1, -1) for emb in concat_emb]
-        
-        transformer_emb = [emb.reshape(1, -1) for emb in transformer_emb]
 
         def task(emb):
             kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k)
@@ -283,7 +281,7 @@ class Predict():
 
         # Use threads instead of processes
         predictions = Parallel(n_jobs=-1, prefer="threads", batch_size=1)(
-            delayed(task)(emb) for emb in tqdm(transformer_emb) # transformer_emb.astype(dtype), concat_emb
+            delayed(task)(emb) for emb in tqdm(concat_emb) # transformer_emb.astype(dtype), concat_emb
         )
         
         gc.collect()
