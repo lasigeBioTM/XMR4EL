@@ -77,7 +77,7 @@ class ReRanker(nn.Module):
         
         with torch.no_grad():
             sim_scores = self._fast_cosine_similarity(x, y).squeeze(0)
-            candidate_indices = torch.topk(sim_scores, min(candidates, y.size(0))).indices
+            candidate_indices = torch.topk(sim_scores, max(candidates, y.size(0))).indices
             candidate_vecs = y[candidate_indices]
             x_expanded = x.expand_as(candidate_vecs)
             
