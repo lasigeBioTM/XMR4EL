@@ -221,7 +221,7 @@ class Predict():
             
     @classmethod
     def inference(
-        cls, htree, input_text, transformer_config, k=3, dtype=np.float32, n_workers=None
+        cls, htree, input_text, transformer_config, k=3, dtype=np.float32
     ):
         """
         Main prediction pipeline for XMR system.
