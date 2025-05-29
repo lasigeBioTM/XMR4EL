@@ -76,11 +76,11 @@ class SkeletonTraining():
         trans_emb = self.init_tfr_emb[match_index]
 
         # Create combined feature space
-        # conc_array = np.hstack((trans_emb, text_emb_array))
+        conc_array = np.hstack((trans_emb, text_emb_array))
 
         # Spit data for classifier training
         X_train, X_test, y_train, y_test = train_test_split(
-            trans_emb, # conc_array 
+            conc_array, # trans_emb
             cluster_labels,
             test_size=self.test_size,
             random_state=self.random_state,
@@ -106,7 +106,7 @@ class SkeletonTraining():
         # Setters
         htree.set_transformer_embeddings(trans_emb)
         htree.set_kb_indices(match_index)
-        htree.set_concatenated_embeddings(trans_emb) # conc_array
+        htree.set_concatenated_embeddings(conc_array) # trans_emb
         htree.set_classifier_model(classifier_model)
         htree.set_test_split(test_split)
 
