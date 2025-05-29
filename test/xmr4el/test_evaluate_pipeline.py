@@ -28,7 +28,7 @@ def main():
 
     transformer_config = {
         "type": "biobert",
-        "kwargs": {"batch_size": 500, "onnx_directory": onnx_directory},
+        "kwargs": {"batch_size": 500},
     }
 
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
