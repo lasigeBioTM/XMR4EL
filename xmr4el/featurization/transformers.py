@@ -319,7 +319,7 @@ class BioBert(Transformer):
             # Free memory after each batch
             gc.collect()
             torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+            torch.cuda.ipc_collect() if torch.cuda.is_available() else None
 
         # Merge batches
         all_embeddings = [
