@@ -115,14 +115,14 @@ class Predict():
         Returns:
             tuple: (indices of top matches, similarity scores)
         """
+        
         rr = ReRanker(
             embed_dim=labels_vec.shape[1],
             hidden_dim=128, 
             batch_size=400,
-            alpha=0
             )
 
-        top_indices, top_scores = rr.match(
+        top_indices, top_scores = rr.forward(
             input_vec=input_vec,
             label_vecs=labels_vec,
             top_k=k,
@@ -165,7 +165,7 @@ class Predict():
             conc_input, 
             conc_emb, 
             k=k, 
-            candidates=min(100, len(conc_emb))
+            candidates=min(100, len(conc_emb)),
         )
                 
         return [
