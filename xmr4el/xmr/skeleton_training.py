@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
+from xmr4el.ranker.reranker import ReRanker
 
 
 LOGGER = logging.getLogger(__name__)
@@ -102,13 +103,27 @@ class SkeletonTraining():
             "X_test": X_test,
             "y_test": y_test,
         }
-
+        
+        # Training reranker
+        # reranker = ReRanker(
+        #     embed_dim=conc_array.shape[1],
+        #     hidden_dim=120, 
+        #     batch_size=400,
+        # )
+        # reranker.fit(
+        #     X=conc_array,
+        #     Y=np.array(match_index),
+        #     num_epochs=15,
+        #     learning_rate=1e-4
+        # )
+        
         # Setters
         htree.set_transformer_embeddings(trans_emb)
         htree.set_kb_indices(match_index)
         htree.set_concatenated_embeddings(conc_array) # trans_emb
         htree.set_classifier_model(classifier_model)
         htree.set_test_split(test_split)
+        # htree.set_reranker(reranker)
 
         # Recurse to child nodes
         for children_htree in htree.children.values():

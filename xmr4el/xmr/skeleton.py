@@ -11,6 +11,7 @@ from collections import Counter
 from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
+from xmr4el.ranker.reranker import ReRanker
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(
@@ -38,6 +39,7 @@ class Skeleton:
         clustering_model=None,
         classifier_model=None,
         test_split=None,
+        reranker=None,
         children=None,  # Dictionary of XMRTree nodes
         depth=0,
     ):
@@ -73,6 +75,7 @@ class Skeleton:
         self.clustering_model = clustering_model
         self.classifier_model = classifier_model
         self.test_split = test_split # Evaluation Data
+        self.reranker = reranker
 
         # Tree Structure
         self.children = children if children is not None else {} # Child Nodes
@@ -101,7 +104,7 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "clustering_model", "classifier_model"]
+        models = ["vectorizer", "clustering_model", "classifier_model", "reranker"]
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
@@ -196,6 +199,11 @@ class Skeleton:
             "classifier_model",
             ClassifierModel.load(os.path.join(load_dir, "classifier_model")),
         )
+        # setattr(
+        #     model, 
+        #     "reranker",
+        #     ReRanker.load(os.path.join(load_dir, "reranker"))
+        # )
 
         # Load embeddings if they exist
         for attr in [
@@ -265,6 +273,10 @@ class Skeleton:
     def set_test_split(self, test_split):
         """Set train/test split data for evaluation."""
         self.test_split = test_split
+        
+    def set_reranker(self, reranker):
+        """Set Reranker for evaluation"""
+        self.reranker = reranker
 
     def set_children(self, idx, child_tree):
         """Add a child node at the specified index."""
