@@ -6,11 +6,13 @@ import gc
 import numpy as np
 
 from scipy.sparse import csr_matrix, issparse
+
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+
 from joblib import Parallel, delayed
 from tqdm import tqdm
-
 
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.ranker.reranker import ReRanker
@@ -122,12 +124,14 @@ class Predict():
             batch_size=400,
             )
 
-        top_indices, top_scores = rr.forward(
-            input_vec=input_vec,
-            label_vecs=labels_vec,
-            top_k=k,
-            candidates=candidates,
-        )
+        rr.eval()
+        with torch.no_grad():
+            top_indices, top_scores = rr.forward(
+                input_vec,
+                labels_vec,
+                k,
+                candidates,
+            )
         
         return top_indices, top_scores
     
@@ -160,19 +164,26 @@ class Predict():
     
     @classmethod
     def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=10):
+        
         # Get top-k matches from candidates in this cluster
-        indices, scores = cls.__reranker(
-            conc_input, 
-            conc_emb, 
-            k=k, 
-            candidates=min(100, len(conc_emb)),
-        )
+        # indices, scores = cls.__reranker(
+        #     conc_input, 
+        #     conc_emb, 
+        #     k=k, 
+        #     candidates=min(100000, len(conc_emb)),
+        # )
                 
-        return [
-            (kb_indices[idx], float(score))
-            for idx, score in zip(indices, scores)
-        ]    
-    
+        # return [
+        #     (kb_indices[idx], float(score))
+        #     for idx, score in zip(indices, scores)
+        # ] 
+        
+        similarites = cosine_similarity(conc_input, conc_emb)[0]
+        
+        top_k_indices = np.argsort(similarites)[-k:][::-1]
+        
+        return [(kb_indices[idx], float(similarites[idx])) for idx in top_k_indices]
+           
     @classmethod
     def _predict_input(cls, htree, conc_input, k=10):
         """

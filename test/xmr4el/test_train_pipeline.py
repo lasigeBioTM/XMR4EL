@@ -21,10 +21,7 @@ from xmr4el.xmr.skeleton_builder import SkeletonBuilder
 """
 
 def main():
-
-    # Must create an onnx_directory
-    onnx_directory = "test/test_data/onnx_dir/model.onnx"
-
+    
     start = time.time()
 
     min_leaf_size = 10
@@ -39,7 +36,8 @@ def main():
         }
     
     transformer_config = {
-        "type": "biobert",
+        # "type": "biobert",
+        "type": "sentencetbiobert",
         "kwargs": {"batch_size": 400}
     }
     

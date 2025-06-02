@@ -22,13 +22,12 @@ def main():
 
     start = time.time()
 
-    onnx_directory = "test/test_data/onnx_dir/model.onnx"
-
     k = 5
 
     transformer_config = {
-        "type": "biobert",
-        "kwargs": {"batch_size": 500},
+        # "type": "biobert",
+        "type": "sentencetbiobert",
+        "kwargs": {"batch_size": 400}
     }
 
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
@@ -40,7 +39,7 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-05-29_12-53-44"
+        "test/test_data/saved_trees/Skeleton_2025-06-02_13-59-14"
     )
 
     print(trained_xtree)
