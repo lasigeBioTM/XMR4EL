@@ -13,6 +13,7 @@ from abc import ABCMeta
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 
 
 classifier_dict = {}
@@ -120,7 +121,7 @@ class ClassifierModel(metaclass=ClassifierMeta):
             else {"type": "sklearnlogisticregression", "kwargs": {}}
         )
         LOGGER.debug(
-            f"Train Logistic Regression with config: {json.dumps(config, indent=True)}"
+            f"Training classifier with config: {json.dumps(config, indent=True)}"
         )
         classifier_type = config.get("type", None)
         assert (
@@ -248,7 +249,7 @@ class SklearnLogisticRegression(ClassifierModel):
             model = LogisticRegression(**config)
         except TypeError:
             raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnAgglomerativeClustering"
+                f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
             )
         model.fit(X_train, y_train)
         return cls(config, model)
@@ -342,7 +343,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
             model = RandomForestClassifier(**config)
         except TypeError:
             raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnAgglomerativeClustering"
+                f"clustering config {config} contains unexpected keyword arguments for SklearnRandomForest"
             )
         model.fit(X_train, y_train)
         return cls(config, model)
@@ -350,6 +351,92 @@ class SklearnRandomForestClassifier(ClassifierModel):
     def predict(self, predict_input):
         return self.model.predict(predict_input)
 
+
+class SklearnSupportVectorClassification(ClassifierModel):
+    """SKlearn SVC"""
+
+    def __init__(self, config=None, model=None):
+        self.config = config
+        self.model = model
+
+    def save(self, save_dir):
+        """Save trained sklearn Support Vector Classifier model to disk.
+
+        Args:
+            save_dir (str): Folder to store serialized object in.
+        """
+
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
+            pickle.dump(self.model, fout)
+
+    @classmethod
+    def load(cls, load_dir, config):
+        """Load a saved sklearn Support Vector Classifier from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            SklearnLogisticRegression: The loaded object.
+        """
+
+        LOGGER.info(f"Loading Sklearn Support Vector Classifier Model from {load_dir}")
+        classifier_path = os.path.join(load_dir, "classifier_model.pkl")
+        assert os.path.exists(
+            classifier_path
+        ), f"Classifier path {classifier_path} does not exist"
+
+        with open(classifier_path, "rb") as fin:
+            model_data = pickle.load(fin)
+        model = cls(config, model_data)
+        return model
+
+    @classmethod
+    def train(cls, X_train, y_train, config={}, dtype=np.float32):
+        """Train on a corpus.
+
+        Args:
+            trn_corpus (list): Training corpus in the form of a list of strings.
+            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
+
+        Returns:
+            LogisticRegression: Trained classifier Model.
+
+        Raises:
+            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
+        """
+
+        defaults = {
+            "C": 1.0, 
+            "kernel": 'rbf', 
+            "degree": 3, 
+            "gamma": 'scale', 
+            "coef0": 0.0, 
+            "shrinking": True, 
+            "probability": True, 
+            "tol": 0.001, 
+            "cache_size": 200,
+            "class_weight": None, 
+            "verbose": False, 
+            "max_iter": -1, 
+            "decision_function_shape": 'ovr', 
+            "break_ties": False, 
+            "random_state": None
+        }
+
+        try:
+            config = {**defaults, **config}
+            model = SVC(**config)
+        except TypeError:
+            raise Exception(
+                f"clustering config {config} contains unexpected keyword arguments for SklearnSVC"
+            )
+        model.fit(X_train, y_train)
+        return cls(config, model)
+
+    def predict(self, predict_input):
+        return self.model.predict(predict_input)
 
 class CumlLogisticRegression(ClassifierModel):
     """Cuml Logistic Regression"""
