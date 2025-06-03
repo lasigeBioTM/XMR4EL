@@ -153,7 +153,7 @@ class Predict():
         
         for row_idx, instance in enumerate(data):
             col, score = instance
-            for idx, _ in enumerate(instance):
+            for idx, _ in enumerate(range(len(score))):
                 rows.append(row_idx)
                 cols.append(col[idx])
                 vals.append(np.float32(score[idx]))
