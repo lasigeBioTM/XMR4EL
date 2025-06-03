@@ -3,6 +3,8 @@ import logging
 import torch
 import gc
 
+import faiss # Later remove and place at the reranker
+
 import numpy as np
 
 from scipy.sparse import csr_matrix, issparse
@@ -148,12 +150,13 @@ class Predict():
             csr_matrix: Sparse matrix of predictions
         """
         rows, cols, vals = [], [], []
-
+        
         for row_idx, instance in enumerate(data):
-            for col_idx, score in instance:
+            col, score = instance
+            for idx, _ in enumerate(instance):
                 rows.append(row_idx)
-                cols.append(col_idx)
-                vals.append(np.float32(score))
+                cols.append(col[idx])
+                vals.append(np.float32(score[idx]))
 
         if num_labels is None:
             num_labels = max(cols) + 1  # infer if not provided
@@ -178,11 +181,23 @@ class Predict():
         #     for idx, score in zip(indices, scores)
         # ] 
         
-        similarites = cosine_similarity(conc_input, conc_emb)[0]
+        # conc_emb_1_dim = conc_emb.shape[1] 
+        # Using faiss
+        index = faiss.IndexFlatIP(conc_emb.shape[1])
+        index.add(conc_emb)
+        (scores, indices) = index.search(conc_input, k)
         
-        top_k_indices = np.argsort(similarites)[-k:][::-1]
+        # print(scores, type(scores))
+        # print(indices, type(indices))
+        # similarites = cosine_similarity(conc_input, conc_emb)[0]
+        # top_k_indices = np.argsort(similarites)[-k:][::-1]
+        # return [(kb_indices[idx], float(scores[idx])) for idx in top_k_indices]     
         
-        return [(kb_indices[idx], float(similarites[idx])) for idx in top_k_indices]
+        kb_indices = np.array(kb_indices)   
+        
+        # print((kb_indices[indices[0]], scores[0].astype(float)))
+        
+        return (kb_indices[indices[0]], scores[0].astype(float)) # problem here
            
     @classmethod
     def _predict_input(cls, htree, conc_input, k=10):
