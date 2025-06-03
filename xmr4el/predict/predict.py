@@ -166,7 +166,7 @@ class Predict():
                           dtype=np.float32)
     
     @classmethod
-    def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=1000):
+    def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=100):
         
         # Get top-k matches from candidates in this cluster
         # indices, scores = cls.__reranker(
@@ -200,7 +200,7 @@ class Predict():
         return (kb_indices[indices[0]], scores[0].astype(float)) # problem here
            
     @classmethod
-    def _predict_input(cls, htree, conc_input, k=1000):
+    def _predict_input(cls, htree, conc_input, k=100):
         """
         Recursively traverses the hierarchical tree to make predictions.
         
