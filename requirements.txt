@@ -8,4 +8,4 @@ scikit_learn
 torch
 transformers
 sentence_transformers
-faiss
+faiss-cpu
