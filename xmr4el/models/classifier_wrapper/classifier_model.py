@@ -13,7 +13,7 @@ from abc import ABCMeta
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
+from sklearn.svm import SVC as SVC
 
 
 classifier_dict = {}

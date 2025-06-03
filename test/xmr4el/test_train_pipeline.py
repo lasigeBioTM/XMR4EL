@@ -49,7 +49,6 @@ def main():
             },
     }
 
-    """
     classifier_config = {
         "type": "sklearnlogisticregression",
         "kwargs": {
@@ -61,8 +60,8 @@ def main():
             "max_iter":1000
             },
     }
+    
     """
-
     classifier_config = {
         "type": "sklearnsupportvectorclassification",
         "kwargs": {
@@ -73,6 +72,7 @@ def main():
             "probability": True
         }
     }
+    """
     
     training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
