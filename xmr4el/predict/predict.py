@@ -200,7 +200,7 @@ class Predict():
         return (kb_indices[indices[0]], scores[0].astype(float)) # problem here
            
     @classmethod
-    def _predict_input(cls, htree, conc_input, k=10):
+    def _predict_input(cls, htree, conc_input, k=1000):
         """
         Recursively traverses the hierarchical tree to make predictions.
         
