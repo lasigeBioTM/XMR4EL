@@ -306,7 +306,7 @@ class Predict():
         # trans_emb = [emb.reshape(1, -1) for emb in transformer_emb]
 
         def task(emb):
-            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb) # didnt add k
+            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k) # didnt add k
             return cls._rank_indices(kb_indices, conc_input, conc_emb)
 
         # Use threads instead of processes
