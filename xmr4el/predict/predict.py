@@ -166,7 +166,7 @@ class Predict():
                           dtype=np.float32)
     
     @classmethod
-    def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=10):
+    def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=1000):
         
         # Get top-k matches from candidates in this cluster
         # indices, scores = cls.__reranker(
@@ -306,7 +306,7 @@ class Predict():
         # trans_emb = [emb.reshape(1, -1) for emb in transformer_emb]
 
         def task(emb):
-            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k)
+            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb) # didnt add k
             return cls._rank_indices(kb_indices, conc_input, conc_emb)
 
         # Use threads instead of processes
