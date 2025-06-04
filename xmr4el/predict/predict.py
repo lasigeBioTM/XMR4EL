@@ -150,7 +150,6 @@ class Predict():
             csr_matrix: Sparse matrix of predictions
         """
         
-        """ Faiss
         rows, cols, vals = [], [], []
         
         for row_idx, instance in enumerate(data):
@@ -166,53 +165,17 @@ class Predict():
         return csr_matrix((vals, (rows, cols)), 
                           shape=(len(data), num_labels), 
                           dtype=np.float32)
-        """
-        
-        # Cosine
-        rows, cols, vals = [], [], []
-
-        for row_idx, instance in enumerate(data):
-            for col_idx, score in instance:
-                rows.append(row_idx)
-                cols.append(col_idx)
-                vals.append(np.float32(score))
-
-        if num_labels is None:
-            num_labels = max(cols) + 1  # infer if not provided
-        
-        return csr_matrix((vals, (rows, cols)), 
-                          shape=(len(data), num_labels), 
-                          dtype=np.float32)
+            
     
     @classmethod
     def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=100):
-        
-        # Get top-k matches from candidates in this cluster
-        # indices, scores = cls.__reranker(
-        #     conc_input, 
-        #     conc_emb, 
-        #     k=k, 
-        #     candidates=min(100000, len(conc_emb)),
-        # )
-                
-        # return [
-        #     (kb_indices[idx], float(score))
-        #     for idx, score in zip(indices, scores)
-        # ] 
         
         # Using faiss
         index = faiss.IndexFlatIP(conc_emb.shape[1])
         index.add(conc_emb)
         (scores, indices) = index.search(conc_input, k)
         
-        # Using simple cosine similarity
-        # similarites = cosine_similarity(conc_input, conc_emb)[0]
-        # top_k_indices = np.argsort(similarites)[-k:][::-1]
-        # return [(kb_indices[idx], float(similarites[idx])) for idx in top_k_indices]     
-        
         kb_indices = np.array(kb_indices)   
-        
-        # print((kb_indices[indices[0]], scores[0].astype(float)))
         
         return (kb_indices[indices[0]], scores[0].astype(float)) # problem here
            
