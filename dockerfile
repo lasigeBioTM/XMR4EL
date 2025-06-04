@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
+    && apt-get install -y libgomp1 \
     python3.12 \
     python3.12-venv \
     && apt-get clean \

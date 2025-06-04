@@ -6,6 +6,7 @@ import pickle
 import pkgutil
 import sys
 import torch
+import lightgbm as lgb
 
 import numpy as np
 
@@ -522,7 +523,105 @@ class CumlLogisticRegression(ClassifierModel):
 
     def predict(self, predict_input):
         return self.model.predict(predict_input)
+
+class LightGBMClassifier(ClassifierModel):
+    """LightGBM Classifier"""
+
+    def __init__(self, config=None, model=None):
+        self.config = config
+        self.model = model
+
+    def save(self, save_dir):
+        """Save trained LightGBM Classifier model to disk.
+
+        Args:
+            save_dir (str): Folder to store serialized object in.
+        """
+
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
+            pickle.dump(self.model, fout)
+
+    @classmethod
+    def load(cls, load_dir, config):
+        """Load a saved LightGBM Classifier model from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            SklearnLogisticRegression: The loaded object.
+        """
+
+        LOGGER.info(
+            f"Loading LightGBM Classifier Model from {load_dir}"
+        )
+        classifier_path = os.path.join(load_dir, "classifier_model.pkl")
+        assert os.path.exists(
+            classifier_path
+        ), f"Classifier path {classifier_path} does not exist"
+
+        with open(classifier_path, "rb") as fin:
+            model_data = pickle.load(fin)
+        model = cls(config, model_data)
+        return model
+
+    @classmethod
+    def train(cls, X_train, y_train, config={}, dtype=np.float32):
+        """Train on a corpus.
+
+        Args:
+            trn_corpus (list): Training corpus in the form of a list of strings.
+            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
+
+        Returns:
+            LogisticRegression: Trained classifier Model.
+
+        Raises:
+            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
+        """
+
+        defaults = {
+            "boosting_type": "gbdt",             # 'gbdt', 'dart', 'rf'
+            "num_leaves": 31,
+            "max_depth": -1,
+            "learning_rate": 0.1,
+            "n_estimators": 100,
+            "subsample_for_bin": 200000,
+            "objective": "multiclass",                   # e.g., default = None, 'binary', 'multiclass', 'regression'
+            "class_weight": None,               # dict, 'balanced', or None
+            "min_split_gain": 0.0,
+            "min_child_weight": 1e-3,
+            "min_child_samples": 20,
+            "subsample": 1.0,
+            "subsample_freq": 0,
+            "colsample_bytree": 1.0,
+            "reg_alpha": 0.0,                   # L1 regularization
+            "reg_lambda": 0.0,                  # L2 regularization
+            "random_state": None,
+            "n_jobs": -1,                     # or -1 for all cores
+            "importance_type": "split",         # 'split' or 'gain'
+            **{"num_class": len(np.unique(y_train))}
+            # "**kwargs": {...}                # Additional parameters if needed
+        }
+
+        try:
+            config = {**defaults, **config}
+            model = lgb.LGBMClassifier(**config)
+        except TypeError:
+            raise Exception(
+                f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
+            )
+        model.fit(X_train, y_train)
+        return cls(config, model)
+
+    def predict(self, X):
+        return self.model.predict(X)
+
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
     
+
 class DeepMLPClassifier(ClassifierModel):
 
     def __init__(self, config, model):
