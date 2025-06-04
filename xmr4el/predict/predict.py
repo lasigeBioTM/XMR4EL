@@ -201,14 +201,14 @@ class Predict():
         # ] 
         
         # Using faiss
-        # index = faiss.IndexFlatIP(conc_emb.shape[1])
-        # index.add(conc_emb)
-        # (scores, indices) = index.search(conc_input, k)
+        index = faiss.IndexFlatIP(conc_emb.shape[1])
+        index.add(conc_emb)
+        (scores, indices) = index.search(conc_input, k)
         
         # Using simple cosine similarity
-        similarites = cosine_similarity(conc_input, conc_emb)[0]
-        top_k_indices = np.argsort(similarites)[-k:][::-1]
-        return [(kb_indices[idx], float(similarites[idx])) for idx in top_k_indices]     
+        # similarites = cosine_similarity(conc_input, conc_emb)[0]
+        # top_k_indices = np.argsort(similarites)[-k:][::-1]
+        # return [(kb_indices[idx], float(similarites[idx])) for idx in top_k_indices]     
         
         kb_indices = np.array(kb_indices)   
         
