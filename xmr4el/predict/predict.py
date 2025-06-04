@@ -149,6 +149,8 @@ class Predict():
         Returns:
             csr_matrix: Sparse matrix of predictions
         """
+        
+        """ Faiss
         rows, cols, vals = [], [], []
         
         for row_idx, instance in enumerate(data):
@@ -157,6 +159,23 @@ class Predict():
                 rows.append(row_idx)
                 cols.append(col[idx])
                 vals.append(np.float32(score[idx]))
+
+        if num_labels is None:
+            num_labels = max(cols) + 1  # infer if not provided
+        
+        return csr_matrix((vals, (rows, cols)), 
+                          shape=(len(data), num_labels), 
+                          dtype=np.float32)
+        """
+        
+        # Cosine
+        rows, cols, vals = [], [], []
+
+        for row_idx, instance in enumerate(data):
+            for col_idx, score in instance:
+                rows.append(row_idx)
+                cols.append(col_idx)
+                vals.append(np.float32(score))
 
         if num_labels is None:
             num_labels = max(cols) + 1  # infer if not provided
@@ -181,17 +200,15 @@ class Predict():
         #     for idx, score in zip(indices, scores)
         # ] 
         
-        # conc_emb_1_dim = conc_emb.shape[1] 
         # Using faiss
-        index = faiss.IndexFlatIP(conc_emb.shape[1])
-        index.add(conc_emb)
-        (scores, indices) = index.search(conc_input, k)
+        # index = faiss.IndexFlatIP(conc_emb.shape[1])
+        # index.add(conc_emb)
+        # (scores, indices) = index.search(conc_input, k)
         
-        # print(scores, type(scores))
-        # print(indices, type(indices))
-        # similarites = cosine_similarity(conc_input, conc_emb)[0]
-        # top_k_indices = np.argsort(similarites)[-k:][::-1]
-        # return [(kb_indices[idx], float(scores[idx])) for idx in top_k_indices]     
+        # Using simple cosine similarity
+        similarites = cosine_similarity(conc_input, conc_emb)[0]
+        top_k_indices = np.argsort(similarites)[-k:][::-1]
+        return [(kb_indices[idx], float(similarites[idx])) for idx in top_k_indices]     
         
         kb_indices = np.array(kb_indices)   
         
