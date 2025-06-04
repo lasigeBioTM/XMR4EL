@@ -49,6 +49,7 @@ def main():
             },
     }
 
+    """
     classifier_config = {
         "type": "sklearnlogisticregression",
         "kwargs": {
@@ -60,19 +61,12 @@ def main():
             "max_iter":1000
             },
     }
+    """
     
-    """
     classifier_config = {
-        "type": "sklearnsupportvectorclassification",
-        "kwargs": {
-            "kernel":"rbf",
-            "C": 1.0,
-            "gamma": "scale",
-            "class_weight": "balanced",
-            "probability": True
-        }
+        "type": "lightgbmclassifier",
+        "kwargs": {"random_state": 0}
     }
-    """
     
     training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")

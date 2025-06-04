@@ -9,3 +9,4 @@ torch
 transformers
 sentence_transformers
 faiss-cpu
+lightgbm
