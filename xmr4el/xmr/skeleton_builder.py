@@ -3,8 +3,6 @@ import logging
 
 import numpy as np
 
-from typing import Counter
-
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 
