@@ -8,12 +8,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     curl \
+    build-essential \             
+    pkg-config \             
+    python3-dev \      
+    libgomp1 \ 
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-    && apt-get install -y libgomp1 \
     python3.12 \
     python3.12-venv \
+    python3.12-dev \ 
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -27,14 +31,11 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3 && \
 # Create a working directory inside the container
 WORKDIR /app
 
-# Copy local folder into the container
-COPY . /app/xmr4el
-
-# Create a virtual environment and install dependencies
-RUN python3 -m pip install -r "/app/xmr4el/requirements.txt"
-
 # Set environment variable so that the virtual environment is used by default
 ENV PYTHONPATH="/app/xmr4el"
 
 # Verify installation
 RUN python3 --version && pip --version
+
+# Default command
+CMD ["/bin/bash"]

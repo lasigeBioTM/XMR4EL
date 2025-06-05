@@ -6,9 +6,6 @@ import glob
 import pickle
 import shutil
 import torch
-import math
-
-import onnxruntime as ort
 import numpy as np
 
 from pathlib import Path

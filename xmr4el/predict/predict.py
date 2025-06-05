@@ -1,17 +1,13 @@
-import os
 import logging
 import torch
 import gc
 
-import faiss # Later remove and place at the reranker
-
 import numpy as np
 
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import issparse
 
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
-from sklearn.metrics.pairwise import cosine_similarity
 
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -36,7 +32,7 @@ class Predict():
     """
     
     @staticmethod
-    def __reduce_dimensionality(emb, n_features, random_state=0):
+    def _reduce_dimensionality(emb, n_features, random_state=0):
         """Reduces the dimensionality of embeddings
 
         Args:
@@ -63,7 +59,7 @@ class Predict():
         return pca.fit_transform(emb)
     
     @staticmethod
-    def __predict_vectorizer(text_vec, corpus):
+    def _predict_vectorizer(text_vec, corpus):
         """Predicts the training data with the Vectorizer model
 
         Args:
@@ -77,7 +73,7 @@ class Predict():
         return text_vec.predict(corpus)
     
     @staticmethod
-    def __predict_transformer(trn_corpus, config, dtype=np.float32):
+    def _predict_transformer(trn_corpus, config, dtype=np.float32):
         """Predicts the training data with the transformer model
 
         Args:
@@ -92,7 +88,7 @@ class Predict():
         return Transformer.train(trn_corpus, config, dtype)
     
     @staticmethod
-    def __predict_proba_classifier(classifier_model, data_points):
+    def _predict_proba_classifier(classifier_model, data_points):
         """
         Predicts class probabilities using a trained classifier.
         
@@ -106,38 +102,6 @@ class Predict():
         return classifier_model.predict_proba(data_points)
     
     @staticmethod
-    def __reranker(input_vec, labels_vec, k=5, candidates=100):
-        """
-        Reranks candidate labels based on similarity to input.
-        
-        Args:
-            input_vec: Input embedding to match against
-            labels_vec: Candidate label embeddings
-            k: Number of top matches to return
-            candidates: Number of candidates to consider
-            
-        Returns:
-            tuple: (indices of top matches, similarity scores)
-        """
-        
-        rr = ReRanker(
-            embed_dim=labels_vec.shape[1],
-            hidden_dim=128, 
-            batch_size=400,
-            )
-
-        rr.eval()
-        with torch.no_grad():
-            top_indices, top_scores = rr.forward(
-                input_vec,
-                labels_vec,
-                k,
-                candidates,
-            )
-        
-        return top_indices, top_scores
-    
-    @staticmethod
     def __convert_predictions_into_csr(data, num_labels=None):
         """
         Converts prediction results into sparse matrix format.
@@ -149,35 +113,17 @@ class Predict():
         Returns:
             csr_matrix: Sparse matrix of predictions
         """
-        
-        rows, cols, vals = [], [], []
-        
-        for row_idx, instance in enumerate(data):
-            col, score = instance
-            for idx, _ in enumerate(range(len(score))):
-                rows.append(row_idx)
-                cols.append(col[idx])
-                vals.append(np.float32(score[idx]))
-
-        if num_labels is None:
-            num_labels = max(cols) + 1  # infer if not provided
-        
-        return csr_matrix((vals, (rows, cols)), 
-                          shape=(len(data), num_labels), 
-                          dtype=np.float32)
+        return ReRanker.convert_predictions_into_csr(data, num_labels)
             
-    
     @classmethod
-    def _rank_indices(cls, kb_indices, conc_input, conc_emb, k=100):
+    def _rank(cls, kb_indices, conc_input, conc_emb, candidates=100, config=None):
+        """Candidate Retrieval"""
         
-        # Using faiss
-        index = faiss.IndexFlatIP(conc_emb.shape[1])
-        index.add(conc_emb)
-        (scores, indices) = index.search(conc_input, k)
+        reranker = ReRanker(config)
         
-        kb_indices = np.array(kb_indices)   
+        kb_labels, scores = reranker.candidate_retrival(kb_indices, conc_input, conc_emb, candidates)
         
-        return (kb_indices[indices[0]], scores[0].astype(float)) # problem here
+        return (kb_labels, scores)
            
     @classmethod
     def _predict_input(cls, htree, conc_input, k=100):
@@ -210,7 +156,7 @@ class Predict():
                     input_cpu = input_tensor.cpu().numpy()
                 else:
                     input_cpu = input_tensor
-                probs = cls.__predict_proba_classifier(classifier, input_cpu)[0]
+                probs = cls._predict_proba_classifier(classifier, input_cpu)[0]
             
             top_label = np.argmax(probs)
 
@@ -244,7 +190,7 @@ class Predict():
         """
         
         # Step 1: Generate text embeddings using stored vectorizer
-        text_emb = cls.__predict_vectorizer(htree.vectorizer, input_text)
+        text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
 
         # Normalize text embeddings (handling both sparse and dense cases)
         if hasattr(text_emb, 'data'):
@@ -253,7 +199,7 @@ class Predict():
             text_emb = normalize(text_emb, norm='l2', axis=1)
         
         # Step 2: Generate transformer embeddings with memory management
-        transformer_model = cls.__predict_transformer(
+        transformer_model = cls._predict_transformer(
             input_text, 
             transformer_config, 
             dtype
@@ -263,7 +209,7 @@ class Predict():
         # Step 3: Ensure dimensional compatibility with training data
         transfomer_n_features = htree.transformer_embeddings.shape[1]
         if transformer_emb.shape[1] != transfomer_n_features:
-            transformer_emb = cls.__reduce_dimensionality(
+            transformer_emb = cls._reduce_dimensionality(
                 transformer_emb, 
                 transfomer_n_features
             )
@@ -287,7 +233,7 @@ class Predict():
 
         def task(emb):
             kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k) # didnt add k
-            return cls._rank_indices(kb_indices, conc_input, conc_emb)
+            return cls._rank(kb_indices, conc_input, conc_emb)
 
         # Use threads instead of processes
         predictions = Parallel(n_jobs=-1, prefer="threads", batch_size=1)(

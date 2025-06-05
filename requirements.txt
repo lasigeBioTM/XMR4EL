@@ -1,7 +1,5 @@
 joblib
 numpy
-onnx
-onnxruntime
 pandas
 psutil
 scikit_learn
