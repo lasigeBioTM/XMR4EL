@@ -13,6 +13,8 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from xmr4el.featurization.transformers import Transformer
+from xmr4el.ranker.candidate_retrieval import CandidateRetrieval
+from xmr4el.ranker.cross_enconder import CrossEncoderMP
 from xmr4el.ranker.reranker import ReRanker
 
 
@@ -116,17 +118,38 @@ class Predict():
         return ReRanker.convert_predictions_into_csr(data, num_labels)
             
     @classmethod
-    def _rank(cls, kb_indices, conc_input, conc_emb, candidates=100, config=None):
-        """Candidate Retrieval"""
+    def _rank(cls, predictions, train_data, input_text, candidates=100, config=None):
+        """Candidate Retrieval
+            
+        Predictions is made in order, i think, check with results        
+        """
         
-        reranker = ReRanker(config)
+        candidate_retrieval = CandidateRetrieval()
+        cross_enconder = CrossEncoderMP()
         
-        kb_labels, scores = reranker.candidate_retrival(kb_indices, conc_input, conc_emb, candidates)
+        matches = []
+        ids = 0
+        for pred in predictions:
+            conc_input = pred[1]
+            conc_emb = pred[2]
+            
+            scores, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates=candidates)
+
+            indices = indices[indices != -1].flatten() # Remove -1 and flatten to 1D
         
-        return (kb_labels, scores)
+            trn_corpus = list(train_data.values())
+            
+            trn_corpus_only_idx = []
+            
+            for idx in indices:
+                trn_corpus_only_idx.append(trn_corpus[int(idx)])
+        
+            matches.append(cross_enconder.predict(input_text[ids], trn_corpus_only_idx)) # conc_input must be a raw string
+            ids += 1
+        return matches
            
     @classmethod
-    def _predict_input(cls, htree, conc_input, k=100):
+    def _predict_input(cls, htree, conc_input, candidates=100):
         """
         Recursively traverses the hierarchical tree to make predictions.
         
@@ -139,37 +162,32 @@ class Predict():
             list: Predicted (kb_index, score) pairs
         """
         
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # device = 'cuda' if torch.cuda.is_available() else 'cpu'
         current_htree = htree
-        input_tensor = torch.FloatTensor(conc_input).to(device)
 
         while True:
             # Get classifier and number of possible labels at current level
             classifier = current_htree.classifier_model
             classifier.model.model.n_jobs = 1
             n_labels = len(current_htree.clustering_model.labels())
-            k = min(k, n_labels) # Ensure k doesn't exceed available labels
+            candidates = min(candidates, n_labels) # Ensure k doesn't exceed available labels
             
-            # Get class probabilities
-            with torch.no_grad():
-                if torch.is_tensor(input_tensor):
-                    input_cpu = input_tensor.cpu().numpy()
-                else:
-                    input_cpu = input_tensor
-                probs = cls._predict_proba_classifier(classifier, input_cpu)[0]
+            probs = cls._predict_proba_classifier(classifier, conc_input)[0]
             
             top_label = np.argmax(probs)
 
             if top_label in current_htree.children:
                 # Continue down the tree hierarchy
                 current_htree = current_htree.children[top_label]
+                continue
                 
             else: 
                 # Reached leaf node - perform reranking
                 mask = current_htree.clustering_model.labels() == top_label
                 conc_emb = current_htree.concatenated_embeddings[mask]
+                kb_indices = np.array(current_htree.kb_indices)[mask]
                 
-                return (current_htree.kb_indices, conc_input, conc_emb)
+                return (kb_indices, conc_input, conc_emb)
             
     @classmethod
     def inference(
@@ -230,10 +248,10 @@ class Predict():
         # transformer_emb = transformer_emb.astype(dtype)
         
         # trans_emb = [emb.reshape(1, -1) for emb in transformer_emb]
-
+        
         def task(emb):
             kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k) # didnt add k
-            return cls._rank(kb_indices, conc_input, conc_emb)
+            return kb_indices, conc_input, conc_emb
 
         # Use threads instead of processes
         predictions = Parallel(n_jobs=-1, prefer="threads", batch_size=1)(
@@ -242,4 +260,6 @@ class Predict():
         
         gc.collect()
         
+        cls._rank(predictions, htree.train_data, input_text)
+
         return cls.__convert_predictions_into_csr(predictions)

@@ -68,7 +68,10 @@ class SkeletonBuilder():
         self.max_n_clusters = max_n_clusters
         self.min_n_clusters = min_n_clusters
         self.min_leaf_size = min_leaf_size
-        self.depth = depth
+        if depth == -1:
+            self.depth = 1000
+        else:
+            self.depth = depth
         
         self.dtype = dtype
 
@@ -172,6 +175,7 @@ class SkeletonBuilder():
 
     def execute(
         self,
+        labels,
         trn_corpus,
         labels_matrix
     ):
@@ -194,14 +198,21 @@ class SkeletonBuilder():
         # Clean up memory before starting
         gc.collect()
         
+        train_data = {}
+        
+        for label, trn in zip(labels, trn_corpus):
+            train_data[label] = trn
+        
         # Initialize tree structure 
-        htree = Skeleton(depth=0)
+        htree = Skeleton(depth=0, train_data=train_data)
 
         # Step 1: Text vectorization
         LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
         vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
-        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
         htree.set_vectorizer(vec_model)
+        
+        # Predict the embeddings
+        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
 
         # Convert to dense array if sparse
         vec_emb = vec_emb.toarray() 

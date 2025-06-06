@@ -90,6 +90,7 @@ class Preprocessor:
         
         return {
             'corpus': grouped_texts["text"].tolist(),
+            'raw_labels': labels,
             'labels_matrix': labels_matrix,
             'label_encoder': mlb
         }
