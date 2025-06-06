@@ -71,7 +71,7 @@ class SkeletonTraining():
         
         # Convert indexed embeddings to array (sorted)
         match_index = sorted(text_emb_idx.keys())
-        text_emb_array = np.array([text_emb_idx[idx] for idx in match_index])
+        text_emb_array = np.array([text_emb_idx[idx] for idx in match_index]) # Return only the emb that match the index
         
         # Get corresponding transformer embeddings
         trans_emb = self.init_tfr_emb[match_index]
@@ -104,26 +104,12 @@ class SkeletonTraining():
             "y_test": y_test,
         }
         
-        # Training reranker
-        # reranker = ReRanker(
-        #     embed_dim=conc_array.shape[1],
-        #     hidden_dim=120, 
-        #     batch_size=400,
-        # )
-        # reranker.fit(
-        #     X=conc_array,
-        #     Y=np.array(match_index),
-        #     num_epochs=15,
-        #     learning_rate=1e-4
-        # )
-        
         # Setters
         htree.set_transformer_embeddings(trans_emb)
         htree.set_kb_indices(match_index)
         htree.set_concatenated_embeddings(conc_array) # trans_emb
         htree.set_classifier_model(classifier_model)
         htree.set_test_split(test_split)
-        # htree.set_reranker(reranker)
 
         # Recurse to child nodes
         for children_htree in htree.children.values():

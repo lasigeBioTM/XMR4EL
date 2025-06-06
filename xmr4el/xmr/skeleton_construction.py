@@ -122,7 +122,7 @@ class SkeletonConstruction():
 
             break  # Valid clustering found
         
-        LOGGER.info(f"Saving Clustering Model at depth {depth}, with {n_clusters} clusters")
+        LOGGER.info(f"Saving Clustering Model at depth {htree.depth}, with {n_clusters} clusters")
         
         # Save model and embeddings to current tree node
         htree.set_clustering_model(clustering_model)

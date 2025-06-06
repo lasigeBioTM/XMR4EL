@@ -2,6 +2,7 @@ import os
 import pickle
 import logging
 import glob
+import json
 
 import numpy as np
 
@@ -30,6 +31,7 @@ class Skeleton:
     
     def __init__(
         self,
+        train_data=None,
         pifa_embeddings=None,
         text_embeddings=None,
         transformer_embeddings=None,
@@ -47,8 +49,7 @@ class Skeleton:
         Initialize an XMRTree node with optional components.
         
         Args:
-            label_matrix: Binary label matrix for the node's data
-            label_enconder: Label encoder for converting between indices and labels
+            train_data: Dictionary, label: corpus
             pifa_embeddings: PIFA label embeddings for this node
             text_embeddings: Text (e.g., TF-IDF) embeddings
             transformer_embeddings: Transformer model embeddings
@@ -61,6 +62,9 @@ class Skeleton:
             children: Dictionary of child nodes (key=cluster ID, value=XMRTree)
             depth: Current depth in the hierarchy (0=root)
         """
+        # Training data
+        self.train_data = train_data
+        
         # Label information
         self.pifa_embeddings = pifa_embeddings
 
@@ -104,7 +108,7 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "clustering_model", "classifier_model", "reranker"]
+        models = ["vectorizer", "clustering_model", "classifier_model"]
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
@@ -115,6 +119,15 @@ class Skeleton:
         # Remove models from state to avoid duplicate saving
         for model in models:
             state.pop(model, None)
+        
+        train_data = getattr(self, "train_data", None)    
+        
+        if not child_tree and train_data:
+            train_data_path = os.path.join(save_dir, "train_dict.json")
+            with open(train_data_path, 'w', encoding='utf-8') as train_f:
+                json.dump(self.train_data, train_f, indent=4)
+            state.pop("train_data", None)
+            LOGGER.info(f"Loaded Training data, {train_data_path}")
 
         # Save large embeddings as numpy files
         for attr in [
@@ -180,6 +193,14 @@ class Skeleton:
 
         model = cls()
         model.__dict__.update(model_data)
+        
+        train_data_path_json = os.path.join(load_dir, "train_dict.json")
+
+        if os.path.exists(train_data_path_json):
+            with open(train_data_path_json, 'r', encoding='utf-8') as train_f:
+                model.train_data = json.load(train_f)
+        else:
+            model.train_data = None
 
         # Load models (skip vectorizer for child trees)
         if not child_tree:
@@ -199,11 +220,6 @@ class Skeleton:
             "classifier_model",
             ClassifierModel.load(os.path.join(load_dir, "classifier_model")),
         )
-        # setattr(
-        #     model, 
-        #     "reranker",
-        #     ReRanker.load(os.path.join(load_dir, "reranker"))
-        # )
 
         # Load embeddings if they exist
         for attr in [
@@ -237,6 +253,10 @@ class Skeleton:
 
         LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
+    
+    def set_train_data(self, train_data):
+        """Set Training Data"""
+        self.train_data = train_data
         
     def set_pifa_embeddings(self, pifa_embeddings):
         """Set PIFA label embeddings for this node."""

@@ -10,7 +10,6 @@ import numpy as np
 
 from pathlib import Path
 from abc import ABCMeta
-# from transformers import AutoTokenizer, AutoModel
 
 from sentence_transformers import SentenceTransformer
 
@@ -22,8 +21,8 @@ logging.basicConfig(
 )
 
 # Disable parallelism
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+# os.environ['TRANSFORMERS_CACHE'] = 
 
 class TransformersMeta(ABCMeta):
     """Metaclass for keeping track of all 'Transformer' subclasses"""

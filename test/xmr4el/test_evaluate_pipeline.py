@@ -35,17 +35,17 @@ def main():
     with open(file_test_input, "r") as file:
         unique_names = set(file.read().splitlines())
 
-    name_list = sorted(unique_names)
+    input_text = sorted(unique_names)
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-06-02_14-37-21"
+        "test/test_data/saved_trees/Skeleton_2025-06-06_15-22-46"
     )
 
     print(trained_xtree)
 
     predicted_labels = Predict.inference(
-        trained_xtree, name_list, transformer_config, k=k
+        trained_xtree, input_text, transformer_config, k=k
     )
 
     print(predicted_labels)

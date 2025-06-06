@@ -49,7 +49,6 @@ def main():
             },
     }
 
-    """
     classifier_config = {
         "type": "sklearnlogisticregression",
         "kwargs": {
@@ -61,12 +60,13 @@ def main():
             "max_iter":1000
             },
     }
-    """
     
+    """
     classifier_config = {
         "type": "lightgbmclassifier",
         "kwargs": {"random_state": 0}
     }
+    """
     
     training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
@@ -78,6 +78,7 @@ def main():
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix
+    raw_labels = train_data["raw_labels"]
     X_train = train_data["corpus"] # List
     label_enconder = train_data["label_encoder"]
         
@@ -96,6 +97,7 @@ def main():
         dtype=np.float32)
 
     htree = pipe.execute(
+        raw_labels,
         X_train,
         Y_train,
     )
