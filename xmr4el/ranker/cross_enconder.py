@@ -21,63 +21,72 @@ class CrossEncoderMP():
     def _score_pairs(self, pairs_chunk):
         return self.model.predict(pairs_chunk)
 
-    def predict_batch(self, query_texts, candidates_list, k=10):
-        """Process multiple queries in one batch"""
-        all_results = []
+    def predict_batch(self, text_pairs, k=10):
+        """Process pre-generated text_pairs in maximum throughput batches."""
+        # --- Phase 1: Flatten and Score ---
+        query_texts = [pair[0] for pair in text_pairs]
+        candidates_list = [pair[1] for pair in text_pairs]
         
-        for i, (query_text, candidates) in enumerate(zip(query_texts, candidates_list)):
-            # Log progress periodically
-            if i % self.log_interval == 0:
-                # print(f"Processing {i}/{len(query_texts)}...")
-                pass
-            
-            # Generate pairs
-            pairs = [(query_text, variant) for candidate in candidates for variant in candidate]
-            
-            # Score pairs
-            if self.use_multiprocessing:
-                chunk_size = max(1, len(pairs) // self.num_workers)
-                chunks = [pairs[i:i + chunk_size] for i in range(0, len(pairs), chunk_size)]
-                with Pool(self.num_workers) as pool:
-                    scores_chunks = pool.map(self._score_pairs, chunks)
-                all_scores = np.concatenate(scores_chunks)
-            else:
-                # Use larger batches on GPU
-                batch_size = 512  # Adjust based on GPU memory
-                all_scores = []
-                for j in range(0, len(pairs), batch_size):
-                    all_scores.extend(self.model.predict(pairs[j:j+batch_size]))
-                all_scores = np.array(all_scores)
-            
-            # Aggregate scores
-            ptr = 0
-            candidates_score = []
-            for candidate in candidates:
-                num_variants = len(candidate)
-                candidates_score.append(np.max(all_scores[ptr:ptr + num_variants]))
-                ptr += num_variants
-            
-            # Get top-k
-            top_k_indices = np.array(candidates_score).argsort()[-k:][::-1]
-            all_results.append((top_k_indices, np.array(candidates_score)[top_k_indices]))
+        # Flatten all candidate variants
+        flat_pairs = []
+        pair_ranges = []  # Tracks (start_idx, end_idx) per query
+        ptr = 0
         
-        return all_results
-    
-    def predict(self, query_texts, candidates_list, k=10, batch_size=512):
-        """Memory-optimized version for large batches"""
+        for query, candidates in text_pairs:
+            variants = [(query, cand) for cand in candidates]
+            flat_pairs.extend(variants)
+            pair_ranges.append((ptr, ptr + len(variants)))
+            ptr += len(variants)
+        
+        # --- Phase 2: Parallel Scoring ---
+        if self.use_multiprocessing:
+            # Dynamic chunk sizing (4 chunks per worker)
+            chunk_size = max(1, len(flat_pairs) // (self.num_workers * 4))
+            with Pool(self.num_workers) as pool:
+                scores = np.concatenate(
+                    pool.map(self._score_pairs,
+                        [flat_pairs[i:i + chunk_size]
+                            for i in range(0, len(flat_pairs), chunk_size)])
+                )
+        else:
+            # GPU batch processing (larger batches for throughput)
+            scores = []
+            batch_size = 1024  # Modern GPUs handle this well
+            for i in range(0, len(flat_pairs), batch_size):
+                scores.extend(self.model.predict(flat_pairs[i:i + batch_size]))
+            scores = np.array(scores)
+        
+        # --- Phase 3: Top-k Aggregation ---
+        results = []
+        for (start, end), candidates in zip(pair_ranges, candidates_list):
+            query_scores = scores[start:end]
+            
+            # Group scores by candidate (handles multi-variant cases)
+            candidate_scores = []
+            score_ptr = 0
+            for cand in candidates:
+                num_variants = 1  # Adjust if candidates have sub-variants
+                candidate_scores.append(np.max(query_scores[score_ptr:score_ptr + num_variants]))
+                score_ptr += num_variants
+            
+            # Get top-k with argpartition (O(n) instead of O(nlogn))
+            top_k_idx = np.argpartition(candidate_scores, -k)[-k:][::-1]
+            results.append((top_k_idx, np.array(candidate_scores)[top_k_idx]))
+        
+        return results
+
+    def predict(self, text_pairs, k=10, batch_size=512):
+        """Memory-optimized outer batch handler."""
         results = []
         
-        # Process in smaller chunks to avoid OOM
-        for i in range(0, len(query_texts), batch_size):
-            batch_queries = query_texts[i:i+batch_size]
-            batch_candidates = candidates_list[i:i+batch_size]
-            
-            # Process this batch
-            batch_results = self.predict_batch(batch_queries, batch_candidates, k)
+        for i in range(0, len(text_pairs), batch_size):
+            batch_results = self.predict_batch(
+                text_pairs[i:i + batch_size],
+                k=k
+            )
             results.extend(batch_results)
             
-            # Clear memory
             if self.device.type == "cuda":
-                torch.cuda.empty_cache()
+                torch.cuda.empty_cache()  # Prevent OOM
         
         return results
