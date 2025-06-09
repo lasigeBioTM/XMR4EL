@@ -62,7 +62,8 @@ class Preprocessor:
         
         train_df["text"] = train_df["text"].astype(str).fillna("")
         
-        grouped_texts = train_df.groupby("id")["text"].apply(lambda x: " ".join(x)).reset_index()
+        grouped_texts = train_df.groupby("id")["text"].apply(list).reset_index()
+        grouped_texts["joined_text"] = grouped_texts["text"].apply(lambda x: " ".join(x))
 
         # Apply truncation if requested
         if truncate_data > 0:
@@ -89,7 +90,8 @@ class Preprocessor:
         labels_matrix = mlb.fit_transform(labels_list)
         
         return {
-            'corpus': grouped_texts["text"].tolist(),
+            'corpus': grouped_texts["joined_text"].tolist(),
+            'cross_corpus': grouped_texts["text"].tolist(),
             'raw_labels': labels,
             'labels_matrix': labels_matrix,
             'label_encoder': mlb

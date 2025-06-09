@@ -176,6 +176,7 @@ class SkeletonBuilder():
     def execute(
         self,
         labels,
+        x_cross_train,
         trn_corpus,
         labels_matrix
     ):
@@ -187,9 +188,10 @@ class SkeletonBuilder():
         4. Classifier training at each level
         
         Args:
-            trn_corpus: Training text data
-            labels_matrix: Binary label matrix
-            label_enconder: Label encoder
+            labels
+            x_cross_train: Training text data
+            trn_corpus: Binary label matrix
+            labels_matrix: Label encoder
             
         Returns:
             XMRTree: Fully trained hierarchical model
@@ -200,7 +202,7 @@ class SkeletonBuilder():
         
         train_data = {}
         
-        for label, trn in zip(labels, trn_corpus):
+        for label, trn in zip(labels, x_cross_train):
             train_data[label] = trn
         
         # Initialize tree structure 

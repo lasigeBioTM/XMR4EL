@@ -171,7 +171,7 @@ class Predict():
         # --- Phase 2: Batch Cross-Encoder Scoring ---
         # Prepare all (input_text, candidate_text) pairs
         text_pairs = [
-            (input_texts[i], [trn_corpus[int(idx)] for idx in indices[:5]])
+            (input_texts[i], ["[SEP]".join(trn_corpus[int(idx)]) for idx in indices])
             for i, indices in enumerate(indices_list)
         ]
         
