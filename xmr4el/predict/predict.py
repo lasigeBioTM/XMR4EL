@@ -155,7 +155,7 @@ class Predict():
         # --- Phase 1: Parallel Candidate Retrieval ---
         def _retrieve(pred):
             conc_input, conc_emb = pred[1], pred[2]
-            scores, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates)
+            _, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates) # scores
             print(f"Indices: {indices}")
             return indices[indices != -1].flatten()
         
@@ -304,6 +304,6 @@ class Predict():
         
         gc.collect()
         
-        results = cls._rank(predictions, htree.train_data, input_text, candidates=50)
+        results = cls._rank(predictions, htree.train_data, input_text, candidates=100)
 
         return cls._convert_predictions_into_csr(results)
