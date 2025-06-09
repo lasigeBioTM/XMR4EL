@@ -27,7 +27,7 @@ class CrossEncoderMP():
         query_texts = [pair[0] for pair in text_pairs]
         candidates_list = [pair[1] for pair in text_pairs]
         
-        k = 1
+        k = min(k, candidates_list[0])
         
         # Flatten all candidate variants
         flat_pairs = []
