@@ -185,7 +185,14 @@ class Predict():
         # Batch predict (cross_encoder should handle parallelism internally)
         matches = cross_encoder.predict(text_pairs)
         
-        return matches
+        # matches = top_k_indices, scores
+        
+        results = []
+        for (kb_indices, _), (match_indices, match_scores) in zip(predictions, matches):
+            for i, score in zip(match_indices, match_scores):
+                results.append((kb_indices[i], score))
+        
+        return results
            
     @classmethod
     def _predict_input(cls, htree, conc_input, candidates=100):
