@@ -15,8 +15,6 @@ class CrossEncoderMP():
         # Disable multiprocessing if on GPU
         self.use_multiprocessing = (self.device.type == "cpu")
         self.num_workers = cpu_count() // 2 if self.use_multiprocessing else 1
-        
-        self.log_interval = 100
 
     def _score_pairs(self, pairs_chunk):
         return self.model.predict(pairs_chunk)
@@ -49,7 +47,7 @@ class CrossEncoderMP():
                 ])
         else:
             scores = []
-            batch_size = 1024
+            batch_size = 2048
             for i in range(0, len(flat_pairs), batch_size):
                 scores.extend(self.model.predict(flat_pairs[i:i + batch_size]))
             scores = np.array(scores)
@@ -65,7 +63,7 @@ class CrossEncoderMP():
 
         return results
 
-    def predict(self, text_pairs, k=10, batch_size=1024):
+    def predict(self, text_pairs, k=10, batch_size=2048):
         """Memory-optimized outer batch handler."""
         results = []
         

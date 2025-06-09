@@ -188,7 +188,7 @@ class Predict():
         # matches = top_k_indices, scores
         
         results = []
-        for (kb_indices, _), (match_indices, match_scores) in zip(predictions, matches):
+        for (kb_indices, _, _), (match_indices, match_scores) in zip(predictions, matches):
             for i, score in zip(match_indices, match_scores):
                 results.append((kb_indices[i], score))
         
