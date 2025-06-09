@@ -35,8 +35,9 @@ class CandidateRetrieval():
         # Initialize HNSW index (rebuild every time)
         dim = conc_emb.shape[1]
         
-        index = faiss.IndexHNSWFlat(dim, self.M, faiss.METRIC_INNER_PRODUCT)
-        index.hnsw.efSearch = self.efSearch  # Control query-time accuracy
+        index = faiss.IndexFlatIP(dim)
+        # index = faiss.IndexHNSWFlat(dim, self.M, faiss.METRIC_INNER_PRODUCT)
+        # index.hnsw.efSearch = self.efSearch  # Control query-time accuracy
         index.add(conc_emb)  # Build index
         
         # Search (clamp candidates to avoid errors)
