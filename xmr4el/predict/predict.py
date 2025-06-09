@@ -104,31 +104,28 @@ class Predict():
     @staticmethod
     def _convert_predictions_into_csr(predictions, num_labels=None):
         """
-        Converts prediction results into sparse matrix format.
-        
+        Converts prediction results into a sparse CSR matrix.
+
         Args:
-            data: List of predictions in format [(label_index, score), ...]
-            num_labels: Total number of possible labels
-            
+            predictions: List of tuples like (label_indices, scores)
+                        where label_indices and scores are arrays or lists of equal length.
+            num_labels: Optional. Total number of possible labels. Inferred if not provided.
+
         Returns:
-            csr_matrix: Sparse matrix of predictions
+            csr_matrix: Sparse matrix of shape (n_instances, num_labels)
         """
-        
         rows, cols, vals = [], [], []
-        
-        for row_idx, instance in enumerate(predictions):
-            col, score = instance
-            for idx, _ in enumerate(range(len(score))):
+
+        for row_idx, (label_indices, scores) in enumerate(predictions):
+            for col, score in zip(label_indices, scores):
                 rows.append(row_idx)
-                cols.append(col[idx])
-                vals.append(np.float32(score[idx]))
+                cols.append(col)
+                vals.append(np.float32(score))
 
         if num_labels is None:
             num_labels = max(cols) + 1  # infer if not provided
-        
-        return csr_matrix((vals, (rows, cols)), 
-                          shape=(len(predictions), num_labels), 
-                          dtype=np.float32)
+
+        return csr_matrix((vals, (rows, cols)), shape=(len(predictions), num_labels), dtype=np.float32)
             
     @classmethod
     def _rank(cls, predictions, train_data, input_texts, candidates=100, config=None):
@@ -189,8 +186,9 @@ class Predict():
         
         results = []
         for (kb_indices, _, _), (match_indices, match_scores) in zip(predictions, matches):
-            for i, score in zip(match_indices, match_scores):
-                results.append((kb_indices[i], score))
+            label_ids = [kb_indices[i] for i in match_indices]
+            scores = list(match_scores)
+            results.append((label_ids, scores))
         
         return results
            
