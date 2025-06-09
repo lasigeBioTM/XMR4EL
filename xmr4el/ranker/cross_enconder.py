@@ -80,6 +80,7 @@ class CrossEncoderMP():
         results = []
         
         for i in range(0, len(text_pairs), batch_size):
+            print(f"Text Pair Number: {i}")
             batch_results = self.predict_batch(
                 text_pairs[i:i + batch_size],
                 k=k

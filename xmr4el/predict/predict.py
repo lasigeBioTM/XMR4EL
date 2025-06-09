@@ -158,9 +158,16 @@ class Predict():
         # --- Phase 2: Batch Cross-Encoder Scoring ---
         # Prepare all (input_text, candidate_text) pairs
         text_pairs = [
-            (input_texts[i], [trn_corpus[int(idx)] for idx in indices])
+            (input_texts[i], [trn_corpus[int(idx)] for idx in indices[:5]])
             for i, indices in enumerate(indices_list)
         ]
+        
+        """
+        # Smart concatenation (e.g., join with separator)
+        trn_corpus_hybrid = {
+            0: "[SEP]".join(["text1_v1", "text1_v2", ...]),  # [SEP] helps models distinguish
+        }
+        """
         
         # Batch predict (cross_encoder should handle parallelism internally)
         matches = cross_encoder.predict(text_pairs)
@@ -279,6 +286,6 @@ class Predict():
         
         gc.collect()
         
-        cls._rank(predictions, htree.train_data, input_text)
+        cls._rank(predictions, htree.train_data, input_text, candidates=50)
 
         return cls.__convert_predictions_into_csr(predictions)
