@@ -304,6 +304,6 @@ class Predict():
         
         gc.collect()
         
-        results = cls._rank(predictions, htree.train_data, input_text, candidates=100)
+        results = cls._rank(predictions, htree.train_data, input_text, candidates=75)
 
         return cls._convert_predictions_into_csr(results)
