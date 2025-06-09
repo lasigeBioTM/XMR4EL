@@ -28,6 +28,7 @@ class CrossEncoderMP():
         candidates_list = [pair[1] for pair in text_pairs]
         
         k = min(k, len(candidates_list[0]))
+        print(k)
         
         # Flatten all candidate variants
         flat_pairs = []
