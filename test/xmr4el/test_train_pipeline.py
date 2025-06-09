@@ -80,6 +80,7 @@ def main():
     Y_train = train_data["labels_matrix"] # csr.matrix
     raw_labels = train_data["raw_labels"]
     X_train = train_data["corpus"] # List
+    X_cross_train = train_data["cross_corpus"]
     label_enconder = train_data["label_encoder"]
         
     # R_train = copy.deepcopy(Y_train)
@@ -98,6 +99,7 @@ def main():
 
     htree = pipe.execute(
         raw_labels,
+        X_cross_train,
         X_train,
         Y_train,
     )

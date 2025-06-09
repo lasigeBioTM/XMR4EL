@@ -69,7 +69,7 @@ class CrossEncoderMP():
             score_ptr = 0
             for cand in candidates:
                 num_variants = 1  # Adjust if candidates have sub-variants
-                candidate_scores.append(np.max(query_scores[score_ptr:score_ptr + num_variants]))
+                candidate_scores.append(np.max(query_scores[score_ptr:score_ptr + num_variants])) # Can change from max, sum or mean
                 score_ptr += num_variants
             
             # Get top-k with argpartition (O(n) instead of O(nlogn))
