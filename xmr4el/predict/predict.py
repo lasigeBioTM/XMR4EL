@@ -129,6 +129,7 @@ class Predict():
         
         # Process all predictions in batches
         matches = []
+        LOGGER.info(f"Started to rank {len(predictions)} predictions")
         for i, pred in enumerate(predictions):
             conc_input = pred[1]
             conc_emb = pred[2]
@@ -142,6 +143,7 @@ class Predict():
             
             # Batch predict
             matches.append(cross_encoder.predict(input_texts[i], trn_corpus_only_idx))
+            LOGGER.info(f"Predicted {i}, {matches[-1]}")
         
         return matches
            

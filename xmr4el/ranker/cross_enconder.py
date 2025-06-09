@@ -28,7 +28,8 @@ class CrossEncoderMP():
         for i, (query_text, candidates) in enumerate(zip(query_texts, candidates_list)):
             # Log progress periodically
             if i % self.log_interval == 0:
-                print(f"Processing {i}/{len(query_texts)}...")
+                # print(f"Processing {i}/{len(query_texts)}...")
+                pass
             
             # Generate pairs
             pairs = [(query_text, variant) for candidate in candidates for variant in candidate]
@@ -62,7 +63,7 @@ class CrossEncoderMP():
         
         return all_results
     
-    def predict(self, query_texts, candidates_list, k=10, batch_size=32):
+    def predict(self, query_texts, candidates_list, k=10, batch_size=512):
         """Memory-optimized version for large batches"""
         results = []
         

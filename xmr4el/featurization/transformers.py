@@ -189,7 +189,7 @@ class Transformer(metaclass=TransformersMeta):
                     device=device,
                     batch_size=batch_size,
                     normalize_embeddings=False,
-                    show_progress_bar=True,
+                    show_progress_bar=False,
                 )
                 
                 batch_filename = f"{emb_file}_batch{batch_idx}.npz"
