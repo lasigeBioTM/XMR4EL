@@ -118,34 +118,31 @@ class Predict():
         return ReRanker.convert_predictions_into_csr(data, num_labels)
             
     @classmethod
-    def _rank(cls, predictions, train_data, input_text, candidates=100, config=None):
-        """Candidate Retrieval
-            
-        Predictions is made in order, i think, check with results        
-        """
-        
+    def _rank(cls, predictions, train_data, input_texts, candidates=100, config=None):
+        """Optimized batch candidate retrieval and ranking"""
+        # Initialize components once (not in loop)
         candidate_retrieval = CandidateRetrieval()
-        cross_enconder = CrossEncoderMP()
+        cross_encoder = CrossEncoderMP()
         
+        # Precompute train corpus once
+        trn_corpus = list(train_data.values())
+        
+        # Process all predictions in batches
         matches = []
-        ids = 0
-        for pred in predictions:
+        for i, pred in enumerate(predictions):
             conc_input = pred[1]
             conc_emb = pred[2]
             
+            # Retrieve candidates
             scores, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates=candidates)
-
-            indices = indices[indices != -1].flatten() # Remove -1 and flatten to 1D
-        
-            trn_corpus = list(train_data.values())
+            indices = indices[indices != -1].flatten()
             
-            trn_corpus_only_idx = []
+            # Get candidate texts
+            trn_corpus_only_idx = [trn_corpus[int(idx)] for idx in indices]
             
-            for idx in indices:
-                trn_corpus_only_idx.append(trn_corpus[int(idx)])
+            # Batch predict
+            matches.append(cross_encoder.predict(input_texts[i], trn_corpus_only_idx))
         
-            matches.append(cross_enconder.predict(input_text[ids], trn_corpus_only_idx)) # conc_input must be a raw string
-            ids += 1
         return matches
            
     @classmethod
