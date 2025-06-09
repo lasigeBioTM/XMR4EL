@@ -119,31 +119,47 @@ class Predict():
             
     @classmethod
     def _rank(cls, predictions, train_data, input_texts, candidates=100, config=None):
-        """Optimized batch candidate retrieval and ranking"""
-        # Initialize components once (not in loop)
+        """Optimized parallel candidate retrieval and ranking.
+        
+        Args:
+            predictions: List of tuples (_, conc_input, conc_emb).
+            train_data: Dict {idx: text} for training corpus.
+            input_texts: List of input texts to match against.
+            candidates: Top-k candidates to retrieve per query.
+            config: Optional config dict (e.g., for n_jobs).
+        
+        Returns:
+            List of ranked matches.
+        """
+        # Initialize components (once)
         candidate_retrieval = CandidateRetrieval()
         cross_encoder = CrossEncoderMP()
+        trn_corpus = list(train_data.values())  # Precompute corpus
         
-        # Precompute train corpus once
-        trn_corpus = list(train_data.values())
+        # Use all cores unless specified
+        n_jobs = config.get("n_jobs", -1) if config else -1
         
-        # Process all predictions in batches
-        matches = []
-        LOGGER.info(f"Started to rank {len(predictions)} predictions")
-        for i, pred in enumerate(predictions):
-            conc_input = pred[1]
-            conc_emb = pred[2]
-            
-            # Retrieve candidates
-            scores, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates=candidates)
-            indices = indices[indices != -1].flatten()
-            
-            # Get candidate texts
-            trn_corpus_only_idx = [trn_corpus[int(idx)] for idx in indices]
-            
-            # Batch predict
-            matches.append(cross_encoder.predict(input_texts[i], trn_corpus_only_idx))
-            LOGGER.info(f"Predicted {i}, {matches[-1]}")
+        LOGGER.info(f"Ranking {len(predictions)} predictions with {n_jobs} cores")
+        
+        # --- Phase 1: Parallel Candidate Retrieval ---
+        def _retrieve(pred):
+            conc_input, conc_emb = pred[1], pred[2]
+            scores, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates)
+            return indices[indices != -1].flatten()
+        
+        # Parallelize retrieval (FAISS is single-threaded, but we batch queries)
+        with Parallel(n_jobs=n_jobs, backend="threading") as parallel:
+            indices_list = parallel(delayed(_retrieve)(pred) for pred in predictions)
+        
+        # --- Phase 2: Batch Cross-Encoder Scoring ---
+        # Prepare all (input_text, candidate_text) pairs
+        text_pairs = [
+            (input_texts[i], [trn_corpus[int(idx)] for idx in indices])
+            for i, indices in enumerate(indices_list)
+        ]
+        
+        # Batch predict (cross_encoder should handle parallelism internally)
+        matches = cross_encoder.predict(text_pairs)
         
         return matches
            
