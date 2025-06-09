@@ -141,15 +141,19 @@ class Predict():
         
         LOGGER.info(f"Ranking {len(predictions)} predictions with {n_jobs} cores")
         
+        LOGGER.info(f"First Stage Retrieval")
         # --- Phase 1: Parallel Candidate Retrieval ---
         def _retrieve(pred):
             conc_input, conc_emb = pred[1], pred[2]
             scores, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates)
+            print(f"Indices: {indices}")
             return indices[indices != -1].flatten()
         
         # Parallelize retrieval (FAISS is single-threaded, but we batch queries)
         with Parallel(n_jobs=n_jobs, backend="threading") as parallel:
             indices_list = parallel(delayed(_retrieve)(pred) for pred in predictions)
+        
+        LOGGER.info(f"Second Stage Cross-Enconder")
         
         # --- Phase 2: Batch Cross-Encoder Scoring ---
         # Prepare all (input_text, candidate_text) pairs
