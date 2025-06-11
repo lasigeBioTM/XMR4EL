@@ -264,13 +264,16 @@ class SkeletonBuilder():
         # Attention Model to form conc_emb
         fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])        
         conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
+        conc_emb = csr_matrix(conc_emb)
+        
+        print(conc_emb.shape, type(conc_emb))
         
         # Prepare UMAP
         n_samples = conc_emb.shape[0]
         n_neighbors = min(15, max(2, n_samples - 1))
         n_components = min(self.n_features, n_samples - 2) # Got to be -2, cause of spectral decomposition
         
-        umap = UMAP(n_components=n_components, metric='cosine', n_neighbors=n_neighbors)
+        umap = UMAP(n_components=n_components, metric='cosine', n_neighbors=n_neighbors, n_jobs=-1)
         conc_emb = umap.fit_transform(conc_emb)
 
         # Normalize PIFA embeddings
