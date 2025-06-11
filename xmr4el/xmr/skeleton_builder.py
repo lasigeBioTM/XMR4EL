@@ -177,7 +177,7 @@ class SkeletonBuilder():
         return pifa_emb
 
     @staticmethod
-    def _fused_emb(X, Y, fusion_model, batch_size=512):
+    def _fused_emb(X, Y, fusion_model, batch_size=1536):
         """
         Compute fused embeddings for X and Y in batches using a trained fusion_model.
         Args:
@@ -192,8 +192,12 @@ class SkeletonBuilder():
 
         fused_all = []
 
+        LOGGER.info(f"Fusing embeddings, total batches: {X.shape[0] / batch_size}")
+        counter = 0
         with torch.no_grad():
+            
             for i in range(0, X.shape[0], batch_size):
+                LOGGER.info(f"Batch: {counter}")
                 X_batch = X[i:i+batch_size]
                 Y_batch = Y[i:i+batch_size]
 
@@ -202,6 +206,7 @@ class SkeletonBuilder():
 
                 fused_batch = fusion_model(X_tensor, Y_tensor).detach().cpu()
                 fused_all.append(fused_batch)
+                counter += 1
 
         fused_all_tensor = torch.cat(fused_all, dim=0)
         return fused_all_tensor.numpy()
