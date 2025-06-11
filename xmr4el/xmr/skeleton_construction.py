@@ -93,7 +93,7 @@ class SkeletonConstruction():
             clustering_model = self._train_clustering(
                 text_emb_array, clustering_config, self.dtype
             )  
-            cluster_labels = clustering_model.model.labels_
+            cluster_labels = clustering_model.model.labels()
             cluster_counts = Counter(cluster_labels)
 
             # Check if any cluster has fewer than 2 samples (to avoid classifier errors)
