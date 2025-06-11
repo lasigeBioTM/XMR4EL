@@ -273,17 +273,17 @@ class SkeletonBuilder():
         svd = TruncatedSVD(n_components=5000, random_state=0)
         dense_conc_emb = svd.fit_transform(sparse_conc_emb) # turns it into dense auto
         
-        LOGGER.info("Using UMAP")
+        # LOGGER.info("Using UMAP")
         # Prepare UMAP
-        n_samples = conc_emb.shape[0]
-        n_neighbors = min(15, max(2, n_samples - 1))
-        n_components = min(self.n_features, n_samples - 2) # Got to be -2, cause of spectral decomposition
+        # n_samples = conc_emb.shape[0]
+        # n_neighbors = min(15, max(2, n_samples - 1))
+        # n_components = min(self.n_features, n_samples - 2) # Got to be -2, cause of spectral decomposition
         
-        umap = UMAP(n_components=n_components, metric='cosine', n_neighbors=n_neighbors, n_jobs=-1)
-        conc_emb = umap.fit_transform(dense_conc_emb)
+        # umap = UMAP(n_components=n_components, metric='cosine', n_neighbors=n_neighbors, n_jobs=-1)
+        # conc_emb = umap.fit_transform(dense_conc_emb)
 
         # Normalize PIFA embeddings
-        dense_conc_emb = normalize(conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
+        dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
         vec_emb = normalize(conc_emb, norm="l2", axis=1)
         
         # Create indexed versions for hierarchical processing
