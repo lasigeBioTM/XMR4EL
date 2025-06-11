@@ -26,14 +26,34 @@ def main():
 
     min_leaf_size = 10
     depth = 1
-    n_features = 100
+    n_features = 768
     max_n_clusters = 6
     min_n_clusters = 2
 
     vectorizer_config = {
         "type": "tfidf", 
-        "kwargs": {"max_features": n_features}
+        "kwargs": {}
         }
+    
+    """
+    tfidf = TfidfVectorizer(
+        max_features=200000,  # Very large vocabulary
+        min_df=2,            # Only include meaningful terms
+        max_df=0.5,          # Filter out overly common terms
+        ngram_range=(1, 3),  # Include unigrams, bigrams and trigrams
+        analyzer='word',      # Word-level analysis
+        sublinear_tf=True,    # Use log scaling
+        use_idf=True,         # Use inverse document frequency
+        smooth_idf=True,      # Smooth IDF weights
+        lowercase=True,       # Case normalization
+        stop_words='english'  # Remove stopwords
+    ) 
+    
+    Why just dont make it to reduce features in tfidf ? 
+    
+    Use Truncate SVD ? 
+    
+    """
     
     transformer_config = {
         # "type": "biobert",
@@ -74,7 +94,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=150
+        truncate_data=300
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix

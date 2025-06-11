@@ -6,11 +6,14 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 
+from umap import UMAP
+
 from scipy.sparse import csr_matrix
 
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
 
+from xmr4el.xmr.attention_fusion import AttentionFusion
 from xmr4el.xmr.skeleton_construction import SkeletonConstruction
 from xmr4el.xmr.skeleton_training import SkeletonTraining
 from xmr4el.xmr.skeleton import Skeleton
@@ -153,15 +156,14 @@ class SkeletonBuilder():
         This creates label embeddings by averaging the feature of positive instances.
         
         Args:
-            X_tfidf: (n_samples, tfidf_dim) Tfidf Matrix, (sparse or dense)
+            X_tfidf: (n_samples, tfidf_dim) Tfidf Matrix, (sparse or dense) Must be sparse, will be sparse
             Y_train: (n_samples, n_labels) Binary label matrix, (sparse)
             
         Return:
-            pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings
+            pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings # Will be dense ig
         """
         # Convert matrices to efficient sparse formats for computation
         labels_matrix = Y_train.tocsc() # CSC for efficient column operations
-        X_tfidf = csr_matrix(X_tfidf) # CSR for efficient row operations
         
         # Matrix multiplications: sum features of positive instances per label
         pifa_emb = labels_matrix @ X_tfidf
@@ -216,9 +218,6 @@ class SkeletonBuilder():
         # Predict the embeddings
         vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
 
-        # Convert to dense array if sparse
-        vec_emb = vec_emb.toarray() 
-
         # Step 2: PIFA embeddings
         LOGGER.info("Computing PIFA")
         pifa_emb = self._compute_pifa(vec_emb, labels_matrix)
@@ -226,16 +225,22 @@ class SkeletonBuilder():
         # Store pifa embeddings information
         htree.set_pifa_embeddings(pifa_emb) # Set pifa embeddings
 
-        # Normalize PIFA embeddings
-        vec_emb = normalize(vec_emb, norm="l2", axis=1) # Need to cap features in kwargs
+        # Attention Model to form conc_emb
+        fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])
+        conc_emb = fusion_model(vec_emb, pifa_emb)  # Tensor
+        conc_emb = conc_emb.detach().cpu().numpy()
         
-        # Normalize PIFA embeddings
-        pifa_emb = normalize(pifa_emb, norm="l2", axis=1)
-        pifa_emb = pifa_emb.toarray() # Ensure dense
+        # Prepare UMAP
+        n_samples = conc_emb.shape[0]
+        n_neighbors = min(15, max(2, n_samples - 1))
+        n_components = min(self.n_features, n_samples - 2) # Got to be -2, cause of spectral decomposition
         
-        # Combine text and PIFA embeddings
-        conc_emb = np.hstack((vec_emb, pifa_emb))
-        conc_emb = normalize(conc_emb, norm="l2", axis=1)
+        umap = UMAP(n_components=n_components, metric='cosine', n_neighbors=n_neighbors)
+        conc_emb = umap.fit_transform(conc_emb)
+
+        # Normalize PIFA embeddings
+        conc_emb = normalize(conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
+        vec_emb = normalize(conc_emb, norm="l2", axis=1)
         
         # Create indexed versions for hierarchical processing
         conc_emb_index = {idx: emb for idx, emb in enumerate(conc_emb)}

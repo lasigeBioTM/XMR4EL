@@ -36,6 +36,7 @@ class SkeletonConstruction():
         self.min_n_clusters = min_n_clusters
         self.min_leaf_size = min_leaf_size
         
+        # Type
         self.dtype = dtype
     
     @staticmethod
