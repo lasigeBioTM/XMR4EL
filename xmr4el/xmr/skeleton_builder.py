@@ -268,7 +268,7 @@ class SkeletonBuilder():
         
         print(conc_emb.shape, type(conc_emb))
         
-        LOGGER.info("Truncating the n_features to 5000")
+        LOGGER.info(f"Truncating the n_features to {self.n_features}")
         # Truncate to use UMAP next
         svd = TruncatedSVD(n_components=self.n_features, random_state=0)
         dense_conc_emb = svd.fit_transform(sparse_conc_emb) # turns it into dense auto
