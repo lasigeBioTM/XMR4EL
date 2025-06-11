@@ -4,7 +4,7 @@ import torch
 
 import numpy as np
 
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.preprocessing import normalize
 
 from umap import UMAP
@@ -264,9 +264,13 @@ class SkeletonBuilder():
         # Attention Model to form conc_emb
         fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])        
         conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
-        conc_emb = csr_matrix(conc_emb)
+        sparse_conc_emb = csr_matrix(conc_emb)
         
         print(conc_emb.shape, type(conc_emb))
+        
+        # Truncate to use UMAP next
+        svd = TruncatedSVD(n_components=10000, random_state=0)
+        dense_conc_emb = svd.fit_transform(sparse_conc_emb) # turns it into dense auto
         
         # Prepare UMAP
         n_samples = conc_emb.shape[0]
@@ -274,10 +278,10 @@ class SkeletonBuilder():
         n_components = min(self.n_features, n_samples - 2) # Got to be -2, cause of spectral decomposition
         
         umap = UMAP(n_components=n_components, metric='cosine', n_neighbors=n_neighbors, n_jobs=-1)
-        conc_emb = umap.fit_transform(conc_emb)
+        conc_emb = umap.fit_transform(dense_conc_emb)
 
         # Normalize PIFA embeddings
-        conc_emb = normalize(conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
+        dense_conc_emb = normalize(conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
         vec_emb = normalize(conc_emb, norm="l2", axis=1)
         
         # Create indexed versions for hierarchical processing
