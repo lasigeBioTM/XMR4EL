@@ -1,5 +1,6 @@
 import gc
 import logging
+import torch
 
 import numpy as np
 
@@ -8,7 +9,7 @@ from sklearn.preprocessing import normalize
 
 from umap import UMAP
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, vstack
 
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
@@ -175,6 +176,36 @@ class SkeletonBuilder():
         
         return pifa_emb
 
+    @staticmethod
+    def _fused_emb(X, Y, fusion_model, batch_size=512):
+        """
+        Compute fused embeddings for X and Y in batches using a trained fusion_model.
+        Args:
+            X, Y: scipy.sparse matrices (e.g., csr_matrix)
+            fusion_model: trained AttentionFusion instance
+            batch_size: size of each batch
+        Returns:
+            numpy array of fused embeddings
+        """
+        fusion_model.eval()
+        fusion_model.to(fusion_model.device)
+
+        fused_all = []
+
+        with torch.no_grad():
+            for i in range(0, X.shape[0], batch_size):
+                X_batch = X[i:i+batch_size]
+                Y_batch = Y[i:i+batch_size]
+
+                X_tensor = torch.tensor(X_batch.toarray(), dtype=torch.float).to(fusion_model.device)
+                Y_tensor = torch.tensor(Y_batch.toarray(), dtype=torch.float).to(fusion_model.device)
+
+                fused_batch = fusion_model(X_tensor, Y_tensor).detach().cpu()
+                fused_all.append(fused_batch)
+
+        fused_all_tensor = torch.cat(fused_all, dim=0)
+        return fused_all_tensor.numpy()
+            
     def execute(
         self,
         labels,
@@ -220,15 +251,14 @@ class SkeletonBuilder():
 
         # Step 2: PIFA embeddings
         LOGGER.info("Computing PIFA")
-        pifa_emb = self._compute_pifa(vec_emb, labels_matrix)
+        pifa_emb = self._compute_pifa(vec_emb, labels_matrix).tocsr()
         
         # Store pifa embeddings information
         htree.set_pifa_embeddings(pifa_emb) # Set pifa embeddings
 
         # Attention Model to form conc_emb
-        fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])
-        conc_emb = fusion_model(vec_emb, pifa_emb)  # Tensor
-        conc_emb = conc_emb.detach().cpu().numpy()
+        fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])        
+        conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
         
         # Prepare UMAP
         n_samples = conc_emb.shape[0]
