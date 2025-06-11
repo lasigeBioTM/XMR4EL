@@ -2,27 +2,29 @@ import torch
 from torch import nn
 
 class AttentionFusion(nn.Module):
-    def __init__(self, tfidf_dim, pifa_dim):
+    def __init__(self, X_dim, Y_dim):
         super().__init__()
         self.attention = nn.Sequential(
-            nn.Linear(tfidf_dim + pifa_dim, 128),
+            nn.Linear(X_dim + Y_dim, 128),
             nn.ReLU(),
             nn.Linear(128, 2),
             nn.Softmax(dim=1)
         )
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Batched
+    def forward(self, X, Y):
+        """X, Y are tensors"""        
+        if X.device != self.device:
+            X = X.to(self.device, non_blocking=True)
+        if Y.device != self.device:
+            Y = Y.to(self.device, non_blocking=True)
         
-    def forward(self, tfidf, pifa):
-        # Compute attention weighs
-        tfidf = torch.tensor(tfidf.toarray(), dtype=torch.float).to(self.device)
-        pifa = torch.tensor(pifa.toarray(), dtype=torch.float).to(self.device)
-        
-        combined = torch.cat([tfidf, pifa], dim=1)
+        combined = torch.cat([X, Y], dim=1)
         weights = self.attention(combined)
+        weights = weights.unsqueeze(-1)
         
         # Apply weights
-        tfidf_weighted = weights[:, 0:1] * tfidf
-        pifa_weighted = weights[:, 1:2] * pifa
-        
-        return tfidf_weighted + pifa_weighted
+        fused = (weights[:, 0] * X) + (weights[:, 1] * Y)
+        return fused
