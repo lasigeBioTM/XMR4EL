@@ -268,10 +268,15 @@ class SkeletonBuilder():
         
         print(conc_emb.shape, type(conc_emb))
         
-        LOGGER.info(f"Truncating the n_features to {self.n_features}")
+        LOGGER.info(f"Truncating Dense Combined Embeddings to {self.n_features} n features")
         # Truncate to use UMAP next
         svd = TruncatedSVD(n_components=self.n_features, random_state=0)
         dense_conc_emb = svd.fit_transform(sparse_conc_emb) # turns it into dense auto
+        
+        LOGGER.info(f"Truncating Vectorizer Embeddings to {self.n_features} n features")
+        # Truncate to use UMAP next
+        svd = TruncatedSVD(n_components=self.n_features, random_state=0)
+        dense_vec_emb = svd.fit_transform(vec_emb) # turns it into dense auto
         
         # LOGGER.info("Using UMAP")
         # Prepare UMAP
@@ -284,17 +289,17 @@ class SkeletonBuilder():
 
         # Normalize PIFA embeddings
         dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
-        vec_emb = normalize(conc_emb, norm="l2", axis=1)
+        dense_vec_emb = normalize(conc_emb, norm="l2", axis=1)
         
         # Create indexed versions for hierarchical processing
-        conc_emb_index = {idx: emb for idx, emb in enumerate(conc_emb)}
-        vec_emb_idx = {idx: emb for idx, emb in enumerate(vec_emb)}
+        conc_emb_index = {idx: emb for idx, emb in enumerate(dense_conc_emb)}
+        vec_emb_idx = {idx: emb for idx, emb in enumerate(dense_vec_emb)}
 
         # Step 3: Build hierarchical clustering structure 
         LOGGER.info("Initializing SkeletonConstruction")
         skl_form = SkeletonConstruction(
             max_n_clusters=self.max_n_clusters, 
-            min_n_clusters=self.min_n_clusters, 
+            min_n_clusters=self.min_n_clusters,
             min_leaf_size=self.min_leaf_size,
             dtype=self.dtype)
         
