@@ -6,7 +6,7 @@ import numpy as np
 from scipy.sparse import issparse, csr_matrix
 
 from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, TruncatedSVD
 
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -55,8 +55,9 @@ class Predict():
             return emb  # Return original if reduction not possible
         
         # Perform PCA with effective dimension
-        pca = PCA(n_components=effective_dim, random_state=random_state)
-        return pca.fit_transform(emb)
+        svd = TruncatedSVD(n_components=n_features, random_state=random_state)
+        emb = svd.fit_transform(emb) # turns it into dense auto
+        return emb
     
     @staticmethod
     def _predict_vectorizer(text_vec, corpus):
@@ -251,14 +252,18 @@ class Predict():
             csr_matrix: Sparse matrix of predictions (n_inputs * n_labels)
         """
         
+        LOGGER.info(f"Started inference")
         # Step 1: Generate text embeddings using stored vectorizer
         text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
+        
+        n_features = htree.text_embeddings.shape[1]
+        
+        LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
+        svd = TruncatedSVD(n_components=n_features, random_state=0)
+        dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
 
-        # Normalize text embeddings (handling both sparse and dense cases)
-        if hasattr(text_emb, 'data'):
-            text_emb.data = normalize(text_emb.data.reshape(1, -1)).ravel()
-        else: # Dense matrix
-            text_emb = normalize(text_emb, norm='l2', axis=1)
+        # Normalize text embeddings (handling sparse)
+        dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
         # Step 2: Generate transformer embeddings with memory management
         transformer_model = cls._predict_transformer(
@@ -266,25 +271,23 @@ class Predict():
             transformer_config, 
             dtype
         )
+        
         transformer_emb = transformer_model.model.embeddings
         
         # Step 3: Ensure dimensional compatibility with training data
-        transfomer_n_features = htree.transformer_embeddings.shape[1]
-        if transformer_emb.shape[1] != transfomer_n_features:
+        transformer_n_features = htree.transformer_embeddings.shape[1]
+        LOGGER.info(f"Truncating transformer embeddings to {transformer_n_features} n features")
+        if transformer_emb.shape[1] != transformer_n_features:
             transformer_emb = cls._reduce_dimensionality(
                 transformer_emb, 
-                transfomer_n_features
+                transformer_n_features
             )
 
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
-
-        # Step 4: Concatenate features efficiently
-        if issparse(text_emb):
-            text_emb = text_emb.toarray()
             
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
-            text_emb.astype(dtype)
+            dense_text_emb.astype(dtype)
         ))
 
         concat_emb = [emb.reshape(1, -1) for emb in concat_emb]
@@ -292,6 +295,8 @@ class Predict():
         # transformer_emb = transformer_emb.astype(dtype)
         
         # trans_emb = [emb.reshape(1, -1) for emb in transformer_emb]
+        
+        LOGGER.info(f"Starting main predict task")
         
         def task(emb):
             kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k) # didnt add k
