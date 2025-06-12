@@ -61,10 +61,11 @@ class XMRTuner:
             
             # Get cluster assignments
             labels = model.labels_
-            num_clusters = len(set(labels)) # Count unique clusters (may be < k)
+            unique_labels = set(labels)
+            num_clusters = len(unique_labels) # Count unique clusters (may be < k)
             
-            # Handle case where clustering failed (only 1 cluster)
-            if num_clusters <= 1:
+            # Handle case where clustering failed (fewer than 2 clusters)
+            if num_clusters < 2:
                 print(
                     f"Warning: Only {num_clusters} clusters found for k={k}, skipping..."
                 )
@@ -73,25 +74,26 @@ class XMRTuner:
             # Compute evaluation metrics
             inertia = model.inertia_ # Within-cluster sum of squares
             
-            # Silhouette score requires >1 cluster
-            sil_score = (
-                silhouette_score(trn_corpus, labels, 
-                                 metric="cosine", random_state=0)
-                if num_clusters > 1
-                else 0
-            )
             
-            # Davis_Bouldin score requires >1 cluster
-            db_score = (
-                davies_bouldin_score(trn_corpus, labels) if num_clusters > 1 else np.inf
-            )
-
+            sil_score = 0
+            
+            try:
+                sil_score = silhouette_score(trn_corpus, labels, metric="cosine", random_state=0) if num_clusters >= 2 else 0
+            except ValueError:
+                sil_score = 0
+                
+            # Compute Davies-Bouldin score (skip if invalid)
+            db_score = np.inf
+            try:
+                db_score = davies_bouldin_score(trn_corpus, labels) if num_clusters >= 2 else np.inf
+            except ValueError:
+                db_score = np.inf
+            
             return k, inertia, sil_score, db_score
 
         # Adjust k_range if max_k exceeds number of data points 
         corpus_len = len(trn_corpus)
-        if k_range[1] > corpus_len:
-            k_range = (k_range[0], corpus_len)
+        k_range = (k_range[0], min(k_range[1], corpus_len))
         
         # Parallel evaluation of all k values in range
         results = Parallel(n_jobs=-1)(
@@ -102,38 +104,14 @@ class XMRTuner:
         results = [res for res in results if res[1] != np.inf]
         if not results:  # If all k values failed, return default
             # print("No valid clustering found, returning k=2")
-            return 2, np.zeros(len(k_range)) # Fallback value
+            return k_range[0], np.zeros(k_range[1] - k_range[0] + 1)  # Fallback
 
-        # Unpack results into separate arrays
-        ks, inertia_scores, silhouette_scores, davies_bouldin_scores = zip(*results)
-        inertia_scores, silhouette_scores, davies_bouldin_scores = map(
-            np.array, [inertia_scores, silhouette_scores, davies_bouldin_scores]
-        )
-
-        # Normalize all scores to [0, 1] range for fair comparison
-        # Inertia: lower is better, so we invert after normalization
-        inertia_scores = 1 - (inertia_scores - inertia_scores.min()) / (
-            inertia_scores.max() - inertia_scores.min()
-        )
+        # Normalize scores and compute combined metric
+        ks, inertia_scores, sil_scores, db_scores = zip(*results)
+        inertia_norm = 1 - (inertia_scores - np.min(inertia_scores)) / (np.max(inertia_scores) - np.min(inertia_scores) + 1e-10)
+        sil_norm = (sil_scores - np.min(sil_scores)) / (np.max(sil_scores) - np.min(sil_scores) + 1e-10)
+        db_norm = 1 - (db_scores - np.min(db_scores)) / (np.max(db_scores) - np.min(db_scores) + 1e-10)
         
-        #Silhouette: Higher is better (already in [-1, 1] normalized to [0, 1])
-        silhouette_scores = (silhouette_scores - silhouette_scores.min()) / (
-            silhouette_scores.max() - silhouette_scores.min()
-        )
-        
-        # Davies Bouldin: lower is better, so we invert after normalization
-        davies_bouldin_scores = 1 - (
-            davies_bouldin_scores - davies_bouldin_scores.min()
-        ) / (davies_bouldin_scores.max() - davies_bouldin_scores.min())
-
-        # Compute weighted combined score
-        combined_score = (
-            (weight_elbow * inertia_scores) # Elbow method component 
-            + (weight_silhouette * silhouette_scores) # Silhouette score
-            + (weight_db * davies_bouldin_scores) # DB index component
-        )
-
-        # Select k with the highest combined score
+        combined_score = (weight_elbow * inertia_norm) + (weight_silhouette * sil_norm) + (weight_db * db_norm)
         best_k = ks[np.argmax(combined_score)]
-
         return int(best_k), combined_score
