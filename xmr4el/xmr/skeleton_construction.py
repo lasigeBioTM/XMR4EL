@@ -98,7 +98,10 @@ class SkeletonConstruction():
         # Get optimal k
         optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, self.dtype, k_range=k_range)
         n_clusters = optimal_k
+        
+        # Changing Config of model 
         clustering_config["kwargs"]["n_clusters"] = n_clusters
+        clustering_config["kwargs"]["init_size"] = 3 * n_clusters
 
         while True:
             clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)  
