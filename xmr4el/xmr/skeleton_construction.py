@@ -79,11 +79,12 @@ class SkeletonConstruction():
         text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
 
         # Base case: stop if too few points to cluster meaningfully
-        if len(text_emb_array) <= self.min_n_clusters:
+        if len(text_emb_array) <= max(self.min_n_clusters, self.min_leaf_size):
             return htree
 
         # Determine optimal number of clusters  
-        k_range = (self.min_n_clusters, min(self.max_n_clusters, len(text_emb_array) - 1))
+        max_possible_k = len(text_emb_array) // max(1, self.min_leaf_size)
+        k_range = (self.min_n_clusters, min(self.max_n_clusters, max_possible_k))
         
         # Get optimal k
         optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, self.dtype, k_range=k_range)
@@ -96,7 +97,7 @@ class SkeletonConstruction():
             cluster_counts = Counter(cluster_labels)
 
             # Check if any cluster has fewer than 2 samples (to avoid classifier errors)
-            if min(cluster_counts.values()) < 2:  # <-- NEW CHECK (prevents singleton clusters)
+            if min(cluster_counts.values()) < self.min_leaf_size:  # <-- NEW CHECK (prevents singleton clusters)
                 if n_clusters == self.min_n_clusters:
                     if htree.depth == 0:
                         LOGGER.warning("Cannot split further: Some clusters have < 2 samples.")
@@ -120,9 +121,11 @@ class SkeletonConstruction():
             cluster_indices = [idx for idx, label in zip(indices, cluster_labels) if label == cluster]
             
             # Skip if cluster has fewer than 2 samples (cannot train classifier)
-            if len(cluster_indices) < 2:
-                LOGGER.warning(f"Skipping cluster {cluster}: Only 1 sample.")
-                continue  # <-- Skip instead of recursing
+            if len(cluster_indices) < self.min_leaf_size:
+                LOGGER.warning(f"Skipping cluster {cluster}:" 
+                               f"Only {len(cluster_indices)} samples"
+                               f"(min_leaf_size={self.min_leaf_size}).")
+                continue
             
             filt_combined_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}
             filt_text_dict = {idx: emb_idx[idx] for idx in cluster_indices}
