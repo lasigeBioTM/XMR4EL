@@ -256,6 +256,8 @@ class Predict():
         # Step 1: Generate text embeddings using stored vectorizer
         text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
         
+        print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
+        
         n_features = htree.text_embeddings.shape[1]
         
         LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
