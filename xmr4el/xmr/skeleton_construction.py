@@ -83,16 +83,15 @@ class SkeletonConstruction():
             return htree
 
         # Determine optimal number of clusters  
-        k_range = (self.min_n_clusters, self.max_n_clusters)
-        optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, self.dtype, k_range=k_range)
+        k_range = (self.min_n_clusters, min(self.max_n_clusters, len(text_emb_array) - 1))
         
+        # Get optimal k
+        optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, self.dtype, k_range=k_range)
         n_clusters = optimal_k
         clustering_config["kwargs"]["n_clusters"] = n_clusters
 
         while True:
-            clustering_model = self._train_clustering(
-                text_emb_array, clustering_config, self.dtype
-            )  
+            clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)  
             cluster_labels = clustering_model.model.labels()
             cluster_counts = Counter(cluster_labels)
 
@@ -112,7 +111,6 @@ class SkeletonConstruction():
             break  # Valid clustering found
         
         LOGGER.info(f"Saving Clustering Model at depth {htree.depth}, with {n_clusters} clusters")
-        
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(emb_idx)
 
