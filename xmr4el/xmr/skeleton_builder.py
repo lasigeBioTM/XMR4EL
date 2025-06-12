@@ -307,6 +307,9 @@ class SkeletonBuilder():
             clustering_config=self.clustering_config
         )
         
+        
+        print(htree)
+        
         # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF] now is [Transfomer] * [TF-IDF] 
 
         # Step 4: Transformer Embeddings
