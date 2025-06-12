@@ -258,7 +258,7 @@ class Predict():
         
         print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
         
-        n_features = htree.text_embeddings.shape[1]
+        n_features = 768
         
         LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
         svd = TruncatedSVD(n_components=n_features, random_state=0)
