@@ -147,8 +147,10 @@ class SkeletonBuilder():
             return emb  # Return original if reduction not possible
         
         # Perform PCA with effective dimension
-        pca = PCA(n_components=effective_dim, random_state=random_state)
-        return pca.fit_transform(emb)
+        svd = TruncatedSVD(n_components=n_features, random_state=random_state)
+        dense_emb = svd.fit_transform(emb) # turns it into dense auto
+        
+        return dense_emb
 
     @staticmethod
     def _compute_pifa(X_tfidf, Y_train):
@@ -291,6 +293,8 @@ class SkeletonBuilder():
         dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
         dense_vec_emb = normalize(conc_emb, norm="l2", axis=1)
         
+        print(dense_conc_emb.shape, dense_vec_emb)
+        
         # Create indexed versions for hierarchical processing
         conc_emb_index = {idx: emb for idx, emb in enumerate(dense_conc_emb)}
         vec_emb_idx = {idx: emb for idx, emb in enumerate(dense_vec_emb)}
@@ -328,6 +332,8 @@ class SkeletonBuilder():
         # Normalize and reduce transformer embeddings
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         transformer_emb = self._reduce_dimensionality(transformer_emb, self.n_features)
+        
+        print(transformer_emb.shape)
 
         # Step 5: Train classifiers throughout hierarchy  
         LOGGER.info(f"Initializing SkeletonTraining")      
