@@ -293,7 +293,7 @@ class SkeletonBuilder():
         dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
         dense_vec_emb = normalize(conc_emb, norm="l2", axis=1)
         
-        print(dense_conc_emb.shape, dense_vec_emb)
+        print(dense_conc_emb.shape, dense_vec_emb.shape)
         
         # Create indexed versions for hierarchical processing
         conc_emb_index = {idx: emb for idx, emb in enumerate(dense_conc_emb)}
