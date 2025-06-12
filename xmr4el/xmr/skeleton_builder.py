@@ -291,7 +291,7 @@ class SkeletonBuilder():
 
         # Normalize PIFA embeddings
         dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
-        dense_vec_emb = normalize(conc_emb, norm="l2", axis=1)
+        dense_vec_emb = normalize(dense_vec_emb, norm="l2", axis=1)
         
         print(dense_conc_emb.shape, dense_vec_emb.shape)
         
