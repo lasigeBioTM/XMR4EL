@@ -78,12 +78,21 @@ class SkeletonConstruction():
         indices = sorted(comb_emb_idx.keys())
         text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
 
+        min_clusterable_size = max(self.min_n_clusters, self.min_leaf_size)
         # Base case: stop if too few points to cluster meaningfully
-        if len(text_emb_array) <= max(self.min_n_clusters, self.min_leaf_size):
+        if len(text_emb_array) <= min_clusterable_size:
             return htree
 
         # Determine optimal number of clusters  
         max_possible_k = len(text_emb_array) // max(1, self.min_leaf_size)
+        
+        if max_possible_k < self.min_n_clusters:
+            LOGGER.warning(
+                f"Cannot cluster: {len(text_emb_array)} samples cannot be split into "
+                f"{self.min_n_clusters} clusters with min_leaf_size={self.min_leaf_size}"
+            )
+            return htree
+    
         k_range = (self.min_n_clusters, min(self.max_n_clusters, max_possible_k))
         
         # Get optimal k
