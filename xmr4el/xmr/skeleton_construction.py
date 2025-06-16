@@ -119,6 +119,7 @@ class SkeletonConstruction():
                 # Try with fewer clusters
                 n_clusters -= 1
                 clustering_config["kwargs"]["n_clusters"] = n_clusters
+                clustering_config["kwargs"]["init_size"] = 3 * n_clusters
                 continue
 
             break  # Valid clustering found

@@ -19,8 +19,8 @@ class XMRTuner:
         config,
         dtype,
         k_range,
-        weight_silhouette=0.5,
-        weight_db=0.3,
+        weight_silhouette=0.6,
+        weight_db=0.2,
         weight_elbow=0.2,
     ):
         """
