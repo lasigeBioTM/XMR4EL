@@ -12,7 +12,6 @@ from collections import Counter
 from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
-from xmr4el.ranker.reranker import ReRanker
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(
