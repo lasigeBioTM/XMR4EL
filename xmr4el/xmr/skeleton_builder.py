@@ -4,12 +4,12 @@ import torch
 
 import numpy as np
 
-from sklearn.decomposition import PCA, TruncatedSVD
+from sklearn.decomposition import TruncatedSVD
 from sklearn.preprocessing import normalize
 
 from umap import UMAP
 
-from scipy.sparse import csr_matrix, vstack
+from scipy.sparse import csr_matrix
 
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
