@@ -6,7 +6,6 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
-from xmr4el.ranker.reranker import ReRanker
 
 
 LOGGER = logging.getLogger(__name__)
