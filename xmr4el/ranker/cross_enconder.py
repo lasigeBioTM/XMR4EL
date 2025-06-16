@@ -56,9 +56,19 @@ class CrossEncoderMP():
         results = []
         for (start, end) in pair_ranges:
             query_scores = scores[start:end]
+
+            # Normalize using min-max (avoids divide-by-zero)
+            min_s, max_s = query_scores.min(), query_scores.max()
+            if max_s > min_s:
+                query_scores = (query_scores - min_s) / (max_s - min_s)
+            else:
+                query_scores = np.zeros_like(query_scores)
+
+            # Top-k selection
             top_k_idx = np.argpartition(query_scores, -k)[-k:]
             top_k_idx = top_k_idx[np.argsort(query_scores[top_k_idx])[::-1]]
             top_k_scores = query_scores[top_k_idx]
+
             results.append((top_k_idx, top_k_scores))
 
         return results
