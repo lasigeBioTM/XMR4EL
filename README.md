@@ -1,4 +1,4 @@
-#### eXtreme Multi-Label Ranking for Entity Linking - XMR4EL
+# eXtreme Multi-Label Ranking for Entity Linking - XMR4EL
 
 This project extends the PECOS pipeline, aiming to support flexible integration of custom models for Extreme Multi-Label Ranking (XMR).
 
