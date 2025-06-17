@@ -64,7 +64,7 @@ To train the model
 >>> max_n_clusters = 16
 >>> min_n_clusters = 6
 >>> vectorizer_config = {"type": "tfidf","kwargs": {"max_features":20000}}
->>> transformer_config = {"type": "biobert","kwargs": {"batch_size": 400}
+>>> transformer_config = {"type": "biobert","kwargs": {"batch_size": 400}}
 >>> clustering_config = {"type": "sklearnminibatchkmeans", "kwargs": { "n_clusters": 8, "init": "k-means++", "max_iter": 500, "batch_size": 0, "verbose": 0, "compute_labels": True, "random_state": 42, "tol": 1e-4, "max_no_improvement": 20, "init_size": 24, "n_init": 5, "reassignment_ratio": 0.01}}
 >>> classifier_config = {"type": "sklearnlogisticregression", "kwargs": {"n_jobs": -1, "random_state": 0,"penalty":"l2",    "class_weight": "balanced", "C": 1.0, "solver":"lbfgs", "max_iter":1000}}
 >>> training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
@@ -72,9 +72,9 @@ To train the model
 # No need to truncate data if we want to test all the data
 >>> train_data = Preprocessor().load_data_labels_from_file(train_filepath=training_file,labels_filepath=labels_file,truncate_data=150)
 >>> Y_train = train_data["labels_matrix"]
->>> raw_labels = parsed_train_data["raw_labels"]
+>>> raw_labels = train_data["raw_labels"]
 >>> X_train = train_data["corpus"]
->>> x_cross_train = parsed_train_data["cross_corpus"]
+>>> x_cross_train = train_data["cross_corpus"]
 >>> pipe = SkeletonBuilder(vectorizer_config, transformer_config, clustering_config, classifier_config, n_features, max_n_clusters, min_n_clusters, min_leaf_size, depth, dtype=np.float32)
 >>> htree = pipe.execute(raw_labels, x_cross_train, X_train,Y_train)
 # Omiting logging
