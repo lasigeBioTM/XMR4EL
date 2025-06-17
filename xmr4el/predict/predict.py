@@ -157,7 +157,7 @@ class Predict():
         def _retrieve(pred):
             conc_input, conc_emb = pred[1], pred[2]
             _, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates) # scores
-            print(f"Indices: {indices}")
+            # print(f"Indices: {indices}")
             return indices[indices != -1].flatten()
         
         # Parallelize retrieval (FAISS is single-threaded, but we batch queries)
