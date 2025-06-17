@@ -57,14 +57,9 @@ class CrossEncoderMP():
         for (start, end) in pair_ranges:
             query_scores = scores[start:end]
 
-            # Safe softmax normalization
-            exp_scores = np.exp(query_scores - np.max(query_scores))  # subtract max for numerical stability
-            softmax_scores = exp_scores / np.sum(exp_scores)
-
-            # Top-k selection on softmax scores
-            top_k_idx = np.argpartition(softmax_scores, -k)[-k:]
-            top_k_idx = top_k_idx[np.argsort(softmax_scores[top_k_idx])[::-1]]
-            top_k_scores = softmax_scores[top_k_idx]
+            top_k_idx = np.argpartition(query_scores, -k)[-k:]
+            top_k_idx = top_k_idx[np.argsort(query_scores[top_k_idx])[::-1]]
+            top_k_scores = query_scores[top_k_idx]
 
             results.append((top_k_idx, top_k_scores))
 
