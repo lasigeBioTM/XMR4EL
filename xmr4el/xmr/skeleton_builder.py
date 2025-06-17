@@ -14,7 +14,7 @@ from scipy.sparse import csr_matrix
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
 
-from xmr4el.xmr.attention_fusion import AttentionFusion
+from xmr4el.featurization.attention_fusion import AttentionFusion
 from xmr4el.xmr.skeleton_construction import SkeletonConstruction
 from xmr4el.xmr.skeleton_training import SkeletonTraining
 from xmr4el.xmr.skeleton import Skeleton

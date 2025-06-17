@@ -1,3 +1,3 @@
-## Classifier Wrapper
+## Classifier Model
 
-## Cluster Wrapper
+## Cluster Model

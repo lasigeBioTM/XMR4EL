@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.ranker.candidate_retrieval import CandidateRetrieval
-from xmr4el.ranker.cross_enconder import CrossEncoderMP
+from xmr4el.ranker.cross_encoder import CrossEncoderMP
 
 
 LOGGER = logging.getLogger(__name__)
