@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Update package lists and install prerequisites
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
+    nano \
     curl \
     build-essential \             
     pkg-config \             
@@ -17,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-venv \
-    python3.12-dev \ 
+    python3.12-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
