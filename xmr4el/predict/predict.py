@@ -3,10 +3,10 @@ import gc
 
 import numpy as np
 
-from scipy.sparse import issparse, csr_matrix
+from scipy.sparse import csr_matrix
 
 from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA, TruncatedSVD
+from sklearn.decomposition import TruncatedSVD
 
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -24,25 +24,35 @@ logging.basicConfig(
 
 class Predict():
     """
-    Prediction class for Extreme Multi-label Ranking (XMR) system that handles:
+    Extreme Multi-label Ranking (XMR) prediction system that handles:
     - Feature transformation and dimensionality reduction
-    - Hierarchical tree traversal for prediction
-    - Reranking of candidate labels
-    - Efficient batch prediction
-    """
+    - Hierarchical tree traversal for efficient prediction
+    - Two-stage candidate retrieval and ranking
+    - Parallel processing for high throughput
     
+    The prediction pipeline consists of:
+    1. Text embedding generation using trained vectorizer
+    2. Transformer embedding generation
+    3. Dimensionality reduction and normalization
+    4. Hierarchical tree traversal for candidate selection
+    5. Two-stage ranking (retrieval + cross-encoder)
+    6. Sparse output generation
+    """
     @staticmethod
     def _reduce_dimensionality(emb, n_features, random_state=0):
-        """Reduces the dimensionality of embeddings
-
+        """
+        Reduces embedding dimensionality using Truncated SVD (PCA for sparse data).
+        
+        Handles edge cases where reduction isn't possible due to matrix dimensions.
+        
         Args:
-            emb (np.array): Embeddings to reduce
+            emb (np.ndarray): Input embeddings of shape (n_samples, n_features_emb)
             n_features (int): Target number of features
-            random_state (int): Random seed for reproducibility
+            random_state (int): Random seed for reproducibility. Defaults to 0.
             
         Returns:
-            np.array: Reduced embeddings with shape (n_samples, n_features)
-                     or original if reduction not possible
+            np.ndarray: Reduced embeddings of shape (n_samples, n_features)
+                       or original embeddings if reduction not possible
         """
         n_samples, n_features_emb = emb.shape
         # PCA cannot have more components than min(n_samples, n_features)
@@ -106,14 +116,17 @@ class Predict():
     def _convert_predictions_into_csr(predictions, num_labels=None):
         """
         Converts prediction results into a sparse CSR matrix.
-
+        
         Args:
-            predictions: List of tuples like (label_indices, scores)
-                        where label_indices and scores are arrays or lists of equal length.
-            num_labels: Optional. Total number of possible labels. Inferred if not provided.
-
+            predictions (list): List of (label_indices, scores) tuples where:
+                             - label_indices: Array of label indices
+                             - scores: Array of corresponding scores
+            num_labels (int, optional): Total number of possible labels.
+                                      If None, inferred from data.
+                                      
         Returns:
             csr_matrix: Sparse matrix of shape (n_instances, num_labels)
+                       with prediction scores
         """
         rows, cols, vals = [], [], []
 
@@ -130,17 +143,21 @@ class Predict():
             
     @classmethod
     def _rank(cls, predictions, train_data, input_texts, candidates=100, config=None):
-        """Optimized parallel candidate retrieval and ranking.
+        """
+        Two-stage ranking pipeline:
+        1. Fast candidate retrieval using FAISS
+        2. Precise reranking using CrossEncoder
         
         Args:
-            predictions: List of tuples (_, conc_input, conc_emb).
-            train_data: Dict {idx: text} for training corpus.
-            input_texts: List of input texts to match against.
-            candidates: Top-k candidates to retrieve per query.
-            config: Optional config dict (e.g., for n_jobs).
-        
+            predictions (list): List of (kb_indices, conc_input, conc_emb) tuples
+            train_data (dict): {index: text} mapping of training corpus
+            input_texts (list): Original input texts for cross-encoder
+            candidates (int): Number of candidates to retrieve. Defaults to 100.
+            config (dict, optional): Configuration including:
+                                   - n_jobs: Number of parallel jobs
+                                   
         Returns:
-            List of ranked matches.
+            list: Ranked predictions as (label_ids, scores) tuples
         """
         # Initialize components (once)
         candidate_retrieval = CandidateRetrieval()
@@ -173,13 +190,6 @@ class Predict():
             for i, indices in enumerate(indices_list)
         ]
         
-        """
-        # Smart concatenation (e.g., join with separator)
-        trn_corpus_hybrid = {
-            0: "[SEP]".join(["text1_v1", "text1_v2", ...]),  # [SEP] helps models distinguish
-        }
-        """
-        
         # Batch predict (cross_encoder should handle parallelism internally)
         matches = cross_encoder.predict(text_pairs)
         
@@ -196,17 +206,19 @@ class Predict():
     @classmethod
     def _predict_input(cls, htree, conc_input, candidates=100):
         """
-        Recursively traverses the hierarchical tree to make predictions.
+        Recursively traverses hierarchical tree to find relevant candidates.
         
         Args:
-            htree (XMRTree): Current tree node
-            conc_input: Concatenated input embeddings
-            k: Number of predictions to return
+            htree (XMRTree): Current hierarchical tree node
+            conc_input (np.ndarray): Concatenated input embeddings
+            candidates (int): Number of candidates to retrieve. Defaults to 100.
             
         Returns:
-            list: Predicted (kb_index, score) pairs
+            tuple: (kb_indices, conc_input, conc_emb) where:
+                 - kb_indices: Knowledge base indices
+                 - conc_input: Original input embeddings
+                 - conc_emb: Candidate embeddings for ranking
         """
-        
         # device = 'cuda' if torch.cuda.is_available() else 'cpu'
         current_htree = htree
 
@@ -239,26 +251,25 @@ class Predict():
         cls, htree, input_text, transformer_config, k=3, dtype=np.float32
     ):
         """
-        Main prediction pipeline for XMR system.
+        End-to-end prediction pipeline for XMR system.
         
         Args:
             htree (XMRTree): Trained hierarchical tree model
-            input_text: Input text(s) to predict
-            transformer_config: Configuration for transformer model
-            k: Number of predictions to return per input
-            dtype: Data type for embeddings
+            input_text (iterable): Input text(s) to predict
+            transformer_config (dict): Transformer configuration
+            k (int): Number of predictions to return per input. Defaults to 3.
+            dtype (np.dtype): Data type for embeddings. Defaults to np.float32.
             
         Returns:
-            csr_matrix: Sparse matrix of predictions (n_inputs * n_labels)
+            csr_matrix: Sparse prediction matrix of shape (n_inputs * n_labels)
         """
-        
         LOGGER.info(f"Started inference")
         # Step 1: Generate text embeddings using stored vectorizer
         text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
         
-        print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
+        # print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
         
-        n_features = 768
+        n_features = htree.transformer_embeddings.shape[1]
         
         LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
         svd = TruncatedSVD(n_components=n_features, random_state=0)
