@@ -15,20 +15,34 @@ logging.basicConfig(
 
 
 class SkeletonTraining():
+    """
+    Hierarchical classifier trainer for XMR tree nodes.
     
-    def __init__(self, 
-                 init_tfr_emb, 
-                 classifier_config,
-                 test_size=0.2, 
-                 random_state=42,
-                 dtype=np.float32):
+    This class handles the training of classifiers at each node of the hierarchical tree,
+    using combined transformer and text embeddings as features. Key features:
+    - Recursive training through the tree structure
+    - Combined feature space creation
+    - Stratified train-test splitting
+    - Memory-efficient processing
+    
+    Attributes:
+        init_tfr_emb (np.ndarray): Initial transformer embeddings for all samples
+        classifier_config (dict): Configuration for classifier models
+        test_size (float): Proportion of data for testing (0.0-1.0)
+        random_state (int): Random seed for reproducibility
+        dtype (np.dtype): Data type for numerical operations
+    """
+    
+    def __init__(self, init_tfr_emb, classifier_config, test_size=0.2, random_state=42, dtype=np.float32):
         """
-        Init:
-            initial_transformer_emb (np.array): Transformer embeddings
-            classifier_config (dict): Configuration for classifiers
-            test_size (int): Size of test size
-            random_state (int): Random seed
-            dtype: Data type for computations
+        Initializes the SkeletonTraining with training parameters.
+        
+        Args:
+            init_tfr_emb (np.ndarray): Transformer embeddings matrix (n_samples, n_features)
+            classifier_config (dict): Classifier configuration parameters
+            test_size (float): Proportion of data to use for testing (default: 0.2)
+            random_state (int): Random seed for reproducibility (default: 42)
+            dtype (np.dtype): Data type for computations (default: np.float32)
         """
         
         self.init_tfr_emb = init_tfr_emb
@@ -56,10 +70,23 @@ class SkeletonTraining():
 
     def execute(self, htree):
         """
-        Second phase: Trains classifiers at each node of the hierarchical tree
+        Recursively trains classifiers throughout the hierarchical tree.
+        
+        For each node:
+        1. Retrieves embeddings and cluster assignments
+        2. Creates combined feature space
+        3. Performs stratified train-test split
+        4. Trains classifier
+        5. Stores results in tree node
+        6. Recurses to child nodes
         
         Args:
-            htree (XMRTree): Current tree node
+            htree (XMRTree): Current tree node being processed
+            
+        Note:
+            - Automatically handles memory cleanup via gc.collect()
+            - Maintains consistent feature space across tree levels
+            - Preserves cluster proportions in train-test split
         """
 
         gc.collect()
