@@ -17,19 +17,36 @@ logging.basicConfig(
 
 
 class SkeletonConstruction():
+    """
+    Hierarchical clustering constructor for building the XMR tree skeleton.
+    
+    This class handles the recursive construction of the hierarchical tree structure
+    using clustering algorithms. Key features:
+    - Dynamic determination of optimal cluster count
+    - Recursive tree building with depth control
+    - Validation of cluster quality and size constraints
+    - Memory-efficient processing of embeddings
+    
+    Attributes:
+        max_n_clusters (int): Maximum number of clusters per node
+        min_n_clusters (int): Minimum number of clusters per node
+        min_leaf_size (int): Minimum samples required per leaf cluster
+        dtype (np.dtype): Data type for numerical operations
+    """
     
     def __init__(self, 
                  max_n_clusters, 
                  min_n_clusters,
                  min_leaf_size, 
                  dtype=np.float32):
-        
         """
-        Init:
-            max_n_clusters (int): Maximum number of clusters to consider
-            min_n_clusters (int): Minimum number of clusters to consider
+        Initializes the SkeletonConstruction with clustering parameters.
+        
+        Args:
+            max_n_clusters (int): Maximum number of clusters to consider per node
+            min_n_clusters (int): Minimum number of clusters to consider per node
             min_leaf_size (int): Minimum size for a cluster to be valid
-            dtype: Data type for computations
+            dtype (np.dtype): Data type for computations. Defaults to np.float32.
         """
         # Configs
         self.max_n_clusters = max_n_clusters
@@ -56,17 +73,29 @@ class SkeletonConstruction():
 
     def execute(self, htree, comb_emb_idx, emb_idx, depth, clustering_config):
         """
-        Recursively builds hierarchical clustering tree structure using text embeddings
+        Recursively constructs the hierarchical clustering tree structure.
+        
+        The method:
+        1. Validates clusterability of current node
+        2. Determines optimal cluster count
+        3. Trains clustering model
+        4. Validates cluster quality
+        5. Recursively processes valid clusters
         
         Args:
-            htree (XMRTree): Current tree node
-            comb_emb_idx (dict): Indexed combined embeddings (text + PIFA)
-            emb_idx (dict): Indexed text embeddings
+            htree (XMRTree): Current tree node being processed
+            comb_emb_idx (dict): Indexed combined embeddings {index: embedding}
+            emb_idx (dict): Indexed text embeddings {index: embedding}
             depth (int): Remaining recursion depth
-            clustering_config (dict): Configuration for clustering
+            clustering_config (dict): Configuration for clustering algorithm
             
         Returns:
-            XMRTree: Constructed hierarchical tree
+            XMRTree: Constructed hierarchical tree with children nodes
+            
+        Note:
+            - Automatically handles memory cleanup via gc.collect()
+            - Validates cluster sizes against min_leaf_size
+            - Dynamically adjusts cluster count when validation fails
         """
         gc.collect()
         

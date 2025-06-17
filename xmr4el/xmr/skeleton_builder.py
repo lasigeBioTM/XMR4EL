@@ -28,11 +28,27 @@ logging.basicConfig(
 
 class SkeletonBuilder():
     """
-    Pipeline for Extreme Multi-label Ranking (XMR) system that combines:
-    - Text vectorization
-    - Dimensionality reduction
-    - Hierarchical clustering
-    - Classification
+    End-to-end pipeline for constructing an Extreme Multi-label Ranking (XMR) hierarchical model.
+    
+    The builder combines multiple stages:
+    1. Text feature extraction (vectorization + transformer embeddings)
+    2. Label embedding creation (PIFA methodology)
+    3. Hierarchical skeleton construction
+    4. Classifier training at each tree level
+    
+    The pipeline produces a complete XMRTree ready for prediction.
+    
+    Attributes:
+        vectorizer_config (dict): Configuration for text vectorization
+        transformer_config (dict): Configuration for transformer embeddings
+        clustering_config (dict): Configuration for hierarchical clustering
+        classifier_config (dict): Configuration for node classifiers
+        n_features (int): Target dimensionality for reduced embeddings
+        max_n_clusters (int): Maximum clusters per tree node
+        min_n_clusters (int): Minimum clusters per tree node  
+        min_leaf_size (int): Minimum samples per leaf node
+        depth (int): Maximum tree depth (1000 if -1)
+        dtype (np.dtype): Data type for numerical operations
     """
 
     def __init__(self,
@@ -46,19 +62,20 @@ class SkeletonBuilder():
                  min_leaf_size=10,
                  depth=3,
                  dtype=np.float32):
-        
         """
-        Init
-            vectorizer_config (dict): Text vectorizer config
-            transformer_config (dict): Transformer config
-            clustering_config (dict): Clustering config
-            classifier_config (dict): Classifier config
-            n_features (int): Target feature dimension
-            max_n_clusters (int): Max clusters per node
-            min_n_clusters (int): Min clusters per node
-            min_leaf_size (int): Min points per cluster
-            depth (int): Max tree depth
-            dtype (np.type): Data type
+        Initializes the SkeletonBuilder with complete pipeline configuration.
+        
+        Args:
+            vectorizer_config (dict): Text vectorizer parameters
+            transformer_config (dict): Transformer model parameters
+            clustering_config (dict): Clustering algorithm parameters
+            classifier_config (dict): Classifier training parameters
+            n_features (int): Target feature dimension after reduction. Defaults to 1000.
+            max_n_clusters (int): Maximum clusters per node. Defaults to 16.
+            min_n_clusters (int): Minimum clusters per node. Defaults to 6.
+            min_leaf_size (int): Minimum samples per leaf cluster. Defaults to 10.
+            depth (int): Maximum tree depth (-1 for unlimited). Defaults to 3.
+            dtype (np.dtype): Data type for embeddings. Defaults to np.float32.
         """
         
         # Configs
@@ -213,28 +230,25 @@ class SkeletonBuilder():
         fused_all_tensor = torch.cat(fused_all, dim=0)
         return fused_all_tensor.numpy()
             
-    def execute(
-        self,
-        labels,
-        x_cross_train,
-        trn_corpus,
-        labels_matrix
-    ):
+    def execute(self, labels, x_cross_train, trn_corpus, labels_matrix):
         """
-        Full XMR pipeline execution:
-        1. Text vectorization
+        Executes the complete XMR model building pipeline.
+        
+        Pipeline stages:
+        1. Text vectorization and embedding generation
         2. PIFA label embedding creation
-        3. Hierarchical clustering
-        4. Classifier training at each level
+        3. Hierarchical skeleton construction
+        4. Transformer embedding generation
+        5. Classifier training throughout hierarchy
         
         Args:
-            labels
-            x_cross_train: Training text data
-            trn_corpus: Binary label matrix
-            labels_matrix: Label encoder
+            labels (iterable): Label identifiers
+            x_cross_train (iterable): Training text data
+            trn_corpus (iterable): Processed training corpus
+            labels_matrix (scipy.sparse): Binary label matrix
             
         Returns:
-            XMRTree: Fully trained hierarchical model
+            Skeleton: Fully trained hierarchical XMR model
         """
 
         # Clean up memory before starting
@@ -268,7 +282,7 @@ class SkeletonBuilder():
         conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
         sparse_conc_emb = csr_matrix(conc_emb)
         
-        print(conc_emb.shape, type(conc_emb))
+        # print(conc_emb.shape, type(conc_emb))
         
         LOGGER.info(f"Truncating Dense Combined Embeddings to {self.n_features} n features")
         # Truncate to use UMAP next
@@ -293,7 +307,7 @@ class SkeletonBuilder():
         dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
         dense_vec_emb = normalize(dense_vec_emb, norm="l2", axis=1)
         
-        print(dense_conc_emb.shape, dense_vec_emb.shape)
+        # print(dense_conc_emb.shape, dense_vec_emb.shape)
         
         # Create indexed versions for hierarchical processing
         conc_emb_index = {idx: emb for idx, emb in enumerate(dense_conc_emb)}
@@ -333,7 +347,7 @@ class SkeletonBuilder():
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         transformer_emb = self._reduce_dimensionality(transformer_emb, self.n_features)
         
-        print(transformer_emb.shape)
+        # print(transformer_emb.shape)
 
         # Step 5: Train classifiers throughout hierarchy  
         LOGGER.info(f"Initializing SkeletonTraining")      
