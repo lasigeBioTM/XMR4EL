@@ -9,7 +9,7 @@ Although this project is primarily designed for Entity Linking, it is general en
 Note: Paper is in progress.
 Status: Functional but not yet finalized.
 
-### Requirements and Installation
+## Requirements and Installation
 
 * Python (3.12)
 
@@ -92,7 +92,7 @@ Now, every time you activate the virtual environment, the Python path will be se
 source .venv/bin/activate
 ```
 
-### Quick Tour
+# Quick Tour
 
 ## Models that are working and vetted
 
@@ -205,7 +205,7 @@ Each line must begin with an index, followed by a tab (\t) and the corresponding
 
 In this case, the label C538288 corresponds to all the lines starting with 0.
 
-# Loading Files with the Preprocessor
+## Loading Files with the Preprocessor
 
 To feed the data into the algorithm using files:
 
@@ -219,7 +219,7 @@ To feed the data into the algorithm using files:
 ...     truncate_data=150)
 ```
 
-# Loading Data Manually
+## Loading Data Manually
 
 You can also manually open and prepare the files before passing them to the algorithm.
 
@@ -246,11 +246,11 @@ The labels should be a list of IDs, and can be encoded using:
 >>> print(label_matrix, type(label_matrix))
 ```
 
-# Important
+### Important
 
 Ensure that label_matrix and the test data list have the same length. If not, the program will exit.
 
-# Truncating Data
+### Truncating Data
 
 When loading from files using Preprocessor().load_data_labels_from_file(...), the method will automatically truncate any labels that do not have corresponding test data entries.
 
