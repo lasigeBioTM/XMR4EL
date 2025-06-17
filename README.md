@@ -88,7 +88,7 @@ To predict using the model
 >>> from xmr4el.predict.predict import Predict
 >>> from xmr4el.xmr.skeleton import Skeleton
 >>> k = 5
->>> transformer_config = {"type": "biobert","kwargs": {"batch_size": 400}}
+>>> transformer_config = {"type": "sentencetbiobert","kwargs": {"batch_size": 400}}
 >>> file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
 >>> with open(file_test_input, "r") as file:
 ...     unique_names = set(file.read().splitlines())
