@@ -27,6 +27,71 @@ pip install git+https://github.com/lasigeBioTM/XMR4EL.git
 
 Current GPU models are based on RAPIDS.ai and are tested within the provided Docker environment (see Dockerfile).
 
+### Dockerfile
+
+The Dockerfile sets up a CUDA-enabled environment to test and run the program.
+
+#### To build the docker image:
+
+```bash
+docker build -t xmr4el .
+```
+
+#### To run the container:
+
+```bash
+docker run -v .:/app --name xmr4el -it xmr4el bash
+```
+
+#### Setting up workspace
+
+* Once inside the container, how you choose to operate the system is up to you. However, it is recommended to use a virtual environment for Python dependecies.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+which python3  # Check that the venv's Python is being used
+pip install -r requirements.txt
+```
+
+* If you prefer not to use a virtual environment, simply install the requirements globally.
+
+```bash
+pip install -r requirements.txt
+```
+
+#### Setting PYTHONPATH
+
+* If you want to run the program without needing to export PYTHONPATH every time, you can modify your virtual environment to handle it automatically.
+
+- Option 1: Export manually each time
+
+You can set the PYTHONPATH manually in every session:
+
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)  # Add current directory to Python path
+```
+
+- Option 2: Automate using the venv activate script (recommended)
+
+To make the PYTHONPATH persistent within your virtual environment (Outside of venv):
+
+```bash
+nano .venv/bin/activate
+```
+
+Add the following line near the end of the file:
+
+```bash
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+```
+
+Now, every time you activate the virtual environment, the Python path will be set automatically.
+
+```bash
+source .venv/bin/activate
+```
+
 ### Quick Tour
 
 ## Models that are working and vetted
