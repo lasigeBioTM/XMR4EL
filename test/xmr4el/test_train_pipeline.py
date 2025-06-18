@@ -102,10 +102,6 @@ def main():
     X_train = train_data["corpus"] # List
     X_cross_train = train_data["cross_corpus"]
     label_enconder = train_data["label_encoder"]
-    
-    print(X_cross_train)
-    
-    exit()
         
     # R_train = copy.deepcopy(Y_train)
 
