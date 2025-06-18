@@ -223,15 +223,26 @@ To feed the data into the algorithm using files:
 
 You can also manually open and prepare the files before passing them to the algorithm.
 
-* Test Data Format
+* Train Data Format
 
-The test data should be a list of concatenated strings, where all text samples with the same ID are merged into one string:
+The train data should be a list of concatenated strings, where all text samples with the same ID are merged into one string:
 
 ```bash
 [
   "achm2 achromatopsia 2 colorblindness, total rmch2 rod monochromacy 2 ...",
   ...
 ]  # type: List[str]
+```
+
+* Cross Train Data Format
+
+The cross training data should be a list of lists, where each list has all the text samples with the same ID:
+
+```bash
+[
+    ["achm2 achromatopsia 2 colorblindness", "total rmch2 rod monochromacy 2", "..."],
+    ["..."]
+]
 ```
 
 * Labels Format
