@@ -143,21 +143,18 @@ class SkeletonConstruction():
             
             cluster_counts = Counter(cluster_labels)
             valid_clusters = [c for c in cluster_counts if cluster_counts[c] >= self.min_leaf_size]
-            # Check if any cluster has fewer than 2 samples (to avoid classifier errors)
-            if len(valid_clusters) < 2:  # <-- NEW CHECK (prevents singleton clusters)
-                if n_clusters <= self.min_n_clusters:
-                    if htree.depth == 0:
-                        LOGGER.warning("Cannot split further: Some clusters have < 2 samples.")
-                        break
-                    return htree
-                
-                # Try with fewer clusters
-                n_clusters = max(self.min_n_clusters, n_clusters - 1)
-                clustering_config["kwargs"]["n_clusters"] = n_clusters
-                # clustering_config["kwargs"]["init_size"] = 3 * n_clusters
-                continue
-
-            break  # Valid clustering found
+            
+            if len(valid_clusters) >= 2 and len(valid_clusters) == len(cluster_counts):
+                break  # Accept this clustering
+    
+            # If we get here, clustering is invalid
+            if n_clusters <= self.min_n_clusters:
+                LOGGER.warning(f"Could not create valid clusters at min_n_clusters={self.min_n_clusters}")
+                return htree  # Terminate completely
+            
+            # Try with fewer clusters
+            n_clusters = max(self.min_n_clusters, n_clusters - 1)
+            clustering_config["kwargs"]["n_clusters"] = n_clusters
         
         LOGGER.info(f"Saving Clustering Model at depth {htree.depth}, with {n_clusters} clusters")
         htree.set_clustering_model(clustering_model)
