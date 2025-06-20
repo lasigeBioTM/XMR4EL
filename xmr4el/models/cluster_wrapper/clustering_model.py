@@ -571,7 +571,7 @@ class FaissKMeans(ClusteringModel):
         }
         
         # Save model data
-        with open(os.path.join(save_dir, "model_data.pkl"), "wb") as fout:
+        with open(os.path.join(save_dir, "clustering_model.pkl"), "wb") as fout:
             pickle.dump(save_data, fout)
 
     @classmethod
