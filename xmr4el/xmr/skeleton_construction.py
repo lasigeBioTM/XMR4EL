@@ -116,10 +116,7 @@ class SkeletonConstruction():
         max_possible_k = len(text_emb_array) // max(1, self.min_leaf_size)
         
         if max_possible_k < self.min_n_clusters:
-            LOGGER.warning(
-                f"Cannot cluster: {len(text_emb_array)} samples cannot be split into "
-                f"{self.min_n_clusters} clusters with min_leaf_size={self.min_leaf_size}"
-            )
+            LOGGER.warning(f"Insufficient samples: {len(text_emb_array)}")
             return htree
     
         k_range = (self.min_n_clusters, min(self.max_n_clusters, max_possible_k))
@@ -130,15 +127,24 @@ class SkeletonConstruction():
         
         # Changing Config of model 
         clustering_config["kwargs"]["n_clusters"] = n_clusters
-        clustering_config["kwargs"]["init_size"] = 3 * n_clusters
+        
+        # clustering_config["kwargs"]["init_size"] = 3 * n_clusters
 
         while True:
             clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)  
-            cluster_labels = clustering_model.model.labels()
-            cluster_counts = Counter(cluster_labels)
+            
+            if clustering_config["type"] == "faisskmeans":
+                # FAISS-specific label extraction
+                _, cluster_labels = clustering_model.model.model.index.search(text_emb_array, 1)
+                cluster_labels = cluster_labels.flatten()
 
+            else:    
+                cluster_labels = clustering_model.model.labels()
+            
+            cluster_counts = Counter(cluster_labels)
+            valid_clusters = [c for c in cluster_counts if cluster_counts[c] >= self.min_leaf_size]
             # Check if any cluster has fewer than 2 samples (to avoid classifier errors)
-            if min(cluster_counts.values()) < self.min_leaf_size:  # <-- NEW CHECK (prevents singleton clusters)
+            if len(valid_clusters) < 2:  # <-- NEW CHECK (prevents singleton clusters)
                 if n_clusters == self.min_n_clusters:
                     if htree.depth == 0:
                         LOGGER.warning("Cannot split further: Some clusters have < 2 samples.")
@@ -148,7 +154,7 @@ class SkeletonConstruction():
                 # Try with fewer clusters
                 n_clusters -= 1
                 clustering_config["kwargs"]["n_clusters"] = n_clusters
-                clustering_config["kwargs"]["init_size"] = 3 * n_clusters
+                # clustering_config["kwargs"]["init_size"] = 3 * n_clusters
                 continue
 
             break  # Valid clustering found
@@ -164,9 +170,7 @@ class SkeletonConstruction():
             
             # Skip if cluster has fewer than 2 samples (cannot train classifier)
             if len(cluster_indices) < self.min_leaf_size:
-                LOGGER.warning(f"Skipping cluster {cluster}:" 
-                               f"Only {len(cluster_indices)} samples"
-                               f"(min_leaf_size={self.min_leaf_size}).")
+                LOGGER.warning(f"Skipping cluster {cluster}: {len(cluster_indices)} samples")
                 continue
             
             filt_combined_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}

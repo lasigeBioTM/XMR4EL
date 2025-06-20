@@ -7,6 +7,7 @@ import pkgutil
 import sys
 import multiprocessing
 import torch
+import faiss
 
 import numpy as np
 
@@ -543,3 +544,153 @@ class CumlKMeans(ClusteringModel):
 
     def labels(self):
         return self.model.labels_
+    
+    
+class FaissKMeans(ClusteringModel):
+    """Faiss Kmeans"""
+    
+    def __init__(self, config=None, model=None):
+        self.model = model
+        self.config = config
+        self.centroids = None
+        self.labels_ = None
+
+    def save(self, save_dir):
+        """Save trained FAISS KMeans model to disk.
+        
+        Args:
+            save_dir (str): Folder to store serialized model.
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # Save FAISS-compatible data (centroids + config)
+        save_data = {
+            'centroids': self.centroids,
+            'labels': self.labels_,
+            'faiss_index': faiss.serialize_index(self.model.index) if hasattr(self.model, 'index') else None
+        }
+        
+        # Save model data
+        with open(os.path.join(save_dir, "model_data.pkl"), "wb") as fout:
+            pickle.dump(save_data, fout)
+
+    @classmethod
+    def load(cls, load_dir, config):
+        """Load a saved Cuml KMeans model from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            CumlKMeans: The loaded object.
+        """
+
+        LOGGER.info(f"Loading Cuml KMeans Clustering Model from {load_dir}")
+        clustering_path = os.path.join(load_dir, "clustering.pkl")
+        assert os.path.exists(
+            clustering_path
+        ), f"clustering path {clustering_path} does not exist"
+
+        with open(clustering_path, "rb") as fin:
+            model_data = pickle.load(fin)
+
+            # Reconstruct FAISS objects
+        d = model_data['centroids'].shape[1]
+        k = model_data['centroids'].shape[0]
+        
+        kmeans = faiss.Kmeans(
+            d, k, 
+            gpu=config.get('gpu', True),
+            niter=config.get('max_iter', 300),
+            nredo=config.get('n_init', 1)
+        )
+        kmeans.centroids = model_data['centroids']
+        
+        if model_data['faiss_index'] is not None:
+            kmeans.index = faiss.deserialize_index(model_data['faiss_index'])
+        
+        # Create instance
+        instance = cls(config, kmeans)
+        instance.centroids = model_data['centroids']
+        instance.labels_ = model_data['labels']
+        
+        return instance
+
+    @classmethod
+    def train(cls, trn_corpus, config={}, dtype=np.float32):
+        """Train FAISS KMeans on a corpus.
+        
+        Args:
+            trn_corpus: Training data (list of strings or numpy array).
+            config: Configuration dictionary.
+            dtype: Data type for embeddings.
+            
+        Returns:
+            ClusteringModel: Wrapped trained model.
+        """
+        defaults = {
+            "n_clusters": 8,
+            "max_iter": 300,
+            "tol": 1e-4,
+            "verbose": False,
+            "random_state": 42,
+            "gpu": True,
+            "nredo": 3,
+            "spherical": False,
+        }
+
+        try:
+            config = {**defaults, **config}
+            # Train FAISS KMeans
+            model = faiss.Kmeans(
+                d=trn_corpus.shape[1],
+                k=config['n_clusters'],
+                gpu=config['gpu'],
+                niter=config['max_iter'],
+                nredo=config['nredo'],
+                verbose=config['verbose'],
+                seed=config['random_state']
+            )
+            
+        except TypeError:
+            raise Exception(
+                f"clustering config {config} contains unexpected keyword arguments for CumlKMeans Clustering"
+            )
+            
+        model.train(trn_corpus)
+        
+        # Get cluster assignments
+        _, labels = model.index.search(trn_corpus, 1)
+        labels = labels.flatten()
+        
+        # Create instance
+        instance = cls(config, model)
+        instance.centroids = model.centroids
+        instance.labels_ = labels
+        
+        return instance
+
+    def predict(self, predict_input):
+        """Predict an input.
+
+        Args:
+            corpus (str, list): List of strings to predict.
+
+        Returns:
+            numpy.ndarray: Matrix of features.
+        """
+
+        if self.config.get('kwargs', {}).get('spherical', False):
+            faiss.normalize_L2(predict_input)
+            
+        _, labels = self.model.index.search(predict_input, 1)
+        return labels.flatten()
+
+    def labels(self):
+        """Get training labels.
+        
+        Returns:
+            np.ndarray: Cluster labels from training.
+        """
+        return self.labels_
+    

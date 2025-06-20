@@ -19,9 +19,9 @@ class XMRTuner:
         config,
         dtype,
         k_range,
-        weight_silhouette=0.6,
+        weight_silhouette=0.7,
         weight_db=0.2,
-        weight_elbow=0.2,
+        weight_elbow=0.1,
     ):
         """
         Optimizes the number of clusters (k) using multiple evaluation metrics with parallel processing.
@@ -59,8 +59,13 @@ class XMRTuner:
                 dtype=dtype,
             ).model.model
             
-            # Get cluster assignments
-            labels = model.labels_
+            if config["type"] == "faisskmeans":
+                _, labels = model.index.search(trn_corpus, 1)
+                labels = labels.flatten()
+            else:
+                # Get cluster assignments
+                labels = model.labels_
+                
             unique_labels = set(labels)
             num_clusters = len(unique_labels) # Count unique clusters (may be < k)
             
@@ -71,9 +76,14 @@ class XMRTuner:
                 )
                 return k, np.inf, 0, np.inf  # Return sentinel scores
             
-            # Compute evaluation metrics
-            inertia = model.inertia_ # Within-cluster sum of squares
-            
+            if config["type"] == "faisskmeans":
+                # FAISS doesn't have inertia_, so we compute pseudo-inertia
+                centroids = model.centroids
+                distances = np.sum((trn_corpus - centroids[labels])**2, axis=1)
+                inertia = np.mean(distances)
+            else:
+                # Compute evaluation metrics
+                inertia = model.inertia_ # Within-cluster sum of squares
             
             sil_score = 0
             

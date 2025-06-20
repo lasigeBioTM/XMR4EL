@@ -61,12 +61,28 @@ def main():
         "kwargs": {"batch_size": 400}
     }
     
+    """
     clustering_config = {
         "type": "sklearnminibatchkmeans",
         "kwargs": {
             "random_state": 0, 
             "max_iter": 300
             },
+    }
+    """
+    
+    clustering_config = {
+    "type": "faisskmeans",  # Matches the registered name in your ClusterMeta system
+    "kwargs": {
+        "n_clusters": 8,           # Default cluster count (will be overridden by tuner)
+        "max_iter": 300,           # Max iterations per run
+        "nredo": 1,               # Number of initializations (FAISS calls this nredo)
+        "gpu": True,               # Enable GPU acceleration
+        "verbose": False,          # Disable progress prints
+        "spherical": False,        # Set True for cosine similarity (L2 normalizes first)
+        "seed": 42,                # Random seed (FAISS uses this for centroid init)
+        "tol": 1e-4,               # Early stopping tolerance
+        }
     }
 
     classifier_config = {
@@ -94,7 +110,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=300
+        truncate_data=150
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix
