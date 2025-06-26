@@ -313,35 +313,73 @@ class Skeleton:
         """Check if this node is a leaf (no children)."""
         return self.children is None        
 
-    def __str__(self, level=0):
+    def __str__(self, indent="", last=True, max_depth=None):
         """
-        Generate a human-readable string representation of the tree.
+        String representation showing hierarchical tree structure with detailed cluster information.
         
         Args:
-            level (int): Current indentation level for pretty printing
+            indent (str): Current indentation string (used internally for recursion)
+            last (bool): Whether this node is the last child of its parent
+            max_depth (int): Maximum depth to print (None for unlimited)
             
         Returns:
-            str: Formatted tree structure with key attributes
+            str: Formatted tree structure string with cluster details
         """
+        if max_depth is not None and self.depth > max_depth:
+            return ""
+            
+        # Tree structure components
+        prefix = "└── " if last else "├── "
+        new_indent = indent + ("    " if last else "│   ")
         
-        indent = "  " * level
+        # Node information
+        node_info = f"Depth {self.depth}"
         
-        # Display key attributes
-        attributes = {
-            "kb_indices": len(self.kb_indices) if self.kb_indices else None,
-            "labels": dict(Counter(self.clustering_model.labels())) if self.clustering_model else None,
-        }
+        # Cluster statistics
+        stats = []
+        # if self.train_data:
+        #     stats.append(f"Labels: {len(self.train_data)}")
+        if self.kb_indices is not None:
+            stats.append(f"KB Indices: {len(self.kb_indices)}")
 
-        children_str = "leaf" if len(self.children) == 0 else len(self.children)
-
-        tree_str = f"{indent * 2}- XMRTree (depth={self.depth}, children={children_str}) [{attributes}]\n"
-
+        # Detailed cluster information
+        cluster_info = ""
+        if self.clustering_model and hasattr(self.clustering_model.model, 'labels_'):
+            label_counts = Counter(self.clustering_model.model.labels_)
+            stats.append(f"Clusters: {len(label_counts)}")
+            
+            # Add detailed cluster distribution (sorted by size)
+            sorted_clusters = sorted(label_counts.items(), key=lambda x: (-x[1], x[0]))
+            cluster_dist = ", ".join(f"C{i}:{count}" for i, (_, count) in enumerate(sorted_clusters))
+            cluster_info = f"\n{new_indent}    Cluster distribution: {cluster_dist}"
+        
+        # Combine all information
+        result = indent + prefix + node_info
+        if stats:
+            result += " [" + ", ".join(stats) + "]"
+        result += cluster_info + "\n"
+        
         # Recursively add children
-        for key, child in self.children.items():
-            tree_str += f"{indent}  |- Child: {key}\n{child.__str__(level + 1)}"
-
-        return tree_str
+        if self.children:
+            child_count = len(self.children)
+            for i, (key, child) in enumerate(self.children.items()):
+                result += child.__str__(
+                    new_indent,
+                    i == child_count - 1,
+                    max_depth
+                )
+        
+        return result
 
     def __repr__(self):
         """Compact representation for debugging."""
-        return f"XMRTree(depth={self.depth}, children={len(self.children)})"
+        stats = []
+        if self.train_data:
+            stats.append(f"labels={len(self.train_data)}")
+        if self.clustering_model and hasattr(self.clustering_model, 'labels_'):
+            label_counts = Counter(self.clustering_model.labels_)
+            stats.append(f"clusters={len(label_counts)}")
+        if self.kb_indices is not None:
+            stats.append(f"points={len(self.kb_indices)}")
+        
+        return f"Skeleton(depth={self.depth}, children={len(self.children)}, {', '.join(stats)})"

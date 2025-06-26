@@ -39,11 +39,11 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-06-09_13-33-56"
+        "test/test_data/saved_trees/TreeDisease100_Faiss"
     )
 
     print(trained_xtree)
-
+    
     predicted_labels = Predict.inference(
         trained_xtree, input_text, transformer_config, k=k
     )

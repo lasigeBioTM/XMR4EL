@@ -359,7 +359,7 @@ class SentenceTBioBert(Transformer):
             save_dir (str): Folder to save the model.
         """
 
-        LOGGER.info(f"Saving BioBERT transformer to {save_dir}")
+        LOGGER.info(f"Saving Sentence BioBERT transformer to {save_dir}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
             pickle.dump(self.__dict__, fout)
@@ -376,6 +376,61 @@ class SentenceTBioBert(Transformer):
         """
 
         LOGGER.info(f"Loading BioBERT transformer from {load_dir}")
+        transformer_path = os.path.join(load_dir, "transformer.pkl")
+        assert os.path.exists(
+            transformer_path
+        ), f"transformer path {transformer_path} does not exist"
+
+        with open(transformer_path, "rb") as fin:
+            model_data = pickle.load(fin)
+        model = cls()
+        model.__dict__.update(model_data)
+        return model
+
+class SentenceTSapBert(Transformer):
+    
+    # cambridgeltl/SapBERT-UMLS-2020AB-all-lang-from-XLMR Multi Lingual
+    
+    model_name = "cambridgeltl/SapBERT-from-PubMedBERT-fulltext"
+
+    def __init__(self, config=None, embeddings=None):
+        """Initialization
+
+        Args:
+            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific transformer class to use.
+                Also contains keyword arguments to pass to the specified transformer.
+            embeddings (numpy.ndarray): The Embeddings
+            model_name (str): Transformer name
+        """
+
+        self.config = config
+        self.embeddings = embeddings
+        self.model_name = SentenceTBioBert.model_name
+
+    def save(self, save_dir):
+        """Save trained tfidf transformer to disk.
+
+        Args:
+            save_dir (str): Folder to save the model.
+        """
+
+        LOGGER.info(f"Saving Sentence BioBERT transformer to {save_dir}")
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
+            pickle.dump(self.__dict__, fout)
+
+    @classmethod
+    def load(cls, load_dir):
+        """Load a BioBert Transformer from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            BioBert: The loaded object.
+        """
+
+        LOGGER.info(f"Loading Sentence SapBERT transformer from {load_dir}")
         transformer_path = os.path.join(load_dir, "transformer.pkl")
         assert os.path.exists(
             transformer_path
