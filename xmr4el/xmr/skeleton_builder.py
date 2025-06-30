@@ -154,13 +154,11 @@ class SkeletonBuilder():
                      or original if reduction not possible
         """
         n_samples, n_features_emb = emb.shape
-        # PCA cannot have more components than min(n_samples, n_features)
-        max_possible = min(n_samples-1, n_features_emb)  # PCA limitation
-        effective_dim = min(n_features, max_possible)
+        effective_dim = min(n_features, emb.shape[0])
         
-        if effective_dim <= 0:
+        if n_features_emb >= n_features_emb or effective_dim <= 0:
             LOGGER.info("Maintaining original number of features," 
-                        f"impossible to reduce, min({n_samples}, {n_features})={max_possible}")
+                        f"impossible to reduce, min({n_samples}, {n_features})={n_features_emb}")
             return emb  # Return original if reduction not possible
         
         # Perform PCA with effective dimension
