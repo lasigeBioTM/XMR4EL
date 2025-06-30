@@ -2,6 +2,8 @@ import os
 import logging
 import pandas as pd
 
+from fuzzywuzzy import fuzz
+
 from sklearn.preprocessing import MultiLabelBinarizer
 
 LOGGER = logging.getLogger(__name__)
@@ -52,24 +54,37 @@ class Preprocessor:
         return labels_matrix, mlb
     
     def load_data_labels_from_file(self, train_filepath, labels_filepath, truncate_data=0):
-        # Load and group texts
+        # Load and group texts (original code)
         train_df = pd.read_csv(
             train_filepath, 
             header=None,
             names=["id", "text"],
             delimiter="\t",
         )
-        
         train_df["text"] = train_df["text"].astype(str).fillna("")
-        
         grouped_texts = train_df.groupby("id")["text"].apply(list).reset_index()
-        grouped_texts["joined_text"] = grouped_texts["text"].apply(lambda x: " ".join(x))
 
-        # Apply truncation if requested
+        # --- NEW: Deduplicate texts for `corpus` only (keep `cross_corpus` untouched) ---
+        def deduplicate_texts(texts, similarity_threshold=85):
+            """Keep only semantically distinct texts per ID using fuzzy matching."""
+            unique_texts = []
+            for text in sorted(texts, key=len, reverse=True):  # Longest first
+                if not any(fuzz.ratio(text, existing) >= similarity_threshold 
+                        for existing in unique_texts):
+                    unique_texts.append(text)
+            return " ".join(unique_texts)  # Return merged string for corpus
+
+        # Apply deduplication to `joined_text` (for TF-IDF/clustering)
+        grouped_texts["joined_text"] = grouped_texts["text"].apply(deduplicate_texts)
+        
+        # Keep original texts for `cross_corpus` (untouched for cross-encoder)
+        grouped_texts["original_texts"] = grouped_texts["text"]  # Backup for cross_corpus
+
+        # Truncate data if requested (original code)
         if truncate_data > 0:
             grouped_texts = grouped_texts.head(truncate_data)
-        
-        # Load labels and truncate to match ID count (either original or truncated)
+
+        # Load labels (original code)
         with open(labels_filepath, 'r') as f:
             if truncate_data > 0:
                 labels = [line.strip() for line in f if line.strip()][:truncate_data]
@@ -77,21 +92,20 @@ class Preprocessor:
                 labels = [line.strip() for line in f if line.strip()]
             
             if len(labels) > len(grouped_texts):
-                LOGGER.warning("Labels and Train length mismatch, Labels > Train. This could influence results. Truncating Labels. "
-                               f"Labels length: {len(labels)}, Train length: {len(grouped_texts)}")
-                labels = labels[:len(grouped_texts)]  # Truncate here
+                LOGGER.warning("Labels and Train length mismatch, Labels > Train. Truncating Labels. "
+                            f"Labels length: {len(labels)}, Train length: {len(grouped_texts)}")
+                labels = labels[:len(grouped_texts)]
             elif len(labels) < len(grouped_texts):
-                raise Exception("Labels and Train lenght, mismatch, Train > Labels. Exiting.")
-                
-        # Proceed as before
+                raise Exception("Labels and Train length mismatch, Train > Labels. Exiting.")
+
+        # Prepare labels (original code)
         labels_list = [[label] for label in labels]
-        
         mlb = MultiLabelBinarizer(sparse_output=True)
         labels_matrix = mlb.fit_transform(labels_list)
-        
+
         return {
-            'corpus': grouped_texts["joined_text"].tolist(),
-            'cross_corpus': grouped_texts["text"].tolist(),
+            'corpus': grouped_texts["joined_text"].tolist(),      # Deduplicated for TF-IDF
+            'cross_corpus': grouped_texts["original_texts"].tolist(),  # Original for cross-encoder
             'raw_labels': labels,
             'labels_matrix': labels_matrix,
             'label_encoder': mlb

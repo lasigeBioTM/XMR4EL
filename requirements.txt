@@ -9,3 +9,5 @@ sentence_transformers
 faiss-cpu
 lightgbm
 umap-learn
+fuzzywuzzy
+python-Levenshtein
