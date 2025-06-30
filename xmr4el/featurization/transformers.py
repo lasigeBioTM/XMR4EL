@@ -31,8 +31,6 @@ class TransformersMeta(ABCMeta):
         new_cls = super().__new__(cls, name, bases, attr)
         if name != "Transformer":
             transformer_dict[name.lower()] = new_cls
-            
-        print(transformer_dict)
         return new_cls
 
 
