@@ -35,7 +35,7 @@ class CandidateRetrieval():
         self.efConstruction = efConstruction
         self.efSearch = efSearch
     
-    def retrival(self, conc_input, conc_emb, candidates=100):
+    def retrival(self, conc_input, conc_emb, candidates=200):
         """
         Performs similarity search to find top-k candidates from embedding vectors.
         
