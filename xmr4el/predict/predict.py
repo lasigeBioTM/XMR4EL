@@ -40,34 +40,30 @@ class Predict():
     """
     @staticmethod
     def _reduce_dimensionality(emb, n_features, random_state=0):
-        """
-        Reduces embedding dimensionality using Truncated SVD (PCA for sparse data).
-        
-        Handles edge cases where reduction isn't possible due to matrix dimensions.
-        
+        """Reduces the dimensionality of embeddings
+
         Args:
-            emb (np.ndarray): Input embeddings of shape (n_samples, n_features_emb)
+            emb (np.array): Embeddings to reduce
             n_features (int): Target number of features
-            random_state (int): Random seed for reproducibility. Defaults to 0.
+            random_state (int): Random seed for reproducibility
             
         Returns:
-            np.ndarray: Reduced embeddings of shape (n_samples, n_features)
-                       or original embeddings if reduction not possible
+            np.array: Reduced embeddings with shape (n_samples, n_features)
+                     or original if reduction not possible
         """
         n_samples, n_features_emb = emb.shape
-        # PCA cannot have more components than min(n_samples, n_features)
-        max_possible = min(n_samples-1, n_features_emb)  # PCA limitation
-        effective_dim = min(n_features, max_possible)
+        effective_dim = min(n_features, emb.shape[0])
         
-        if effective_dim <= 0:
+        if n_features_emb >= n_features_emb or effective_dim <= 0:
             LOGGER.info("Maintaining original number of features," 
-                        f"impossible to reduce, min({n_samples}, {n_features})={max_possible}")
+                        f"impossible to reduce, min({n_samples}, {n_features})={n_features_emb}")
             return emb  # Return original if reduction not possible
         
         # Perform PCA with effective dimension
         svd = TruncatedSVD(n_components=n_features, random_state=random_state)
-        emb = svd.fit_transform(emb) # turns it into dense auto
-        return emb
+        dense_emb = svd.fit_transform(emb) # turns it into dense auto
+        
+        return dense_emb
     
     @staticmethod
     def _predict_vectorizer(text_vec, corpus):
@@ -322,6 +318,6 @@ class Predict():
         
         gc.collect()
         
-        results = cls._rank(predictions, htree.train_data, input_text, candidates=200)
+        results = cls._rank(predictions, htree.train_data, input_text, candidates=200   )
 
         return cls._convert_predictions_into_csr(results)
