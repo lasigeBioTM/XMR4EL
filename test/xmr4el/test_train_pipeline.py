@@ -57,20 +57,28 @@ def main():
     
     transformer_config = {
         # "type": "biobert",
-        "type": "sentencetbiobert",
+        "type": "sentencetsapbert",
         "kwargs": {"batch_size": 400}
     }
     
-    """
     clustering_config = {
         "type": "sklearnminibatchkmeans",
         "kwargs": {
-            "random_state": 0, 
-            "max_iter": 300
-            },
+            "n_clusters": 8,  # This should be determined by your tuning process
+            "init": "k-means++",
+            "max_iter": 500,  # Increased from 300
+            "batch_size": 0,  # Larger batch size for more stable updates
+            "verbose": 0,
+            "compute_labels": True,
+            "random_state": 42,  # Fixed for reproducibility
+            "tol": 1e-4,  # Added small tolerance for early stopping
+            "max_no_improvement": 20,  # More patience for improvement
+            "init_size": 24,  # 3 * n_clusters (3*8=24)
+            "n_init": 5,  # Run multiple initializations, pick best
+            "reassignment_ratio": 0.01,
+        }
     }
     """
-    
     clustering_config = {
     "type": "faisskmeans",  # Matches the registered name in your ClusterMeta system
     "kwargs": {
@@ -84,6 +92,7 @@ def main():
         "tol": 1e-4,               # Early stopping tolerance
         }
     }
+    """
 
     classifier_config = {
         "type": "sklearnlogisticregression",
@@ -118,10 +127,7 @@ def main():
     X_train = train_data["corpus"] # List
     X_cross_train = train_data["cross_corpus"]
     label_enconder = train_data["label_encoder"]
-    
-    print(X_train[0])
-        
-    exit()   
+
     # R_train = copy.deepcopy(Y_train)
 
     pipe = SkeletonBuilder(

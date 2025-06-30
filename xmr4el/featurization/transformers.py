@@ -31,6 +31,8 @@ class TransformersMeta(ABCMeta):
         new_cls = super().__new__(cls, name, bases, attr)
         if name != "Transformer":
             transformer_dict[name.lower()] = new_cls
+            
+        print(transformer_dict)
         return new_cls
 
 
@@ -405,7 +407,7 @@ class SentenceTSapBert(Transformer):
 
         self.config = config
         self.embeddings = embeddings
-        self.model_name = SentenceTBioBert.model_name
+        self.model_name = SentenceTSapBert.model_name
 
     def save(self, save_dir):
         """Save trained tfidf transformer to disk.
@@ -414,7 +416,7 @@ class SentenceTSapBert(Transformer):
             save_dir (str): Folder to save the model.
         """
 
-        LOGGER.info(f"Saving Sentence BioBERT transformer to {save_dir}")
+        LOGGER.info(f"Saving Sentence SapBERT transformer to {save_dir}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
             pickle.dump(self.__dict__, fout)

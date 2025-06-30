@@ -26,7 +26,7 @@ def main():
 
     transformer_config = {
         # "type": "biobert",
-        "type": "sentencetbiobert",
+        "type": "sentencetsapbert",
         "kwargs": {"batch_size": 400}
     }
 
