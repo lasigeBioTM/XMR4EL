@@ -129,7 +129,7 @@ class SkeletonConstruction():
         clustering_config["kwargs"]["n_clusters"] = n_clusters
         
         if clustering_config["type"] != "faisskmeans":
-            clustering_config["kwargs"]["init_size"] = n_clusters * 3
+            clustering_config["kwargs"]["init_size"] = min(3 * n_clusters, text_emb_array.shape[0])
         
         # clustering_config["kwargs"]["init_size"] = 3 * n_clusters
 

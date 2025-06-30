@@ -55,7 +55,7 @@ class XMRTuner:
             # Train clustering model with current k
             model = ClusteringModel.train(
                 trn_corpus,
-                {**config, "kwargs": {**config["kwargs"], "n_clusters": k}},
+                {**config, "kwargs": {**config["kwargs"], "n_clusters": k, "init_size": min(3 * k, trn_corpus.shape[0])}},
                 dtype=dtype,
             ).model.model
             
