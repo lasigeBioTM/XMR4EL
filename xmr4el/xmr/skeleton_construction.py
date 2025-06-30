@@ -128,6 +128,9 @@ class SkeletonConstruction():
         # Changing Config of model 
         clustering_config["kwargs"]["n_clusters"] = n_clusters
         
+        if clustering_config["type"] != "faisskmeans":
+            clustering_config["kwargs"]["init_size"] = n_clusters * 3
+        
         # clustering_config["kwargs"]["init_size"] = 3 * n_clusters
 
         while True:
