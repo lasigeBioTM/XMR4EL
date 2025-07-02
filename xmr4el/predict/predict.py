@@ -265,11 +265,13 @@ class Predict():
         
         # print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
         
-        n_features = htree.transformer_embeddings.shape[1]
+        n_features = htree.text_features
         
         LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
         svd = TruncatedSVD(n_components=n_features, random_state=0)
         dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
+        
+        print(dense_text_emb.shape)
 
         # Normalize text embeddings (handling sparse)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)

@@ -33,6 +33,7 @@ class Skeleton:
         train_data=None,
         pifa_embeddings=None,
         text_embeddings=None,
+        text_features=None,
         transformer_embeddings=None,
         concatenated_embeddings=None,
         kb_indices=None,
@@ -69,6 +70,7 @@ class Skeleton:
 
         # Embeddings storage
         self.text_embeddings = text_embeddings
+        self.text_features = text_features
         self.transformer_embeddings = transformer_embeddings
         self.concatenated_embeddings = concatenated_embeddings
         self.kb_indices = kb_indices # Indices of data points in this node

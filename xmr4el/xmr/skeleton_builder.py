@@ -280,7 +280,7 @@ class SkeletonBuilder():
         conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
         sparse_conc_emb = csr_matrix(conc_emb)
         
-        # print(conc_emb.shape, type(conc_emb))
+        # print(vec_emb.shape)
         
         LOGGER.info(f"Truncating Dense Combined Embeddings to {self.n_features} n features")
         # Truncate to use UMAP next
@@ -292,18 +292,13 @@ class SkeletonBuilder():
         svd = TruncatedSVD(n_components=self.n_features, random_state=0)
         dense_vec_emb = svd.fit_transform(vec_emb) # turns it into dense auto
         
-        # LOGGER.info("Using UMAP")
-        # Prepare UMAP
-        # n_samples = conc_emb.shape[0]
-        # n_neighbors = min(15, max(2, n_samples - 1))
-        # n_components = min(self.n_features, n_samples - 2) # Got to be -2, cause of spectral decomposition
-        
-        # umap = UMAP(n_components=n_components, metric='cosine', n_neighbors=n_neighbors, n_jobs=-1)
-        # conc_emb = umap.fit_transform(dense_conc_emb)
+        htree.text_features = dense_vec_emb.shape[1]
 
         # Normalize PIFA embeddings
         dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
         dense_vec_emb = normalize(dense_vec_emb, norm="l2", axis=1)
+        
+        # print(dense_vec_emb.shape)
         
         # print(dense_conc_emb.shape, dense_vec_emb.shape)
         
