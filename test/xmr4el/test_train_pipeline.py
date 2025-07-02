@@ -24,7 +24,7 @@ def main():
     
     start = time.time()
 
-    min_leaf_size = 10
+    min_leaf_size = 5
     depth = 1
     n_features = 768
     max_n_clusters = 6
@@ -57,7 +57,7 @@ def main():
     
     transformer_config = {
         # "type": "biobert",
-        "type": "sentencetsapbert",
+        "type": "sentencetbiobert",
         "kwargs": {"batch_size": 400}
     }
     

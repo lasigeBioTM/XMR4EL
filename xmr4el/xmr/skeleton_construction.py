@@ -145,6 +145,7 @@ class SkeletonConstruction():
                 cluster_labels = clustering_model.model.labels()
             
             cluster_counts = Counter(cluster_labels)
+            print(cluster_counts)
             valid_clusters = [c for c in cluster_counts if cluster_counts[c] >= self.min_leaf_size]
             
             if len(valid_clusters) >= 2 and len(valid_clusters) == len(cluster_counts):
