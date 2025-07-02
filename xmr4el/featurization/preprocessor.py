@@ -96,7 +96,7 @@ class Preprocessor:
                             f"Labels length: {len(labels)}, Train length: {len(grouped_texts)}")
                 labels = labels[:len(grouped_texts)]
             elif len(labels) < len(grouped_texts):
-                raise Exception("Labels and Train length mismatch, Train > Labels. Exiting.")
+                raise Exception(f"Labels and Train length mismatch, Train > Labels. Exiting. Labels: {len(labels)}, Train: {len(grouped_texts)}")
 
         # Prepare labels (original code)
         labels_list = [[label] for label in labels]
