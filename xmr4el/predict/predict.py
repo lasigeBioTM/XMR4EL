@@ -323,6 +323,10 @@ class Predict():
             kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k) # didnt add k
             return kb_indices, conc_input, conc_emb
 
+        del transformer_emb
+        del dense_text_emb
+        del rp
+        
         gc.collect()
 
         # Use threads instead of processes
