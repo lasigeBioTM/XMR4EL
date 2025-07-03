@@ -330,7 +330,7 @@ class Predict():
         gc.collect()
 
         # Use threads instead of processes
-        predictions = Parallel(n_jobs=(min(8, os.cpu_count())), prefer="threads", batch_size=8, max_nbytes="128K")(
+        predictions = Parallel(n_jobs=(min(4, os.cpu_count())), prefer="threads", batch_size=1, max_nbytes="128K")(
             delayed(task)(emb) for emb in tqdm(concat_emb) # trans_emb
         )
         
