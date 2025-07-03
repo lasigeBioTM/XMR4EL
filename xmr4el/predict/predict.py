@@ -2,6 +2,7 @@ import gc
 import os
 import logging
 import tempfile
+from typing import Counter
 
 import numpy as np
 
@@ -143,64 +144,56 @@ class Predict():
         return csr_matrix((vals, (rows, cols)), shape=(len(predictions), num_labels), dtype=np.float32)
             
     @classmethod
-    def _rank(cls, predictions, train_data, input_texts, candidates=100, config=None):
+    def _rank(cls, predictions, train_data, input_texts, candidates=100):
         """
-        Two-stage ranking pipeline:
-        1. Fast candidate retrieval using FAISS
-        2. Precise reranking using CrossEncoder
+        Simplified two-stage ranking pipeline without batching
         
         Args:
             predictions (list): List of (kb_indices, conc_input, conc_emb) tuples
-            train_data (dict): {index: text} mapping of training corpus
-            input_texts (list): Original input texts for cross-encoder
-            candidates (int): Number of candidates to retrieve. Defaults to 100.
-            config (dict, optional): Configuration including:
-                                   - n_jobs: Number of parallel jobs
-                                   
+            train_data (dict): {index: text} mapping
+            input_texts (list): Original input texts
+            candidates (int): Number of candidates to retrieve
+            config (dict, optional): Configuration parameters
+            
         Returns:
             list: Ranked predictions as (label_ids, scores) tuples
         """
-        # Initialize components (once)
         candidate_retrieval = CandidateRetrieval()
         cross_encoder = CrossEncoderMP()
-        trn_corpus = list(train_data.values())  # Precompute corpus
+        trn_corpus = list(train_data.values())
         
-        # Use all cores unless specified
-        n_jobs = config.get("n_jobs", -1) if config else -1
+        LOGGER.info(f"Ranking {len(predictions)} predictions")
+
+        # --- Phase 1: Candidate Retrieval ---
+        LOGGER.info("First Stage Retrieval")
+        indices_list = []
         
-        LOGGER.info(f"Ranking {len(predictions)} predictions with {n_jobs} cores")
+        for kb_indices, conc_input, conc_emb in predictions:
+            # Ensure proper input shape for FAISS
+            query = np.atleast_2d(conc_input)
+            candidates_emb = np.atleast_2d(conc_emb)
+            
+            # Get candidates
+            _, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
+            indices_list.append(indices[indices != -1].flatten())
         
-        LOGGER.info(f"First Stage Retrieval")
-        # --- Phase 1: Parallel Candidate Retrieval ---
-        def _retrieve(pred):
-            conc_input, conc_emb = pred[1], pred[2]
-            _, indices = candidate_retrieval.retrival(conc_input, conc_emb, candidates) # scores
-            # print(f"Indices: {indices}")
-            return indices[indices != -1].flatten()
+        # --- Phase 2: Cross-Encoder Scoring ---
+        LOGGER.info("Second Stage Cross-Encoder")
         
-        # Parallelize retrieval (FAISS is single-threaded, but we batch queries)
-        with Parallel(n_jobs=n_jobs, backend="threading") as parallel:
-            indices_list = parallel(delayed(_retrieve)(pred) for pred in predictions)
-        
-        LOGGER.info(f"Second Stage Cross-Enconder")
-        
-        # --- Phase 2: Batch Cross-Encoder Scoring ---
-        # Prepare all (input_text, candidate_text) pairs
+        # Prepare all text pairs at once
         text_pairs = [
             (input_texts[i], ["[SEP]".join(trn_corpus[int(idx)]) for idx in indices])
             for i, indices in enumerate(indices_list)
         ]
         
-        # Batch predict (cross_encoder should handle parallelism internally)
+        # Get all matches at once
         matches = cross_encoder.predict(text_pairs)
         
-        # matches = top_k_indices, scores
-        
+        # Format final results
         results = []
         for (kb_indices, _, _), (match_indices, match_scores) in zip(predictions, matches):
             label_ids = [kb_indices[i] for i in match_indices]
-            scores = list(match_scores)
-            results.append((label_ids, scores))
+            results.append((label_ids, list(match_scores)))
         
         return results
            
@@ -245,7 +238,107 @@ class Predict():
                 kb_indices = np.array(current_htree.kb_indices)[mask]
                 
                 return (kb_indices, conc_input, conc_emb)
+    
+    @classmethod
+    def _predict(cls, htree, batch_conc_input, candidates=100):
+        """
+        Batch version of _predict_input that processes multiple inputs simultaneously.
+        
+        Args:
+            htree (XMRTree): Root of hierarchical tree
+            batch_conc_input (np.ndarray): Batch of concatenated input embeddings (n_samples x n_features)
+            candidates (int): Number of candidates to retrieve per input
             
+        Returns:
+            list: List of tuples (kb_indices, conc_input, conc_emb) for each input
+        """
+        # Initialize results and current nodes for all inputs
+        n_samples = batch_conc_input.shape[0]
+        results = [None] * n_samples
+        current_nodes = [htree] * n_samples
+        active_indices = list(range(n_samples))  # Track which inputs still need processing
+        
+        while active_indices:
+            # Group inputs by their current node for batch processing
+            node_groups = {}
+            for idx in active_indices:
+                node = current_nodes[idx]
+                if node not in node_groups:
+                    node_groups[node] = []
+                node_groups[node].append(idx)
+            
+            # Process each node group in batch
+            new_active_indices = []
+            for node, group_indices in node_groups.items():
+                group_inputs = batch_conc_input[group_indices]
+                
+                # Batch predict probabilities
+                classifier = node.classifier_model
+                classifier.model.model.n_jobs = -1
+                probs = cls._predict_proba_classifier(classifier, group_inputs)
+                
+                # Get top labels for each input
+                top_labels = np.argmax(probs, axis=1)
+                
+                # Process each input in the group
+                for i, idx in enumerate(group_indices):
+                    top_label = top_labels[i]
+                    
+                    if top_label in node.children:
+                        # Move to child node for next iteration
+                        current_nodes[idx] = node.children[top_label]
+                        new_active_indices.append(idx)
+                    else:
+                        # Reached leaf node - store results
+                        mask = node.clustering_model.labels() == top_label
+                        conc_emb = node.concatenated_embeddings[mask]
+                        kb_indices = np.array(node.kb_indices)[mask]
+                        
+                        # Ensure we don't return more than candidates
+                        if len(kb_indices) > candidates:
+                            random_indices = np.random.choice(
+                                len(kb_indices), 
+                                candidates, 
+                                replace=False
+                            )
+                            kb_indices = kb_indices[random_indices]
+                            conc_emb = conc_emb[random_indices]
+                        
+                        results[idx] = (kb_indices, batch_conc_input[idx], conc_emb)
+            
+            active_indices = new_active_indices
+        
+        return results
+    
+    @classmethod
+    def _predict_batch_memopt(cls, htree, batch_conc_input, candidates=100, batch_size=1000):
+        """
+        Memory-optimized batch prediction that processes inputs in chunks.
+        
+        Args:
+            htree (XMRTree): Root of hierarchical tree
+            batch_conc_input (np.ndarray): Batch of concatenated input embeddings
+            candidates (int): Number of candidates to retrieve per input
+            batch_size (int): Number of inputs to process at once
+            
+        Returns:
+            list: List of tuples (kb_indices, conc_input, conc_emb) for each input
+        """
+        n_samples = batch_conc_input.shape[0]
+        results = []
+        
+        # Process in chunks to control memory usage
+        for i in range(0, n_samples, batch_size):
+            chunk = batch_conc_input[i:i+batch_size]
+            chunk_results = cls._predict(htree, chunk, candidates)
+            results.extend(chunk_results)
+            
+            # Explicit cleanup if needed
+            if i % (10 * batch_size) == 0:
+                gc.collect()
+        
+        return results
+                
     @classmethod
     def inference(
         cls, htree, input_text, transformer_config, k=3, dtype=np.float32
@@ -309,26 +402,14 @@ class Predict():
             dense_text_emb.astype(dtype)
         ))
 
-        concat_emb = [emb.reshape(1, -1) for emb in concat_emb]
-        
-        LOGGER.info(f"Starting main predict task")
-        
-        def task(emb):
-            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k)
-            return kb_indices, conc_input, conc_emb
-
-        del transformer_emb
-        del dense_text_emb
-        del rp
-        
+        del transformer_emb, dense_text_emb, rp
         gc.collect()
 
-        # Use threads instead of processes
-        predictions = Parallel(n_jobs=min(1, os.cpu_count()), prefer="threads", batch_size=20)(
-            delayed(task)(emb) for emb in tqdm(concat_emb)
-        )
+        predictions = cls._predict_batch_memopt(htree, concat_emb, candidates=200)
         
-        gc.collect()
+        # print(predictions[0][0], predictions[0][1], predictions[0][2])
+        
+        # exit()
         
         results = cls._rank(predictions, htree.train_data, input_text, candidates=200)
 
