@@ -303,7 +303,9 @@ class Predict():
             )
 
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
-            
+        
+        print(transformer_emb.shape)
+        
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
             dense_text_emb.astype(dtype)
