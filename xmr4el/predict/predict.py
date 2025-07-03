@@ -314,15 +314,8 @@ class Predict():
         
         LOGGER.info(f"Starting main predict task")
         
-        # Before parallel section:
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            dump(htree, f.name)
-            htree_path = f.name
-        
-        def task(emb, model_path):
-            htree = load(model_path)
+        def task(emb):
             kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k)
-            del htree
             return kb_indices, conc_input, conc_emb
 
         del transformer_emb
@@ -331,13 +324,10 @@ class Predict():
         
         gc.collect()
 
-        try:
-            # Use threads instead of processes
-            predictions = Parallel(n_jobs=min(8, os.cpu_count()), prefer="processes", batch_size=20)(
-                delayed(task)(emb, htree_path) for emb in tqdm(concat_emb)
-            )
-        finally:
-            os.unlink(htree_path)
+        # Use threads instead of processes
+        predictions = Parallel(n_jobs=min(2, os.cpu_count()), prefer="threads", batch_size=20)(
+            delayed(task)(emb) for emb in tqdm(concat_emb)
+        )
         
         gc.collect()
         
