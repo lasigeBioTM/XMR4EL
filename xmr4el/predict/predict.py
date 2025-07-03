@@ -274,8 +274,10 @@ class Predict():
         # svd = TruncatedSVD(n_components=n_features, random_state=0)
         # dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
         
-        rp = SparseRandomProjection(n_components=10000, random_state=42)
+        rp = SparseRandomProjection(n_components=n_features, random_state=42)
         dense_text_emb = rp.fit_transform(text_emb)
+        
+        print(dense_text_emb.shape)
         
         # print(dense_text_emb.shape)
 
