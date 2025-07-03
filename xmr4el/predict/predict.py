@@ -220,13 +220,12 @@ class Predict():
                  - conc_input: Original input embeddings
                  - conc_emb: Candidate embeddings for ranking
         """
-        # device = 'cuda' if torch.cuda.is_available() else 'cpu'
         current_htree = htree
 
         while True:
             # Get classifier and number of possible labels at current level
             classifier = current_htree.classifier_model
-            classifier.model.model.n_jobs = 1
+            classifier.model.model.n_jobs = -1
             n_labels = len(current_htree.clustering_model.labels())
             candidates = min(candidates, n_labels) # Ensure k doesn't exceed available labels
             
@@ -325,7 +324,7 @@ class Predict():
         gc.collect()
 
         # Use threads instead of processes
-        predictions = Parallel(n_jobs=min(2, os.cpu_count()), prefer="threads", batch_size=20)(
+        predictions = Parallel(n_jobs=min(1, os.cpu_count()), prefer="threads", batch_size=20)(
             delayed(task)(emb) for emb in tqdm(concat_emb)
         )
         
