@@ -8,6 +8,8 @@ from scipy.sparse import csr_matrix
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import TruncatedSVD
 
+from sklearn.random_projection import SparseRandomProjection
+
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
@@ -265,13 +267,17 @@ class Predict():
         
         # print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
         
+        # Problemas de features, pq logistic regression é treinado com muitos mais features, inventar features ?     
         n_features = htree.text_features
         
         LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
-        svd = TruncatedSVD(n_components=n_features, random_state=0)
-        dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
+        # svd = TruncatedSVD(n_components=n_features, random_state=0)
+        # dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
         
-        print(dense_text_emb.shape)
+        rp = SparseRandomProjection(n_components=10000, random_state=42)
+        dense_text_emb = rp.fit_transform(text_emb)
+        
+        # print(dense_text_emb.shape)
 
         # Normalize text embeddings (handling sparse)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
@@ -320,6 +326,6 @@ class Predict():
         
         gc.collect()
         
-        results = cls._rank(predictions, htree.train_data, input_text, candidates=200   )
+        results = cls._rank(predictions, htree.train_data, input_text, candidates=200)
 
         return cls._convert_predictions_into_csr(results)
