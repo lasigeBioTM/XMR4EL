@@ -277,8 +277,6 @@ class Predict():
         rp = SparseRandomProjection(n_components=n_features, random_state=42)
         dense_text_emb = rp.fit_transform(text_emb)
         
-        print(dense_text_emb.shape)
-        
         # print(dense_text_emb.shape)
 
         # Normalize text embeddings (handling sparse)
@@ -305,6 +303,7 @@ class Predict():
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         
         print(transformer_emb.shape)
+        print(dense_text_emb.shape)
         
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
