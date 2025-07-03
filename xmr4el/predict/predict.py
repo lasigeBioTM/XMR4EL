@@ -1,6 +1,7 @@
-import logging
 import gc
 import os
+import logging
+import tempfile
 
 import numpy as np
 
@@ -11,7 +12,7 @@ from sklearn.decomposition import TruncatedSVD
 
 from sklearn.random_projection import SparseRandomProjection
 
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, load, dump
 from tqdm import tqdm
 
 from xmr4el.featurization.transformers import Transformer
@@ -41,6 +42,7 @@ class Predict():
     5. Two-stage ranking (retrieval + cross-encoder)
     6. Sparse output generation
     """
+        
     @staticmethod
     def _reduce_dimensionality(emb, n_features, random_state=0):
         """Reduces the dimensionality of embeddings
@@ -303,9 +305,6 @@ class Predict():
 
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         
-        # print(transformer_emb.shape, type(transformer_emb))
-        # print(dense_text_emb.shape, type(dense_text_emb))
-        
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
             dense_text_emb.astype(dtype)
@@ -313,14 +312,17 @@ class Predict():
 
         concat_emb = [emb.reshape(1, -1) for emb in concat_emb]
         
-        # transformer_emb = transformer_emb.astype(dtype)
-        
-        # trans_emb = [emb.reshape(1, -1) for emb in transformer_emb]
-        
         LOGGER.info(f"Starting main predict task")
         
-        def task(emb):
-            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k) # didnt add k
+        # Before parallel section:
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            dump(htree, f.name)
+            htree_path = f.name
+        
+        def task(emb, model_path):
+            htree = load(model_path)
+            kb_indices, conc_input, conc_emb = cls._predict_input(htree, emb, k)
+            del htree
             return kb_indices, conc_input, conc_emb
 
         del transformer_emb
@@ -329,10 +331,13 @@ class Predict():
         
         gc.collect()
 
-        # Use threads instead of processes
-        predictions = Parallel(n_jobs=(min(4, os.cpu_count())), prefer="threads", batch_size=1, max_nbytes="128K")(
-            delayed(task)(emb) for emb in tqdm(concat_emb) # trans_emb
-        )
+        try:
+            # Use threads instead of processes
+            predictions = Parallel(n_jobs=min(8, os.cpu_count()), prefer="processes", batch_size=20)(
+                delayed(task)(emb, htree_path) for emb in tqdm(concat_emb)
+            )
+        finally:
+            os.unlink(htree_path)
         
         gc.collect()
         
