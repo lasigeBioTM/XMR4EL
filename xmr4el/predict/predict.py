@@ -275,7 +275,7 @@ class Predict():
         # dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
         
         rp = SparseRandomProjection(n_components=n_features, random_state=42)
-        dense_text_emb = rp.fit_transform(text_emb)
+        dense_text_emb = rp.fit_transform(text_emb).toarray()
         
         # print(dense_text_emb.shape)
 
@@ -302,8 +302,8 @@ class Predict():
 
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         
-        print(transformer_emb.shape)
-        print(dense_text_emb.shape)
+        print(transformer_emb.shape, type(transformer_emb))
+        print(dense_text_emb.shape, type(dense_text_emb))
         
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
