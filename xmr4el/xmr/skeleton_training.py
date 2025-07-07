@@ -105,7 +105,9 @@ class SkeletonTraining():
         print(trans_emb.shape, text_emb_array.shape)
 
         # Create combined feature space
-        conc_array = np.hstack((trans_emb, text_emb_array))
+        # conc_array = np.hstack((trans_emb, text_emb_array))
+        
+        conc_array = trans_emb
         
         print(conc_array)
 

@@ -179,7 +179,7 @@ class Predict():
             # Get candidates
             scores, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
             
-            candidates_indices = min(50, len(indices))
+            candidates_indices = min(30, len(indices))
             indices = indices[indices != -1].flatten()[:candidates_indices]
             
             indices_list.append(indices)
@@ -408,6 +408,8 @@ class Predict():
             transformer_emb.astype(dtype),
             dense_text_emb.astype(dtype)
         ))
+        
+        concat_emb = transformer_emb.astype(dtype)
 
         del transformer_emb, dense_text_emb, rp
         gc.collect()
