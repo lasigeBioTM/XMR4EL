@@ -17,6 +17,7 @@ from joblib import Parallel, delayed, load, dump
 from tqdm import tqdm
 
 from xmr4el.featurization.transformers import Transformer
+from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.ranker.candidate_retrieval import CandidateRetrieval
 from xmr4el.ranker.cross_encoder import CrossEncoderMP
 
@@ -70,6 +71,21 @@ class Predict():
         dense_emb = svd.fit_transform(emb) # turns it into dense auto
         
         return dense_emb
+    
+    @staticmethod
+    def _train_vectorizer(trn_corpus, config, dtype=np.float32):
+        """Trains the vectorizer model with the training data
+
+        Args:
+            trn_corpus (np.array): Training Data, sparse or dense array
+            config (dict): Configurations of the vectorizer model
+            dtype (np.float): Type of the data inside the array
+
+        Return:
+            TextVectorizer (Vectorizer): Trained Vectorizer
+        """
+        # Delegate training to Vectorizer class with given configuration
+        return Vectorizer.train(trn_corpus, config, dtype)
     
     @staticmethod
     def _predict_vectorizer(text_vec, corpus):
@@ -348,7 +364,7 @@ class Predict():
                 
     @classmethod
     def inference(
-        cls, htree, input_text, transformer_config, k=3, dtype=np.float32
+        cls, htree, input_text, vec_config, transformer_config, k=3, dtype=np.float32
     ):
         """
         End-to-end prediction pipeline for XMR system.
@@ -365,19 +381,25 @@ class Predict():
         """
         LOGGER.info(f"Started inference")
         # Step 1: Generate text embeddings using stored vectorizer
-        text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
+        # text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
+        
+        n_features = htree.text_features
+        vec_config["kwargs"]["max_features"] = n_features
+        
+        vec = cls._train_vectorizer(htree.train_data, vec_config)
+        dense_text_emb = cls._predict_vectorizer(vec, input_text)
         
         # print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
         
         # Problemas de features, pq logistic regression é treinado com muitos mais features, inventar features ?     
-        n_features = htree.text_features
+        # n_features = htree.text_features
         
         LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
         # svd = TruncatedSVD(n_components=n_features, random_state=0)
         # dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
         
-        rp = SparseRandomProjection(n_components=n_features, random_state=42)
-        dense_text_emb = rp.fit_transform(text_emb).toarray()
+        # rp = SparseRandomProjection(n_components=n_features, random_state=42)
+        # dense_text_emb = rp.fit_transform(text_emb).toarray()
         
         # print(dense_text_emb.shape)
 
@@ -409,7 +431,7 @@ class Predict():
             dense_text_emb.astype(dtype)
         ))
         
-        concat_emb = transformer_emb.astype(dtype)
+        # concat_emb = transformer_emb.astype(dtype)
 
         del transformer_emb, dense_text_emb, rp
         gc.collect()

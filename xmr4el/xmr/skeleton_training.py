@@ -102,14 +102,10 @@ class SkeletonTraining():
         # Get corresponding transformer embeddings
         trans_emb = self.init_tfr_emb[match_index]
 
-        print(trans_emb.shape, text_emb_array.shape)
-
         # Create combined feature space
-        # conc_array = np.hstack((trans_emb, text_emb_array))
+        conc_array = np.hstack((trans_emb, text_emb_array))
         
-        conc_array = trans_emb
-        
-        print(conc_array)
+        # conc_array = trans_emb
 
         # Spit data for classifier training
         X_train, X_test, y_train, y_test = train_test_split(
