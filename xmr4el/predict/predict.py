@@ -428,7 +428,7 @@ class Predict():
         
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
-            dense_text_emb.astype(dtype)
+            dense_text_emb.toarray().astype(dtype)
         ))
         
         # concat_emb = transformer_emb.astype(dtype)
