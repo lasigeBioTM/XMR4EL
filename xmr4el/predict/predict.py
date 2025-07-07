@@ -179,20 +179,10 @@ class Predict():
             # Get candidates
             scores, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
             
-            # indices = indices[indices != -1].flatten()
+            candidates_indices = min(10, len(indices))
+            indices = indices[indices != -1].flatten()[:candidates_indices]
             
-            for score_row, index_row in zip(scores, indices):
-                for s, i in zip(score_row, index_row):
-                    if i != -1:
-                        all_scores.append(s)
-                        all_indices.append(i)
-                        
-            all_scores = np.array(all_scores)
-            all_indices = np.array(all_indices)
-            
-            cand_ind = min(10, all_scores.shape[0])
-            top_k_indices = all_indices(np.argsort(-all_scores)[:cand_ind])
-            indices_list.append(top_k_indices)
+            indices_list.append(indices)
             
         
         # --- Phase 2: Cross-Encoder Scoring ---
