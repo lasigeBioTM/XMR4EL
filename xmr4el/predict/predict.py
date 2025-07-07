@@ -168,14 +168,32 @@ class Predict():
         LOGGER.info("First Stage Retrieval")
         indices_list = []
         
+        all_scores = []
+        all_indices = []
+        
         for kb_indices, conc_input, conc_emb in predictions:
             # Ensure proper input shape for FAISS
             query = np.atleast_2d(conc_input)
             candidates_emb = np.atleast_2d(conc_emb)
             
             # Get candidates
-            _, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
-            indices_list.append(indices[indices != -1].flatten())
+            scores, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
+            
+            # indices = indices[indices != -1].flatten()
+            
+            for score_row, index_row in zip(scores, indices):
+                for s, i in zip(score_row, index_row):
+                    if i != -1:
+                        all_scores.append(s)
+                        all_indices.append(i)
+                        
+            all_scores = np.array(all_scores)
+            all_indices = np.array(all_indices)
+            
+            cand_ind = min(10, all_scores.shape[0])
+            top_k_indices = all_indices(np.argsort(-all_scores)[:cand_ind])
+            indices_list.append(top_k_indices)
+            
         
         # --- Phase 2: Cross-Encoder Scoring ---
         LOGGER.info("Second Stage Cross-Encoder")
