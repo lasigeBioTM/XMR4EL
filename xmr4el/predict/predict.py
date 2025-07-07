@@ -433,7 +433,7 @@ class Predict():
         
         # concat_emb = transformer_emb.astype(dtype)
 
-        del transformer_emb, dense_text_emb, rp
+        del transformer_emb, dense_text_emb # , rp
         gc.collect()
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
