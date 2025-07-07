@@ -179,7 +179,7 @@ class Predict():
             # Get candidates
             scores, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
             
-            candidates_indices = min(20, len(indices))
+            candidates_indices = min(50, len(indices))
             indices = indices[indices != -1].flatten()[:candidates_indices]
             
             indices_list.append(indices)
