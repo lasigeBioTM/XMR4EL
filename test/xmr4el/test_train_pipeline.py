@@ -113,13 +113,13 @@ def main():
     }
     """
     
-    training_file = os.path.join(os.getcwd(), "test/test_data/train/disease/train_Disease_100.txt")
+    training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
     
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=150
+        # truncate_data=150
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix

@@ -198,7 +198,7 @@ class Predict():
         return results
            
     @classmethod
-    def _predict_input(cls, htree, conc_input, candidates=100):
+    def _predict_input(cls, htree, conc_input):
         """
         Recursively traverses hierarchical tree to find relevant candidates.
         
@@ -220,7 +220,6 @@ class Predict():
             classifier = current_htree.classifier_model
             classifier.model.model.n_jobs = -1
             n_labels = len(current_htree.clustering_model.labels())
-            candidates = min(candidates, n_labels) # Ensure k doesn't exceed available labels
             
             probs = cls._predict_proba_classifier(classifier, conc_input)[0]
             
@@ -241,7 +240,7 @@ class Predict():
     
     @classmethod
     def _predict(cls, htree, batch_conc_input, candidates=100):
-        """
+        """ 
         Batch version of _predict_input that processes multiple inputs simultaneously.
         
         Args:
@@ -405,12 +404,8 @@ class Predict():
         del transformer_emb, dense_text_emb, rp
         gc.collect()
 
-        predictions = cls._predict_batch_memopt(htree, concat_emb, candidates=200)
+        predictions = cls._predict_batch_memopt(htree, concat_emb)
         
-        # print(predictions[0][0], predictions[0][1], predictions[0][2])
-        
-        # exit()
-        
-        results = cls._rank(predictions, htree.train_data, input_text, candidates=200)
+        results = cls._rank(predictions, htree.train_data, input_text, candidates=100)
 
         return cls._convert_predictions_into_csr(results)
