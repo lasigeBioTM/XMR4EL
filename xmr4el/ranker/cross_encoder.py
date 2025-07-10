@@ -38,10 +38,6 @@ class CrossEncoderMP():
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = CrossEncoder(model_name, device=self.device)
-        
-        # Disable multiprocessing if on GPU
-        self.use_multiprocessing = (self.device.type == "cpu")
-        self.num_workers = cpu_count() // 2 if self.use_multiprocessing else 1
 
     def _score_pairs(self, pairs_chunk):
         """
@@ -54,6 +50,37 @@ class CrossEncoderMP():
             numpy.ndarray: Array of similarity scores for the input pairs
         """
         return self.model.predict(pairs_chunk, apply_softmax=True)
+
+    # 4096 / 8192
+    def predict_entities(self, query_alias_pairs, entity_indices, batch_size=8192):
+        """
+        New method for medical entity linking with alias pooling
+        
+        Args:
+            query_alias_pairs: List of (query, alias) tuples
+            entity_indices: List mapping each alias to its entity index
+            batch_size: Processing batch size
+            
+        Returns:
+            dict: {entity_idx: max_score} across all aliases
+            list: All scores in input order (for debugging)
+        """
+        # Phase 1: Score all query-alias pairs
+        all_scores = []
+        for i in range(0, len(query_alias_pairs), batch_size):
+            batch = query_alias_pairs[i:i+batch_size]
+            all_scores.extend(self.model.predict(batch, apply_softmax=True))
+            
+            if self.device.type == "cuda":
+                torch.cuda.empty_cache()
+        
+        # Phase 2: Max-pool by entity
+        entity_scores = {}
+        for idx, score in zip(entity_indices, all_scores):
+            if idx not in entity_scores or score > entity_scores[idx]:
+                entity_scores[idx] = score
+                
+        return entity_scores, all_scores
 
     def predict_batch(self, text_pairs, k=10):
         """

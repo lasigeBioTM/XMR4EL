@@ -184,9 +184,6 @@ class Predict():
         LOGGER.info("First Stage Retrieval")
         indices_list = []
         
-        all_scores = []
-        all_indices = []
-        
         for kb_indices, conc_input, conc_emb in predictions:
             # Ensure proper input shape for FAISS
             query = np.atleast_2d(conc_input)
@@ -195,7 +192,8 @@ class Predict():
             # Get candidates
             scores, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
             
-            candidates_indices = min(30, len(indices))
+            # 30 candidates,
+            candidates_indices = min(10, len(indices))
             indices = indices[indices != -1].flatten()[:candidates_indices]
             
             indices_list.append(indices)
@@ -204,20 +202,52 @@ class Predict():
         # --- Phase 2: Cross-Encoder Scoring ---
         LOGGER.info("Second Stage Cross-Encoder")
         
-        # Prepare all text pairs at once
-        text_pairs = [
-            (input_texts[i], ["[SEP]".join(trn_corpus[int(idx)]) for idx in indices])
-            for i, indices in enumerate(indices_list)
-        ]
+        text_pairs = []
+        entity_indices = []  # Tracks entity index for each pair (no alias details)
         
-        # Get all matches at once
-        matches = cross_encoder.predict(text_pairs)
+        for i, indices in enumerate(indices_list):
+            query = input_texts[i]
+            for idx in indices:
+                aliases = trn_corpus[int(idx)]
+                text_pairs.extend([(query, alias) for alias in aliases])
+                entity_indices.extend([idx] * len(aliases))  # Repeat entity index
+
+        print(text_pairs)
         
-        # Format final results
+        print(entity_indices)
+
+        # Batch scoring
+        match_scores = cross_encoder.predict_entities(text_pairs, entity_indices)
+        
+        # Recombine scores per entity (max pooling)
         results = []
-        for (kb_indices, _, _), (match_indices, match_scores) in zip(predictions, matches):
-            label_ids = [kb_indices[i] for i in match_indices]
-            results.append((label_ids, list(match_scores)))
+        current_pos = 0
+        
+        for i, (kb_indices, _, _) in enumerate(predictions):
+            entity_scores = {}
+            
+            # Process all aliases for this query's candidates
+            for _ in indices_list[i]:
+                num_aliases = len(trn_corpus[int(idx)])
+                for score in match_scores[current_pos:current_pos+num_aliases]:
+                    entity_scores.setdefault(idx, []).append(score)
+                current_pos += num_aliases
+            
+            # Get max score per entity
+            scored_entities = {
+                idx: max(scores) 
+                for idx, scores in entity_scores.items()
+            }
+            
+            # Sort by score (descending)
+            sorted_entities = sorted(scored_entities.items(), 
+                                key=lambda x: -x[1])
+            
+            # Map to final labels
+            label_ids = [kb_indices[int(idx)] for idx, _ in sorted_entities]
+            scores = [score for _, score in sorted_entities]
+            
+            results.append((label_ids, scores))
         
         return results
            
@@ -438,6 +468,6 @@ class Predict():
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
         
-        results = cls._rank(predictions, htree.train_data, input_text, candidates=100)
+        results, _ = cls._rank(predictions, htree.train_data, input_text, candidates=100)
 
         return cls._convert_predictions_into_csr(results)

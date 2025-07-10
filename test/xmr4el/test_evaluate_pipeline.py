@@ -24,6 +24,11 @@ def main():
 
     k = 5
 
+    vectorizer_config = {
+        "type": "tfidf", 
+        "kwargs": {}
+    }
+
     transformer_config = {
         # "type": "biobert",
         "type": "sentencetsapbert",
@@ -45,7 +50,7 @@ def main():
     print(trained_xtree)
     
     predicted_labels = Predict.inference(
-        trained_xtree, input_text, transformer_config, k=k
+        trained_xtree, input_text, vectorizer_config, transformer_config, k=k
     )
 
     print(predicted_labels)
