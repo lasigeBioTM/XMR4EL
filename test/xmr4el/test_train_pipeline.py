@@ -32,33 +32,13 @@ def main():
 
     vectorizer_config = {
         "type": "tfidf", 
-        "kwargs": {}
+        "kwargs": {'max_features': 30000}
         }
-    
-    """
-    tfidf = TfidfVectorizer(
-        max_features=200000,  # Very large vocabulary
-        min_df=2,            # Only include meaningful terms
-        max_df=0.5,          # Filter out overly common terms
-        ngram_range=(1, 3),  # Include unigrams, bigrams and trigrams
-        analyzer='word',      # Word-level analysis
-        sublinear_tf=True,    # Use log scaling
-        use_idf=True,         # Use inverse document frequency
-        smooth_idf=True,      # Smooth IDF weights
-        lowercase=True,       # Case normalization
-        stop_words='english'  # Remove stopwords
-    ) 
-    
-    Why just dont make it to reduce features in tfidf ? 
-    
-    Use Truncate SVD ? 
-    
-    """
     
     transformer_config = {
         # "type": "biobert",
         "type": "sentencetbiobert",
-        "kwargs": {"batch_size": 400}
+        "kwargs": {"batch_size": 3000}
     }
     
     clustering_config = {
@@ -127,6 +107,14 @@ def main():
     X_train = train_data["corpus"] # List
     X_cross_train = train_data["cross_corpus"]
     label_enconder = train_data["label_encoder"]
+
+    # print(raw_labels[6227])
+    # print(X_cross_train[6227])
+    
+    # print(raw_labels[2918])
+    # print(X_cross_train[2918])
+    
+    # exit()
 
     # R_train = copy.deepcopy(Y_train)
 

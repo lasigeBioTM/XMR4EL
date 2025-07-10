@@ -233,16 +233,16 @@ class Tfidf(Vectorizer):
         """
         defaults = {
             "ngram_range": (1, 2),  # n-grams from 1 to 2
-            "max_features": None,  # No max feature limit
+            "max_features": 50000,  # No max feature limit
             "min_df": 0.0,  # Minimum document frequency ratio
             "max_df": 0.98,  # Maximum document frequency ratio
             "binary": False,  # Term frequency is not binary
             "use_idf": True,  # Use inverse document frequency
             "smooth_idf": True,  # Apply smoothing to idf
-            "sublinear_tf": False,  # Use raw term frequency
+            "sublinear_tf": True,  # Use raw term frequency
             "norm": "l2",  # Apply L2 normalization
             "analyzer": "word",  # Tokenizes by word
-            "stop_words": None,  # No stop words used
+            "stop_words": "english",  # No stop words used
         }
 
         try:

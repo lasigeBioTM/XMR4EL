@@ -11,6 +11,7 @@ from umap import UMAP
 
 from scipy.sparse import csr_matrix
 
+from xmr4el.featurization.featurization import PIFAEmbeddingFactory
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
 
@@ -24,7 +25,6 @@ LOGGER = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
 
 class SkeletonBuilder():
     """
@@ -168,7 +168,7 @@ class SkeletonBuilder():
         return dense_emb
 
     @staticmethod
-    def _compute_pifa(X_tfidf, Y_train):
+    def _compute_pifa(X, n_features=2**17):
         """
         Compute PIFA (Positive Instance Feature Aggregation) embeddings for labels.
         This creates label embeddings by averaging the feature of positive instances.
@@ -180,18 +180,9 @@ class SkeletonBuilder():
         Return:
             pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings # Will be dense ig
         """
-        # Convert matrices to efficient sparse formats for computation
-        labels_matrix = Y_train.tocsc() # CSC for efficient column operations
-        
-        # Matrix multiplications: sum features of positive instances per label
-        pifa_emb = labels_matrix @ X_tfidf
-        
-        # Normalize by number of positive instances per label
-        label_counts = np.array(labels_matrix.sum(axis=0)).flatten()  # (n_labels,)
-        label_counts = np.maximum(label_counts, 1.0)  # Prevent division by zero
-        pifa_emb = pifa_emb / label_counts[:, None]  # Broadcasting division
-        
-        return pifa_emb
+        pifa_factory = PIFAEmbeddingFactory(n_features=n_features)
+        X_csr = pifa_factory.transform(X)
+        return X_csr
 
     @staticmethod
     def _fused_emb(X, Y, fusion_model, batch_size=1536):
@@ -270,8 +261,8 @@ class SkeletonBuilder():
 
         # Step 2: PIFA embeddings
         LOGGER.info("Computing PIFA")
-        pifa_emb = self._compute_pifa(vec_emb, labels_matrix).tocsr()
-        
+        pifa_emb = self._compute_pifa(trn_corpus, vec_emb.shape[1])
+            
         # Store pifa embeddings information
         htree.set_pifa_embeddings(pifa_emb) # Set pifa embeddings
 
@@ -282,21 +273,21 @@ class SkeletonBuilder():
         
         # print(vec_emb.shape)
         
-        LOGGER.info(f"Truncating Dense Combined Embeddings to {self.n_features} n features")
+        # LOGGER.info(f"Truncating Dense Combined Embeddings to {self.n_features} n features")
         # Truncate to use UMAP next
-        svd = TruncatedSVD(n_components=self.n_features, random_state=0)
-        dense_conc_emb = svd.fit_transform(sparse_conc_emb) # turns it into dense auto
+        # svd = TruncatedSVD(n_components=self.n_features, random_state=0)
+        # dense_conc_emb = svd.fit_transform(sparse_conc_emb) # turns it into dense auto
         
-        LOGGER.info(f"Truncating Vectorizer Embeddings to {self.n_features} n features")
+        # LOGGER.info(f"Truncating Vectorizer Embeddings to {self.n_features} n features")
         # Truncate to use UMAP next
-        svd = TruncatedSVD(n_components=self.n_features, random_state=0)
-        dense_vec_emb = svd.fit_transform(vec_emb) # turns it into dense auto
+        # svd = TruncatedSVD(n_components=self.n_features, random_state=0)
+        # dense_vec_emb = svd.fit_transform(vec_emb) # turns it into dense auto
         
-        htree.text_features = dense_vec_emb.shape[1]
+        htree.text_features = sparse_conc_emb.shape[1]
 
         # Normalize PIFA embeddings
-        dense_conc_emb = normalize(dense_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
-        dense_vec_emb = normalize(dense_vec_emb, norm="l2", axis=1)
+        dense_conc_emb = normalize(sparse_conc_emb, norm="l2", axis=1).toarray() # Need to cap features in kwargs
+        dense_vec_emb = normalize(vec_emb, norm="l2", axis=1).toarray()
         
         # print(dense_vec_emb.shape)
         
