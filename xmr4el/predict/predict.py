@@ -424,6 +424,8 @@ class Predict():
         # Normalize text embeddings (handling sparse)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
+        print(dense_text_emb.shape)
+        
         # Step 2: Generate transformer embeddings with memory management
         transformer_model = cls._predict_transformer(
             input_text, 
@@ -433,14 +435,16 @@ class Predict():
         
         transformer_emb = transformer_model.model.embeddings
         
-        # Step 3: Ensure dimensional compatibility with training data
-        transformer_n_features = htree.transformer_embeddings.shape[1]
-        LOGGER.info(f"Truncating transformer embeddings to {transformer_n_features} n features")
-        if transformer_emb.shape[1] != transformer_n_features:
-            transformer_emb = cls._reduce_dimensionality(
-                transformer_emb, 
-                transformer_n_features
-            )
+        print(transformer_emb.shape)
+        
+        # # Step 3: Ensure dimensional compatibility with training data
+        # transformer_n_features = htree.transformer_embeddings.shape[1]
+        # LOGGER.info(f"Truncating transformer embeddings to {transformer_n_features} n features")
+        # if transformer_emb.shape[1] != transformer_n_features:
+        #     transformer_emb = cls._reduce_dimensionality(
+        #         transformer_emb, 
+        #         transformer_n_features
+        #     )
 
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         
