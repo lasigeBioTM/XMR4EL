@@ -93,7 +93,7 @@ class CrossEncoderMP():
         scores = []
         batch_size = 2048
         for i in range(0, len(flat_pairs), batch_size):
-            scores.extend(self.model.predict(flat_pairs[i:i + batch_size]))
+            scores.extend(self.model.predict(flat_pairs[i:i + batch_size], apply_softmax=True))
         scores = np.array(scores)
 
         # --- Phase 3: Top-k Selection ---
