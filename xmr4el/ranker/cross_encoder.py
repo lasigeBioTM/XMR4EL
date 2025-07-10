@@ -25,7 +25,9 @@ class CrossEncoderMP():
         use_multiprocessing (bool): Whether to use multiprocessing (enabled only on CPU)
         num_workers (int): Number of worker processes to use (CPU cores/2 when multiprocessing)
     """
-    def __init__(self, model_name='cross-encoder/ms-marco-TinyBERT-L-2-v2'):
+    
+    """'cross-encoder/ms-marco-TinyBERT-L-2-v2'""" 
+    def __init__(self, model_name='cross-encoder/ms-marco-MiniLM-L6-v2'):
         """
         Initializes the CrossEncoderMP with the specified model.
         
