@@ -456,6 +456,8 @@ class Predict():
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
         
-        results, _ = cls._rank(predictions, htree.train_data, input_text, candidates=100)
+        results = cls._rank(predictions, htree.train_data, input_text, candidates=100)
+        
+        print(results)
 
         return cls._convert_predictions_into_csr(results)
