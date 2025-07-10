@@ -71,8 +71,8 @@ class CrossEncoderMP():
             batch = query_alias_pairs[i:i+batch_size]
             with torch.no_grad():
                 logits = self.model.predict(batch, apply_softmax=False)
-                print(logits)
-                probs = torch.nn.functional.softmax(torch.tensor(logits), dim=1)[:, 1]
+                logits_tensor = torch.tensor(logits)
+                probs = torch.sigmoid(logits_tensor)
                 all_scores.extend(probs.tolist())
         
         # Phase 2: Max-pool by entity
