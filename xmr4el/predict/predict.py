@@ -1,8 +1,5 @@
 import gc
-import os
 import logging
-import tempfile
-from typing import Counter
 
 import numpy as np
 
@@ -13,13 +10,10 @@ from sklearn.decomposition import TruncatedSVD
 
 from sklearn.random_projection import SparseRandomProjection
 
-from joblib import Parallel, delayed, load, dump
-from tqdm import tqdm
-
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.ranker.candidate_retrieval import CandidateRetrieval
-from xmr4el.ranker.cross_encoder import CrossEncoderMP
+from xmr4el.ranker.cross_encoder import CrossEncoder
 
 
 LOGGER = logging.getLogger(__name__)
@@ -160,7 +154,7 @@ class Predict():
         return csr_matrix((vals, (rows, cols)), shape=(len(predictions), num_labels), dtype=np.float32)
             
     @classmethod
-    def _rank(cls, predictions, train_data, input_texts, candidates=100):
+    def _rank(cls, predictions, train_data, input_texts, encoder_config, candidates=100, k=5):
         """
         Simplified two-stage ranking pipeline without batching
         
@@ -175,7 +169,7 @@ class Predict():
             list: Ranked predictions as (label_ids, scores) tuples
         """
         candidate_retrieval = CandidateRetrieval()
-        cross_encoder = CrossEncoderMP()
+        cross_encoder = CrossEncoder(encoder_config)
         trn_corpus = list(train_data.values())
         
         LOGGER.info(f"Ranking {len(predictions)} predictions")
@@ -193,7 +187,7 @@ class Predict():
             scores, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
             
             # 30 candidates,
-            candidates_indices = min(10, len(indices))
+            candidates_indices = min(k, len(indices))
             indices = indices[indices != -1].flatten()[:candidates_indices]
             
             indices_list.append(indices)
@@ -213,7 +207,7 @@ class Predict():
                 entity_indices.extend([idx] * len(aliases))  # Repeat entity index
 
         # Batch scoring
-        entity_scores_dict, _ = cross_encoder.predict_entities(text_pairs, entity_indices)
+        entity_scores_dict, _ = cross_encoder.predict(text_pairs, entity_indices)
         
         # Recombine scores per query
         results = []
@@ -352,7 +346,7 @@ class Predict():
         return results
     
     @classmethod
-    def _predict_batch_memopt(cls, htree, batch_conc_input, candidates=100, batch_size=1000):
+    def _predict_batch_memopt(cls, htree, batch_conc_input, candidates=100, batch_size=32768):
         """
         Memory-optimized batch prediction that processes inputs in chunks.
         
@@ -382,7 +376,7 @@ class Predict():
                 
     @classmethod
     def inference(
-        cls, htree, input_text, vec_config, transformer_config, k=3, dtype=np.float32
+        cls, htree, input_text, vec_config, transformer_config, encoder_config, k=3, dtype=np.float32
     ):
         """
         End-to-end prediction pipeline for XMR system.
@@ -466,7 +460,7 @@ class Predict():
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
         
-        results = cls._rank(predictions, htree.train_data, input_text, candidates=100)
+        results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=100)
         
         print(results)
 

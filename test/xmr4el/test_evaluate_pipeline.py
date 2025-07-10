@@ -34,6 +34,11 @@ def main():
         "type": "sentencetsapbert",
         "kwargs": {"batch_size": 400}
     }
+    
+    encoder_config = {
+        "type": "biolinkbert",
+        "kwargs": {}
+    }
 
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
 
@@ -50,7 +55,7 @@ def main():
     print(trained_xtree)
     
     predicted_labels = Predict.inference(
-        trained_xtree, input_text, vectorizer_config, transformer_config, k=k
+        trained_xtree, input_text, vectorizer_config, transformer_config, encoder_config, k=k
     )
 
     print(predicted_labels)

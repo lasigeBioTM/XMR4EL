@@ -1,32 +1,44 @@
+import logging
+import os
 import torch
 
+from abc import ABCMeta
 import numpy as np
 
-from sentence_transformers import CrossEncoder
-from multiprocessing import Pool, cpu_count
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from sentence_transformers import CrossEncoder as STCrossEncoder
+
+cross_encoder_dict = {}
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+class CrossEncoderMeta(ABCMeta):
+    """Metaclass for keeping track of all 'CrossEncoder' subclasses"""
+    def __new__(cls, name, bases, attr):
+        new_cls = super().__new__(cls, name, bases, attr)
+        if name != "CrossEncoder":
+            cross_encoder_dict[name.lower()] = new_cls
+        return new_cls
 
 
-class CrossEncoderMP():
-    """
-    A multiprocessing-enabled wrapper for Sentence Transformers CrossEncoder that efficiently scores
-    query-document pairs with optional GPU acceleration and CPU multiprocessing.
+class CrossEncoder(metaclass=CrossEncoderMeta):
     
-    Model Hardcoded for now
+    def __init__(self, config=None):
+        self.config = config if config is not None else {"type": "minilm_l6_v2", "kwargs": {}}      
+          
+        cross_encoder_type = self.config.get("type")
+        
+        self.subclass = cross_encoder_dict[cross_encoder_type]()
     
-    This class handles batch processing of (query, candidates) pairs, automatically managing:
-    - GPU vs CPU execution
-    - Multiprocessing on CPU
-    - Memory-efficient batch processing
-    - Top-k candidate selection
+    def predict(self, *args, **kwargs):
+        return self.subclass.predict(*args, **kwargs)
+
+class MiniLM_L6_v2(CrossEncoder):
     
-    Attributes:
-        device (torch.device): The computation device (CUDA if available, otherwise CPU)
-        model (CrossEncoder): The underlying CrossEncoder model
-        use_multiprocessing (bool): Whether to use multiprocessing (enabled only on CPU)
-        num_workers (int): Number of worker processes to use (CPU cores/2 when multiprocessing)
-    """
-    
-    """'cross-encoder/ms-marco-TinyBERT-L-2-v2'""" 
     def __init__(self, model_name='cross-encoder/ms-marco-MiniLM-L6-v2'):
         """
         Initializes the CrossEncoderMP with the specified model.
@@ -37,22 +49,10 @@ class CrossEncoderMP():
         """
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = CrossEncoder(model_name, device=self.device)
-
-    def _score_pairs(self, pairs_chunk):
-        """
-        Internal method to score a chunk of text pairs.
-        
-        Args:
-            pairs_chunk (list): List of (query, candidate) tuples to score
-            
-        Returns:
-            numpy.ndarray: Array of similarity scores for the input pairs
-        """
-        return self.model.predict(pairs_chunk, apply_softmax=True)
+        self.model = STCrossEncoder(model_name, device=self.device)
 
     # 4096 / 8192 / 16384 / 32768
-    def predict_entities(self, query_alias_pairs, entity_indices, batch_size=32768):
+    def predict(self, query_alias_pairs, entity_indices, batch_size=32768):
         """
         New method for medical entity linking with alias pooling
         
@@ -82,91 +82,45 @@ class CrossEncoderMP():
                 entity_scores[idx] = score
                 
         return entity_scores, all_scores
+    
+class BioLinkBERT(CrossEncoder):
 
-    def predict_batch(self, text_pairs, k=10):
-        """
-        Predicts top-k candidates for a batch of queries with their candidates.
-        
-        The method processes the input in three phases:
-        1. Flattens the input structure for efficient batch processing
-        2. Computes scores using either multiprocessing (CPU) or batched GPU processing
-        3. Selects and returns the top-k candidates for each query
-        
-        Args:
-            text_pairs (list): List of (query, candidates) tuples where:
-                            - query (str): The search query
-                            - candidates (list[str]): List of candidate documents/passages
-            k (int): Number of top candidates to return for each query. Defaults to 10.
-            
-        Returns:
-            list: List of (top_k_idx, top_k_scores) tuples for each input query where:
-                - top_k_idx (numpy.ndarray): Indices of top candidates in original list
-                - top_k_scores (numpy.ndarray): Corresponding scores of top candidates
-        """
-        # --- Phase 1: Flatten Input ---
-        # Each text_pair = (query, list of candidates)
-        flat_pairs = []
-        pair_ranges = []  # Tracks start/end indices for each query's candidates
-        ptr = 0
+    def __init__(self, model_name="michiyasunaga/BioLinkBERT-base"):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        self.model.to(self.device)
+        self.model.eval()
 
-        for query, candidates in text_pairs:
-            flat_pairs.extend((query, cand) for cand in candidates)
-            pair_ranges.append((ptr, ptr + len(candidates)))
-            ptr += len(candidates)
+    def _score_pairs(self, pairs_chunk):
+        texts = [f"{q} [SEP] {a}" for q, a in pairs_chunk]
+        inputs = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+            max_length=256,
+        ).to(self.device)
 
-        k = min(k, max(end - start for start, end in pair_ranges))
+        with torch.no_grad():
+            logits = self.model(**inputs).logits.squeeze()
+            if logits.dim() == 0:
+                logits = logits.unsqueeze(0)
+            # Use raw logits directly for ranking
+            return logits.cpu().tolist()
 
-        # --- Phase 2: Predict Scores ---
 
-        scores = []
-        batch_size = 2048
-        for i in range(0, len(flat_pairs), batch_size):
-            scores.extend(self.model.predict(flat_pairs[i:i + batch_size], apply_softmax=True))
-        scores = np.array(scores)
+    def predict(self, query_alias_pairs, entity_indices, batch_size=32768):
+        all_scores = []
+        for i in range(0, len(query_alias_pairs), batch_size):
+            batch = query_alias_pairs[i : i + batch_size]
+            batch_scores = self._score_pairs(batch)
+            probs = torch.sigmoid(batch_scores)
+            all_scores.extend(probs)
 
-        # --- Phase 3: Top-k Selection ---
-        results = []
-        for (start, end) in pair_ranges:
-            query_scores = scores[start:end]
+        entity_scores = {}
+        for idx, score in zip(entity_indices, all_scores):
+            if idx not in entity_scores or score > entity_scores[idx]:
+                entity_scores[idx] = score
 
-            top_k_idx = np.argpartition(query_scores, -k)[-k:]
-            top_k_idx = top_k_idx[np.argsort(query_scores[top_k_idx])[::-1]]
-            top_k_scores = query_scores[top_k_idx]
-
-            results.append((top_k_idx, top_k_scores))
-
-        return results
-
-    def predict(self, text_pairs, k=10, batch_size=2048):
-        """
-        Memory-optimized batch prediction handler for large numbers of queries.
-        
-        Processes input in batches to prevent memory issues, especially on GPU.
-        Automatically clears CUDA cache between batches when running on GPU.
-        
-        Args:
-            text_pairs (list): List of (query, candidates) tuples where:
-                            - query (str): The search query
-                            - candidates (list[str]): List of candidate documents/passages
-            k (int): Number of top candidates to return for each query. Defaults to 10.
-            batch_size (int): Number of queries to process at once. Defaults to 2048.
-            
-        Returns:
-            list: List of (top_k_idx, top_k_scores) tuples for each input query where:
-                - top_k_idx (numpy.ndarray): Indices of top candidates in original list
-                - top_k_scores (numpy.ndarray): Corresponding scores of top candidates
-        """
-        results = []
-        
-        for i in range(0, len(text_pairs), batch_size):
-            print(f"Text Pair Number: {i}")
-            batch_results = self.predict_batch(
-                text_pairs[i:i + batch_size],
-                k=k
-            )
-            results.extend(batch_results)
-            
-            if self.device.type == "cuda":
-                torch.cuda.empty_cache()  # Prevent OOM
-        
-        return results
+        return entity_scores, all_scores

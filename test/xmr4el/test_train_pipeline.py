@@ -109,13 +109,13 @@ def main():
     X_cross_train = train_data["cross_corpus"]
     label_enconder = train_data["label_encoder"]
 
-    # print(raw_labels[6227])
-    # print(X_cross_train[6227])
+    print(raw_labels[8240])
+    print(X_cross_train[8240])
     
-    # print(raw_labels[2918])
-    # print(X_cross_train[2918])
+    print(raw_labels[9807])
+    print(X_cross_train[9807])
     
-    # exit()
+    exit()
 
     # R_train = copy.deepcopy(Y_train)
 
