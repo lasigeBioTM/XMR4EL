@@ -402,6 +402,9 @@ class Predict():
         # text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
         
         n_features = htree.text_features
+        
+        print(n_features)
+        
         vec_config["kwargs"]["max_features"] = n_features
         
         vec = cls._train_vectorizer(htree.train_data, vec_config)
@@ -416,8 +419,11 @@ class Predict():
         # svd = TruncatedSVD(n_components=n_features, random_state=0)
         # dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
         
-        # rp = SparseRandomProjection(n_components=n_features, random_state=42)
-        # dense_text_emb = rp.fit_transform(text_emb).toarray()
+        print(dense_text_emb.shape)
+        
+        if dense_text_emb.shape[1] < n_features:
+            rp = SparseRandomProjection(n_components=n_features, random_state=42)
+            dense_text_emb = rp.fit_transform(dense_text_emb).toarray()
         
         # print(dense_text_emb.shape)
 
