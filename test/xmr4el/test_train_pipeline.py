@@ -24,8 +24,8 @@ def main():
     
     start = time.time()
 
-    min_leaf_size = 5
-    depth = 1
+    min_leaf_size = 20
+    depth = 3
     n_features = 768
     max_n_clusters = 6
     min_n_clusters = 2
@@ -41,6 +41,7 @@ def main():
         "kwargs": {"batch_size": 3000}
     }
     
+    """
     clustering_config = {
         "type": "sklearnminibatchkmeans",
         "kwargs": {
@@ -58,21 +59,21 @@ def main():
             "reassignment_ratio": 0.01,
         }
     }
+    
     """
     clustering_config = {
     "type": "faisskmeans",  # Matches the registered name in your ClusterMeta system
     "kwargs": {
-        "n_clusters": 8,           # Default cluster count (will be overridden by tuner)
+        "n_clusters": 6,           # Default cluster count (will be overridden by tuner)
         "max_iter": 300,           # Max iterations per run
         "nredo": 1,               # Number of initializations (FAISS calls this nredo)
-        "gpu": True,               # Enable GPU acceleration
+        "gpu": False,               # Enable GPU acceleration
         "verbose": False,          # Disable progress prints
-        "spherical": False,        # Set True for cosine similarity (L2 normalizes first)
+        "spherical": True,        # Set True for cosine similarity (L2 normalizes first)
         "seed": 42,                # Random seed (FAISS uses this for centroid init)
         "tol": 1e-4,               # Early stopping tolerance
         }
     }
-    """
 
     classifier_config = {
         "type": "sklearnlogisticregression",

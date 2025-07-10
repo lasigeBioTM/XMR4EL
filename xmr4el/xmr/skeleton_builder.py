@@ -200,12 +200,12 @@ class SkeletonBuilder():
 
         fused_all = []
 
-        LOGGER.info(f"Fusing embeddings, total batches: {X.shape[0] / batch_size}")
+        # LOGGER.info(f"Fusing embeddings, total batches: {X.shape[0] / batch_size}")
         counter = 0
         with torch.no_grad():
             
             for i in range(0, X.shape[0], batch_size):
-                LOGGER.info(f"Batch: {counter}")
+                # LOGGER.info(f"Batch: {counter}")
                 X_batch = X[i:i+batch_size]
                 Y_batch = Y[i:i+batch_size]
 
@@ -311,13 +311,11 @@ class SkeletonBuilder():
             conc_emb_index, 
             vec_emb_idx, 
             depth=self.depth,
-            clustering_config=self.clustering_config
+            clustering_config=self.clustering_config,
+            root=True
         )
         
-        
         print(htree)
-        
-        # Final Embeddigns = [Transfomer] * [PIFA] * [TF-IDF] now is [Transfomer] * [TF-IDF] 
 
         # Step 4: Transformer Embeddings
         LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")

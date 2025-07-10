@@ -71,7 +71,7 @@ class SkeletonConstruction():
         # Delegate training to ClusteringModel class
         return ClusteringModel.train(trn_corpus, config, dtype)    
 
-    def execute(self, htree, comb_emb_idx, emb_idx, depth, clustering_config):
+    def execute(self, htree, comb_emb_idx, emb_idx, depth, clustering_config, root=False):
         """
         Recursively constructs the hierarchical clustering tree structure.
         
@@ -108,58 +108,30 @@ class SkeletonConstruction():
         text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
 
         min_clusterable_size = max(self.min_n_clusters, self.min_leaf_size)
-        # Base case: stop if too few points to cluster meaningfully
+
         if len(text_emb_array) <= min_clusterable_size:
             return htree
-
-        # Determine optimal number of clusters  
-        max_possible_k = len(text_emb_array) // max(1, self.min_leaf_size)
-        
-        if max_possible_k < self.min_n_clusters:
-            LOGGER.warning(f"Insufficient samples: {len(text_emb_array)}")
-            return htree
-    
-        k_range = (self.min_n_clusters, min(self.max_n_clusters, max_possible_k))
-        
-        # Get optimal k
-        optimal_k, _ = XMRTuner.tune_k(text_emb_array, clustering_config, self.dtype, k_range=k_range)
-        n_clusters = optimal_k
         
         # Changing Config of model 
-        clustering_config["kwargs"]["n_clusters"] = n_clusters
-        
-        if clustering_config["type"] != "faisskmeans":
-            clustering_config["kwargs"]["init_size"] = min(3 * n_clusters, text_emb_array.shape[0])
-        
-        # clustering_config["kwargs"]["init_size"] = 3 * n_clusters
+        n_clusters = clustering_config["kwargs"]["n_clusters"]
 
-        while True:
-            clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)  
+        clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)  
             
-            if clustering_config["type"] == "faisskmeans":
-                # FAISS-specific label extraction
-                _, cluster_labels = clustering_model.model.model.index.search(text_emb_array, 1)
-                cluster_labels = cluster_labels.flatten()
-
-            else:    
-                cluster_labels = clustering_model.model.labels()
-            
-            cluster_counts = Counter(cluster_labels)
-            # print(cluster_counts)
-            valid_clusters = [c for c in cluster_counts if cluster_counts[c] >= self.min_leaf_size]
-            
-            if len(valid_clusters) >= 2 and len(valid_clusters) == len(cluster_counts):
-                break  # Accept this clustering
-    
-            # If we get here, clustering is invalid
-            if n_clusters <= self.min_n_clusters:
-                LOGGER.warning(f"Could not create valid clusters at min_n_clusters={self.min_n_clusters}")
-                return htree  # Terminate completely
-            
-            # Try with fewer clusters
-            n_clusters = max(self.min_n_clusters, n_clusters - 1)
-            clustering_config["kwargs"]["n_clusters"] = n_clusters
+        # FAISS-specific label extraction
+        _, cluster_labels = clustering_model.model.model.index.search(text_emb_array, 1)
+        cluster_labels = cluster_labels.flatten()
         
+        cluster_counts = Counter(cluster_labels)
+        
+        for c in cluster_counts:
+            if cluster_counts[c] < self.min_leaf_size:
+                # Min leaf size not reached
+                LOGGER.info("Removing Clustering, Minimal Leaf Size reached")
+                if root:
+                    LOGGER.info(cluster_counts)
+                    raise Exception(f"Exiting Training, model has too many clusters being formed, mininal leaf size being reached")
+                return htree
+            
         LOGGER.info(f"Saving Clustering Model at depth {htree.depth}, with {n_clusters} clusters")
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(emb_idx)
@@ -168,11 +140,6 @@ class SkeletonConstruction():
         unique_labels = np.unique(cluster_labels)
         for cluster in unique_labels:
             cluster_indices = [idx for idx, label in zip(indices, cluster_labels) if label == cluster]
-            
-            # Skip if cluster has fewer than 2 samples (cannot train classifier)
-            if len(cluster_indices) < self.min_leaf_size:
-                LOGGER.warning(f"Skipping cluster {cluster}: {len(cluster_indices)} samples")
-                continue
             
             filt_combined_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}
             filt_text_dict = {idx: emb_idx[idx] for idx in cluster_indices}
