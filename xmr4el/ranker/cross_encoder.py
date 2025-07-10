@@ -51,8 +51,8 @@ class CrossEncoderMP():
         """
         return self.model.predict(pairs_chunk, apply_softmax=True)
 
-    # 4096 / 8192
-    def predict_entities(self, query_alias_pairs, entity_indices, batch_size=8192):
+    # 4096 / 8192 / 16384 / 32768
+    def predict_entities(self, query_alias_pairs, entity_indices, batch_size=32768):
         """
         New method for medical entity linking with alias pooling
         
