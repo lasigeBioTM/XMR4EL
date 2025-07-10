@@ -212,44 +212,32 @@ class Predict():
                 text_pairs.extend([(query, alias) for alias in aliases])
                 entity_indices.extend([idx] * len(aliases))  # Repeat entity index
 
-        print(text_pairs)
-        
-        print(entity_indices)
-
         # Batch scoring
-        match_scores = cross_encoder.predict_entities(text_pairs, entity_indices)
+        entity_scores_dict, _ = cross_encoder.predict_entities(text_pairs, entity_indices)
         
-        # Recombine scores per entity (max pooling)
+        # Recombine scores per query
         results = []
-        current_pos = 0
-        
         for i, (kb_indices, _, _) in enumerate(predictions):
-            entity_scores = {}
-            
-            # Process all aliases for this query's candidates
-            for _ in indices_list[i]:
-                num_aliases = len(trn_corpus[int(idx)])
-                for score in match_scores[current_pos:current_pos+num_aliases]:
-                    entity_scores.setdefault(idx, []).append(score)
-                current_pos += num_aliases
-            
-            # Get max score per entity
-            scored_entities = {
-                idx: max(scores) 
-                for idx, scores in entity_scores.items()
+            # Get scores for this query's candidates
+            query_entity_scores = {
+                idx: entity_scores_dict[idx] 
+                for idx in indices_list[i] 
+                if idx in entity_scores_dict
             }
             
-            # Sort by score (descending)
-            sorted_entities = sorted(scored_entities.items(), 
-                                key=lambda x: -x[1])
+            # Sort entities by score (descending)
+            sorted_entities = sorted(
+                query_entity_scores.items(),
+                key=lambda x: -x[1]
+            )
             
             # Map to final labels
             label_ids = [kb_indices[int(idx)] for idx, _ in sorted_entities]
             scores = [score for _, score in sorted_entities]
             
             results.append((label_ids, scores))
-        
-        return results
+
+        return results 
            
     @classmethod
     def _predict_input(cls, htree, conc_input):

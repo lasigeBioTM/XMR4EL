@@ -69,10 +69,8 @@ class CrossEncoderMP():
         all_scores = []
         for i in range(0, len(query_alias_pairs), batch_size):
             batch = query_alias_pairs[i:i+batch_size]
-            all_scores.extend(self.model.predict(batch, apply_softmax=True))
-            
-            if self.device.type == "cuda":
-                torch.cuda.empty_cache()
+            with torch.no_grad():
+                all_scores.extend(self.model.predict(batch, apply_softmax=True))
         
         # Phase 2: Max-pool by entity
         entity_scores = {}
