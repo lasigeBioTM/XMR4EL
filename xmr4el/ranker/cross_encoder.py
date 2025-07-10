@@ -70,7 +70,9 @@ class CrossEncoderMP():
         for i in range(0, len(query_alias_pairs), batch_size):
             batch = query_alias_pairs[i:i+batch_size]
             with torch.no_grad():
-                all_scores.extend(self.model.predict(batch, apply_softmax=True))
+                batch_scores = self.model.predict(batch, apply_softmax=True)
+                batch_scores = [score[1] for score in batch_scores]  # score for class 1
+                all_scores.extend()
         
         # Phase 2: Max-pool by entity
         entity_scores = {}
