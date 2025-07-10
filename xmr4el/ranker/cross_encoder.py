@@ -51,7 +51,7 @@ class CrossEncoderMP():
         Returns:
             numpy.ndarray: Array of similarity scores for the input pairs
         """
-        return self.model.predict(pairs_chunk)
+        return self.model.predict(pairs_chunk, apply_softmax=True)
 
     def predict_batch(self, text_pairs, k=10):
         """
@@ -87,21 +87,12 @@ class CrossEncoderMP():
         k = min(k, max(end - start for start, end in pair_ranges))
 
         # --- Phase 2: Predict Scores ---
-        if self.use_multiprocessing:
-            chunk_size = max(1, len(flat_pairs) // (self.num_workers * 4))
-            with Pool(self.num_workers) as pool:
-                scores = np.concatenate([
-                    pool.map(self._score_pairs, [
-                        flat_pairs[i:i + chunk_size]
-                        for i in range(0, len(flat_pairs), chunk_size)
-                    ])
-                ])
-        else:
-            scores = []
-            batch_size = 2048
-            for i in range(0, len(flat_pairs), batch_size):
-                scores.extend(self.model.predict(flat_pairs[i:i + batch_size]))
-            scores = np.array(scores)
+
+        scores = []
+        batch_size = 2048
+        for i in range(0, len(flat_pairs), batch_size):
+            scores.extend(self.model.predict(flat_pairs[i:i + batch_size]))
+        scores = np.array(scores)
 
         # --- Phase 3: Top-k Selection ---
         results = []
