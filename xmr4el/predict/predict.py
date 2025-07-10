@@ -423,7 +423,7 @@ class Predict():
         
         if dense_text_emb.shape[1] < n_features:
             rp = SparseRandomProjection(n_components=n_features, random_state=42)
-            dense_text_emb = rp.fit_transform(dense_text_emb).toarray()
+            dense_text_emb = rp.fit_transform(dense_text_emb)
         
         # print(dense_text_emb.shape)
 
