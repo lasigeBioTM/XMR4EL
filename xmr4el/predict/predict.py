@@ -424,28 +424,15 @@ class Predict():
         )
         
         transformer_emb = transformer_model.model.embeddings
-        
-        # print(transformer_emb.shape)
-        
-        # # Step 3: Ensure dimensional compatibility with training data
-        # transformer_n_features = htree.transformer_embeddings.shape[1]
-        # LOGGER.info(f"Truncating transformer embeddings to {transformer_n_features} n features")
-        # if transformer_emb.shape[1] != transformer_n_features:
-        #     transformer_emb = cls._reduce_dimensionality(
-        #         transformer_emb, 
-        #         transformer_n_features
-        #     )
 
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
-            dense_text_emb.toarray().astype(dtype)
+            dense_text_emb.astype(dtype)
         ))
-        
-        # concat_emb = transformer_emb.astype(dtype)
 
-        del transformer_emb, dense_text_emb # , rp
+        del transformer_emb, dense_text_emb
         gc.collect()
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
