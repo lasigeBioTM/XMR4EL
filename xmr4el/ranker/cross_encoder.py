@@ -110,7 +110,7 @@ class BioLinkBERT(CrossEncoder):
             return logits.cpu().tolist()
 
 
-    def predict(self, query_alias_pairs, entity_indices, batch_size=32768):
+    def predict(self, query_alias_pairs, entity_indices, batch_size=16384):
         all_scores = []
         for i in range(0, len(query_alias_pairs), batch_size):
             batch = query_alias_pairs[i : i + batch_size]
