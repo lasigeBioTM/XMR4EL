@@ -642,6 +642,7 @@ class FaissKMeans(ClusteringModel):
         try:
             config = {**defaults, **config}
             # Train FAISS KMeans
+            
             model = faiss.Kmeans(
                 d=trn_corpus.shape[1],
                 k=config['n_clusters'],

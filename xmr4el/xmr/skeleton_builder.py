@@ -266,12 +266,11 @@ class SkeletonBuilder():
         # Attention Model to form conc_emb Unsupervised
         fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])        
         conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
-        sparse_conc_emb = csr_matrix(conc_emb)
         
-        htree.text_features = sparse_conc_emb.shape[1]
+        htree.text_features = conc_emb.shape[1]
 
         # Normalize PIFA embeddings
-        dense_conc_emb = normalize(sparse_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
+        dense_conc_emb = normalize(conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
         dense_vec_emb = normalize(vec_emb, norm="l2", axis=1)
         
         # Create indexed versions for hierarchical processing

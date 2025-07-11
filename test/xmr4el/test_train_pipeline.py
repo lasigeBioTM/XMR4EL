@@ -100,7 +100,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        # truncate_data=150
+        truncate_data=150
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix
@@ -108,11 +108,11 @@ def main():
     X_train = train_data["corpus"] # List
     X_cross_train = train_data["cross_corpus"]
 
-    print(raw_labels[8240])
-    print(X_cross_train[8240])
+    # print(raw_labels[8240])
+    # print(X_cross_train[8240])
     
-    print(raw_labels[9807])
-    print(X_cross_train[9807])
+    # print(raw_labels[9807])
+    # print(X_cross_train[9807])
     
     # exit()
 
