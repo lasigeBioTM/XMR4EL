@@ -376,7 +376,7 @@ class Predict():
                 
     @classmethod
     def inference(
-        cls, htree, input_text, vec_config, transformer_config, encoder_config, k=3, dtype=np.float32
+        cls, htree, input_text, transformer_config, encoder_config, k=3, dtype=np.float32
     ):
         """
         End-to-end prediction pipeline for XMR system.
@@ -412,10 +412,6 @@ class Predict():
         # Normalize text embeddings (handling sparse)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
-        print(dense_text_emb.shape)
-        
-        # print(dense_text_emb.shape)
-        
         # Step 2: Generate transformer embeddings with memory management
         transformer_model = cls._predict_transformer(
             input_text, 
@@ -437,7 +433,7 @@ class Predict():
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
         
-        results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=100)
+        results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=k)
         
         print(results)
 
