@@ -271,8 +271,8 @@ class SkeletonBuilder():
         htree.text_features = sparse_conc_emb.shape[1]
 
         # Normalize PIFA embeddings
-        dense_conc_emb = normalize(sparse_conc_emb, norm="l2", axis=1).toarray() # Need to cap features in kwargs
-        dense_vec_emb = normalize(vec_emb, norm="l2", axis=1).toarray()
+        dense_conc_emb = normalize(sparse_conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
+        dense_vec_emb = normalize(vec_emb, norm="l2", axis=1)
         
         # Create indexed versions for hierarchical processing
         conc_emb_index = {idx: emb for idx, emb in enumerate(dense_conc_emb)}
