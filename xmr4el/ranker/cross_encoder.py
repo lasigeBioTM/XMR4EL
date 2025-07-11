@@ -99,7 +99,7 @@ class BioLinkBERT(CrossEncoder):
             padding=True,
             truncation=True,
             return_tensors="pt",
-            # max_length=256,
+            max_length=768,
         ).to(self.device)
 
         with torch.no_grad():

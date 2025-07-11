@@ -585,7 +585,7 @@ class FaissKMeans(ClusteringModel):
             CumlKMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading Cuml KMeans Clustering Model from {load_dir}")
+        LOGGER.info(f"Loading FAISS KMeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
