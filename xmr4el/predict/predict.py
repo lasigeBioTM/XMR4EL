@@ -399,7 +399,7 @@ class Predict():
         
         # print(n_features)
         
-        vec_config["kwargs"]["max_features"] = n_features
+        # vec_config["kwargs"]["max_features"] = n_features
         
         vec = cls._train_vectorizer(htree.train_data, vec_config)
         text_emb = cls._predict_vectorizer(vec, input_text)
