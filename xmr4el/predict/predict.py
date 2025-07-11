@@ -402,27 +402,17 @@ class Predict():
         vec_config["kwargs"]["max_features"] = n_features
         
         vec = cls._train_vectorizer(htree.train_data, vec_config)
-        dense_text_emb = cls._predict_vectorizer(vec, input_text)
+        text_emb = cls._predict_vectorizer(vec, input_text)
         
-        # print(htree.transformer_embeddings, type(htree.transformer_embeddings), htree.transformer_embeddings.shape)
-        
-        # Problemas de features, pq logistic regression é treinado com muitos mais features, inventar features ?     
-        # n_features = htree.text_features
         
         LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
-        # svd = TruncatedSVD(n_components=n_features, random_state=0)
-        # dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
-        
-        # print(dense_text_emb.shape)
-        
-        if dense_text_emb.shape[1] < n_features:
-            rp = SparseRandomProjection(n_components=n_features, random_state=42)
-            dense_text_emb = rp.fit_transform(dense_text_emb)
-        
-        # print(dense_text_emb.shape)
+        svd = htree.dimension_model
+        dense_text_emb = svd.predict(text_emb) # turns it into dense auto
 
         # Normalize text embeddings (handling sparse)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
+        
+        print(dense_text_emb.shape)
         
         # print(dense_text_emb.shape)
         
