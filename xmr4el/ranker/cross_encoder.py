@@ -99,7 +99,7 @@ class BioLinkBERT(CrossEncoder):
             padding=True,
             truncation=True,
             return_tensors="pt",
-            max_length=256,
+            # max_length=256,
         ).to(self.device)
 
         with torch.no_grad():
@@ -110,7 +110,7 @@ class BioLinkBERT(CrossEncoder):
             return logits.cpu().tolist()
 
 
-    def predict(self, query_alias_pairs, entity_indices, batch_size=16384):
+    def predict(self, query_alias_pairs, entity_indices, batch_size=4096):
         all_scores = []
         for i in range(0, len(query_alias_pairs), batch_size):
             batch = query_alias_pairs[i : i + batch_size]
