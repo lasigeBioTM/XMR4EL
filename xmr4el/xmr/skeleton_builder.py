@@ -153,19 +153,14 @@ class SkeletonBuilder():
             np.array: Reduced embeddings with shape (n_samples, n_features)
                      or original if reduction not possible
         """
-        n_samples, n_features_emb = emb.shape
-        effective_dim = min(n_features, emb.shape[0])
-        
-        if n_features_emb >= n_features_emb or effective_dim <= 0:
-            LOGGER.info("Maintaining original number of features," 
-                        f"impossible to reduce, min({n_samples}, {n_features})={n_features_emb}")
-            return emb  # Return original if reduction not possible
+        # n_samples, n_features_emb = emb.shape
+        # effective_dim = min(n_features, emb.shape[0])
         
         # Perform PCA with effective dimension
         svd = TruncatedSVD(n_components=n_features, random_state=random_state)
         dense_emb = svd.fit_transform(emb) # turns it into dense auto
         
-        return dense_emb
+        return dense_emb, svd
 
     @staticmethod
     def _compute_pifa(X, n_features=2**17):
@@ -219,7 +214,7 @@ class SkeletonBuilder():
         fused_all_tensor = torch.cat(fused_all, dim=0)
         return fused_all_tensor.numpy()
             
-    def execute(self, labels, x_cross_train, trn_corpus, labels_matrix):
+    def execute(self, labels, x_cross_train, trn_corpus):
         """
         Executes the complete XMR model building pipeline.
         
@@ -234,7 +229,6 @@ class SkeletonBuilder():
             labels (iterable): Label identifiers
             x_cross_train (iterable): Training text data
             trn_corpus (iterable): Processed training corpus
-            labels_matrix (scipy.sparse): Binary label matrix
             
         Returns:
             Skeleton: Fully trained hierarchical XMR model
@@ -254,44 +248,31 @@ class SkeletonBuilder():
         # Step 1: Text vectorization
         LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
         vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
+        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
         htree.set_vectorizer(vec_model)
         
-        # Predict the embeddings
-        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
-
+        # Reduce dimensions, and save the model to use in predict method
+        vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features)
+        htree.set_dimension_model(svd)
+        
         # Step 2: PIFA embeddings
         LOGGER.info("Computing PIFA")
-        pifa_emb = self._compute_pifa(trn_corpus, vec_emb.shape[1])
-            
-        # Store pifa embeddings information
+        pifa_emb = self._compute_pifa(trn_corpus)
+        
+        # Reduce dimensions, no need to save the model
+        pifa_emb, _ = self._reduce_dimensionality(pifa_emb, self.n_features)
         htree.set_pifa_embeddings(pifa_emb) # Set pifa embeddings
 
-        # Attention Model to form conc_emb
+        # Attention Model to form conc_emb Unsupervised
         fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])        
         conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
         sparse_conc_emb = csr_matrix(conc_emb)
-        
-        # print(vec_emb.shape)
-        
-        # LOGGER.info(f"Truncating Dense Combined Embeddings to {self.n_features} n features")
-        # Truncate to use UMAP next
-        # svd = TruncatedSVD(n_components=self.n_features, random_state=0)
-        # dense_conc_emb = svd.fit_transform(sparse_conc_emb) # turns it into dense auto
-        
-        # LOGGER.info(f"Truncating Vectorizer Embeddings to {self.n_features} n features")
-        # Truncate to use UMAP next
-        # svd = TruncatedSVD(n_components=self.n_features, random_state=0)
-        # dense_vec_emb = svd.fit_transform(vec_emb) # turns it into dense auto
         
         htree.text_features = sparse_conc_emb.shape[1]
 
         # Normalize PIFA embeddings
         dense_conc_emb = normalize(sparse_conc_emb, norm="l2", axis=1).toarray() # Need to cap features in kwargs
         dense_vec_emb = normalize(vec_emb, norm="l2", axis=1).toarray()
-        
-        # print(dense_vec_emb.shape)
-        
-        # print(dense_conc_emb.shape, dense_vec_emb.shape)
         
         # Create indexed versions for hierarchical processing
         conc_emb_index = {idx: emb for idx, emb in enumerate(dense_conc_emb)}
@@ -315,7 +296,7 @@ class SkeletonBuilder():
             root=True
         )
         
-        print(htree)
+        LOGGER.info(htree)
 
         # Step 4: Transformer Embeddings
         LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
@@ -327,9 +308,6 @@ class SkeletonBuilder():
 
         # Normalize and reduce transformer embeddings
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
-        transformer_emb = self._reduce_dimensionality(transformer_emb, self.n_features)
-        
-        # print(transformer_emb.shape)
 
         # Step 5: Train classifiers throughout hierarchy  
         LOGGER.info(f"Initializing SkeletonTraining")      

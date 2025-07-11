@@ -26,7 +26,7 @@ def main():
 
     min_leaf_size = 20
     depth = 3
-    n_features = 768
+    n_features = 5000
     max_n_clusters = 6
     min_n_clusters = 2
 
@@ -107,7 +107,6 @@ def main():
     raw_labels = train_data["raw_labels"]
     X_train = train_data["corpus"] # List
     X_cross_train = train_data["cross_corpus"]
-    label_enconder = train_data["label_encoder"]
 
     print(raw_labels[8240])
     print(X_cross_train[8240])
@@ -115,7 +114,7 @@ def main():
     print(raw_labels[9807])
     print(X_cross_train[9807])
     
-    exit()
+    # exit()
 
     # R_train = copy.deepcopy(Y_train)
 
@@ -135,7 +134,6 @@ def main():
         raw_labels,
         X_cross_train,
         X_train,
-        Y_train,
     )
 
     # Print the tree structure

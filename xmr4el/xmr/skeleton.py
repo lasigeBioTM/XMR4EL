@@ -3,6 +3,7 @@ import pickle
 import logging
 import glob
 import json
+import joblib
 
 import numpy as np
 
@@ -38,6 +39,7 @@ class Skeleton:
         concatenated_embeddings=None,
         kb_indices=None,
         vectorizer=None,
+        dimension_model=None,
         clustering_model=None,
         classifier_model=None,
         test_split=None,
@@ -77,6 +79,7 @@ class Skeleton:
         
         # Models
         self.vectorizer = vectorizer
+        self.dimension_model = dimension_model
         self.clustering_model = clustering_model
         self.classifier_model = classifier_model
         self.test_split = test_split # Evaluation Data
@@ -109,13 +112,24 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "clustering_model", "classifier_model"]
+        models = ["vectorizer", "dimension_model", "clustering_model", "classifier_model"] # reranker
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
             if model is not None:  # Ensure model exists before saving
                 print(type(model))
-                model.save(os.path.join(save_dir, models[idx]))
+                model_path = os.path.join(save_dir, models[idx])
+                # Handle models with different save methods
+                if hasattr(model, 'save'):
+                    model.save(model_path)
+                else:
+                    # For models without save method, use joblib or pickle
+                    try:
+                        joblib.dump(model, f"{model_path}.joblib")
+                    except ImportError:
+                        with open(f"{model_path}.pkl", "wb") as f:
+                            pickle.dump(model, f)
+                LOGGER.debug(f"Saved {models[idx]} to {model_path}")
 
         # Remove models from state to avoid duplicate saving
         for model in models:
@@ -140,6 +154,7 @@ class Skeleton:
             if emb_data is not None:
                 np.save(os.path.join(save_dir, f"{attr}.npy"), emb_data)
                 state.pop(attr, None) # Remove from state dict
+                LOGGER.info(f"Saved {attr} embeddings")
             else:
                 LOGGER.warning(f"{attr} is None and will not be saved.")
 
@@ -153,6 +168,7 @@ class Skeleton:
                     children_dir, f"child_{idx}"
                 )  # Unique directory for each child
                 child.save(child_save_dir, child_tree=True)
+                LOGGER.info(f"Saved child {idx} to {child_save_dir}")
 
         # Save remaining metadata as pickle
         with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
@@ -203,24 +219,35 @@ class Skeleton:
         else:
             model.train_data = None
 
-        # Load models (skip vectorizer for child trees)
-        if not child_tree:
-            setattr(
-                model,
-                "vectorizer",
-                Vectorizer.load(os.path.join(load_dir, "vectorizer")),
-            )
-
-        setattr(
-            model,
-            "clustering_model",
-            ClusteringModel.load(os.path.join(load_dir, "clustering_model")),
-        )
-        setattr(
-            model,
-            "classifier_model",
-            ClassifierModel.load(os.path.join(load_dir, "classifier_model")),
-        )
+        # Load models
+        model_files = {
+            "vectorizer": Vectorizer if hasattr(Vectorizer, 'load') else None,
+            "dimension_model": None,  # Will handle generically
+            "clustering_model": ClusteringModel if hasattr(ClusteringModel, 'load') else None,
+            "classifier_model": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
+            "reranker": None
+        }
+        
+        for model_name, model_class in model_files.items():
+            model_path = os.path.join(load_dir, model_name)
+            
+            # First check for model-specific save format
+            if os.path.exists(model_path) and model_class is not None:
+                setattr(model, model_name, model_class.load(model_path))
+                LOGGER.debug(f"Loaded {model_name} using class-specific loader")
+            else:
+                # Check for generic save formats
+                for ext in ['.joblib', '.pkl']:
+                    full_path = f"{model_path}{ext}"
+                    if os.path.exists(full_path):
+                        try:
+                            loaded_model = joblib.load(full_path)
+                        except:
+                            with open(full_path, "rb") as f:
+                                loaded_model = pickle.load(f)
+                        setattr(model, model_name, loaded_model)
+                        LOGGER.debug(f"Loaded {model_name} from {full_path}")
+                        break
 
         # Load embeddings if they exist
         for attr in [
@@ -282,7 +309,11 @@ class Skeleton:
     def set_vectorizer(self, vectorizer):
         """Set the text vectorizer model (typically only at root)."""
         self.vectorizer = vectorizer
-
+        
+    def set_dimension_model(self, dimension_model):
+        """Set the Reduce Dimension model (typically only at the root)"""
+        self.dimension_model = dimension_model
+        
     def set_clustering_model(self, clustering_model):
         """Set the clustering model for this node."""
         self.clustering_model = clustering_model
