@@ -107,7 +107,7 @@ class BioLinkBERT(CrossEncoder):
             if logits.dim() == 0:
                 logits = logits.unsqueeze(0)
             # Use raw logits directly for ranking
-            return logits.cpu().tolist()
+            return logits.cpu()
 
 
     def predict(self, query_alias_pairs, entity_indices, batch_size=4096):
