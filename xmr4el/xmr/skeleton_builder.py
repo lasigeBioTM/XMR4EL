@@ -204,8 +204,8 @@ class SkeletonBuilder():
                 X_batch = X[i:i+batch_size]
                 Y_batch = Y[i:i+batch_size]
 
-                X_tensor = torch.tensor(X_batch.toarray(), dtype=torch.float).to(fusion_model.device)
-                Y_tensor = torch.tensor(Y_batch.toarray(), dtype=torch.float).to(fusion_model.device)
+                X_tensor = torch.tensor(X_batch, dtype=torch.float).to(fusion_model.device)
+                Y_tensor = torch.tensor(Y_batch, dtype=torch.float).to(fusion_model.device)
 
                 fused_batch = fusion_model(X_tensor, Y_tensor).detach().cpu()
                 fused_all.append(fused_batch)
