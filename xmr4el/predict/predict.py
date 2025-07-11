@@ -397,7 +397,7 @@ class Predict():
         
         n_features = htree.text_features
         
-        print(n_features)
+        # print(n_features)
         
         vec_config["kwargs"]["max_features"] = n_features
         
@@ -413,7 +413,7 @@ class Predict():
         # svd = TruncatedSVD(n_components=n_features, random_state=0)
         # dense_text_emb = svd.fit_transform(text_emb) # turns it into dense auto
         
-        print(dense_text_emb.shape)
+        # print(dense_text_emb.shape)
         
         if dense_text_emb.shape[1] < n_features:
             rp = SparseRandomProjection(n_components=n_features, random_state=42)
@@ -424,7 +424,7 @@ class Predict():
         # Normalize text embeddings (handling sparse)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
-        print(dense_text_emb.shape)
+        # print(dense_text_emb.shape)
         
         # Step 2: Generate transformer embeddings with memory management
         transformer_model = cls._predict_transformer(
@@ -435,7 +435,7 @@ class Predict():
         
         transformer_emb = transformer_model.model.embeddings
         
-        print(transformer_emb.shape)
+        # print(transformer_emb.shape)
         
         # # Step 3: Ensure dimensional compatibility with training data
         # transformer_n_features = htree.transformer_embeddings.shape[1]

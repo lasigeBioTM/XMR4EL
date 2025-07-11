@@ -91,6 +91,8 @@ class SkeletonTraining():
 
         gc.collect()
 
+        LOGGER.info(f"Using Classifier at depth {htree.depth}")
+
         # Get embeddings and cluster assignments from current node
         text_emb_idx = htree.text_embeddings 
         cluster_labels = htree.clustering_model.labels()
