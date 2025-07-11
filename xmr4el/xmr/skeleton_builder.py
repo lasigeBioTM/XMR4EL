@@ -213,6 +213,18 @@ class SkeletonBuilder():
 
         fused_all_tensor = torch.cat(fused_all, dim=0)
         return fused_all_tensor.numpy()
+    
+    @staticmethod
+    def _alias_data_collecting(trn_corpus, tfidf_matrix):
+        # For each entity, pick alias with highest max TF-IDF score
+        best_aliases = {}
+        for entity_id, aliases in enumerate(trn_corpus):
+            if not aliases:
+                continue
+            alias_scores = tfidf_matrix[entity_id].max(axis=1).A1  # Max TF-IDF per alias
+            best_idx = alias_scores.argmax()
+            best_aliases[entity_id] = aliases[best_idx]
+        return best_aliases
             
     def execute(self, labels, x_cross_train, trn_corpus):
         """
@@ -250,6 +262,10 @@ class SkeletonBuilder():
         vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
         vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
         htree.set_vectorizer(vec_model)
+        
+        # Step 1.5: Collect alias
+        alias_data = self._alias_data_collecting(trn_corpus, vec_emb)
+        htree.set_alias_data(alias_data)
         
         # Reduce dimensions, and save the model to use in predict method
         vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features)

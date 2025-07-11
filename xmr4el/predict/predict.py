@@ -1,5 +1,6 @@
 import gc
 import logging
+import random
 
 import numpy as np
 
@@ -154,7 +155,7 @@ class Predict():
         return csr_matrix((vals, (rows, cols)), shape=(len(predictions), num_labels), dtype=np.float32)
             
     @classmethod
-    def _rank(cls, predictions, train_data, input_texts, encoder_config, candidates=100, k=5):
+    def _rank(cls, predictions, train_data, alias_data, input_texts, encoder_config, candidates=100, k=5):
         """
         Simplified two-stage ranking pipeline without batching
         
@@ -197,14 +198,15 @@ class Predict():
         LOGGER.info("Second Stage Cross-Encoder")
         
         text_pairs = []
-        entity_indices = []  # Tracks entity index for each pair (no alias details)
+        entity_indices = []
         
-        for i, indices in enumerate(indices_list):
+        # ALIAS CHOOSING
+        for i, (kb_indices, _, _) in enumerate(predictions):
             query = input_texts[i]
-            for idx in indices:
-                aliases = trn_corpus[int(idx)]
-                text_pairs.extend([(query, alias) for alias in aliases])
-                entity_indices.extend([idx] * len(aliases))  # Repeat entity index
+            for idx in kb_indices:
+                best_alias = alias_data.get(int(idx), trn_corpus[int(idx)][0])
+                text_pairs.append((query, best_alias))
+                entity_indices.append(idx)
 
         # Batch scoring
         entity_scores_dict, _ = cross_encoder.predict(text_pairs, entity_indices)
@@ -433,7 +435,7 @@ class Predict():
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
         
-        results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=k)
+        results = cls._rank(predictions, htree.train_data, htree.alias_data, input_text, encoder_config, candidates=k)
         
         print(results)
 

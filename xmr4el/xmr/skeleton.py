@@ -35,6 +35,7 @@ class Skeleton:
         pifa_embeddings=None,
         text_embeddings=None,
         text_features=None,
+        alias_data=None,
         transformer_embeddings=None,
         concatenated_embeddings=None,
         kb_indices=None,
@@ -73,6 +74,9 @@ class Skeleton:
         # Embeddings storage
         self.text_embeddings = text_embeddings
         self.text_features = text_features
+        
+        self.alias_data = alias_data
+        
         self.transformer_embeddings = transformer_embeddings
         self.concatenated_embeddings = concatenated_embeddings
         self.kb_indices = kb_indices # Indices of data points in this node
@@ -293,6 +297,10 @@ class Skeleton:
     def set_text_embeddings(self, text_embeddings):
         """Set text embeddings (e.g., TF-IDF) for this node."""
         self.text_embeddings = text_embeddings
+        
+    def set_alias_data(self, alias_data):
+        """Set alias data according to tf-idf"""
+        self.alias_data = alias_data
 
     def set_transformer_embeddings(self, transformer_embeddings):
         """Set transformer model embeddings for this node."""
