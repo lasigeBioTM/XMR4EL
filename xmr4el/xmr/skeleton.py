@@ -116,7 +116,7 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "dimension_model", "clustering_model", "classifier_model"] # reranker
+        models = ["vectorizer", "dimension_model", "clustering_model", "classifier_model", "reranker"] # reranker
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
@@ -229,7 +229,7 @@ class Skeleton:
             "dimension_model": None,  # Will handle generically
             "clustering_model": ClusteringModel if hasattr(ClusteringModel, 'load') else None,
             "classifier_model": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
-            "reranker": None
+            "reranker": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
         }
         
         for model_name, model_class in model_files.items():

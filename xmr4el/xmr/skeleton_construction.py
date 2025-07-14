@@ -115,9 +115,9 @@ class SkeletonConstruction():
         # Changing Config of model 
         n_clusters = clustering_config["kwargs"]["n_clusters"]
         
-        print(text_emb_array)
+        # print(text_emb_array)
         
-        print(text_emb_array.shape)
+        # print(text_emb_array.shape)
 
         clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)  
             

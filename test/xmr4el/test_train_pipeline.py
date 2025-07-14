@@ -32,7 +32,7 @@ def main():
 
     vectorizer_config = {
         "type": "tfidf", 
-        "kwargs": {'max_features': 30000}
+        "kwargs": {'max_features': 15000}
         }
     
     transformer_config = {
@@ -64,7 +64,7 @@ def main():
     clustering_config = {
     "type": "faisskmeans",  # Matches the registered name in your ClusterMeta system
     "kwargs": {
-        "n_clusters": 6,           # Default cluster count (will be overridden by tuner)
+        "n_clusters": 2,           # Default cluster count (will be overridden by tuner)
         "max_iter": 300,           # Max iterations per run
         "nredo": 1,               # Number of initializations (FAISS calls this nredo)
         "gpu": False,               # Enable GPU acceleration

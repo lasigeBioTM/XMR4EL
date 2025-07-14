@@ -55,7 +55,7 @@ def main():
     print(trained_xtree)
     
     predicted_labels = Predict.inference(
-        trained_xtree, input_text, vectorizer_config, transformer_config, encoder_config, k=k
+        trained_xtree, input_text, transformer_config, encoder_config, k=k
     )
 
     print(predicted_labels)
