@@ -128,31 +128,40 @@ class Predict():
     @staticmethod
     def _convert_predictions_into_csr(predictions, num_labels=None):
         """
-        Converts prediction results into a sparse CSR matrix.
+        Converts ranked predictions into CSR sparse matrix.
         
         Args:
             predictions (list): List of (label_indices, scores) tuples where:
-                             - label_indices: Array of label indices
-                             - scores: Array of corresponding scores
+                            - label_indices: Array of top-k label indices
+                            - scores: Array of corresponding reranker scores
             num_labels (int, optional): Total number of possible labels.
-                                      If None, inferred from data.
-                                      
+                                    If None, uses max index found + 1.
+                                    
         Returns:
             csr_matrix: Sparse matrix of shape (n_instances, num_labels)
-                       with prediction scores
+                    with reranker scores at top-k positions
         """
+        if not predictions:
+            return csr_matrix((0, num_labels or 0), dtype=np.float32)
+
+        # Prepare CSR components
         rows, cols, vals = [], [], []
-
+        
         for row_idx, (label_indices, scores) in enumerate(predictions):
-            for col, score in zip(label_indices, scores):
-                rows.append(row_idx)
-                cols.append(col)
-                vals.append(np.float32(score))
-
+            if len(label_indices) > 0:  # Handle empty predictions
+                rows.extend([row_idx] * len(label_indices))
+                cols.extend(label_indices)
+                vals.extend(np.asarray(scores, dtype=np.float32))
+        
+        # Determine matrix shape
         if num_labels is None:
-            num_labels = max(cols) + 1  # infer if not provided
-
-        return csr_matrix((vals, (rows, cols)), shape=(len(predictions), num_labels), dtype=np.float32)
+            num_labels = max(cols) + 1 if cols else 0
+        
+        return csr_matrix(
+            (vals, (rows, cols)),
+            shape=(len(predictions), num_labels),
+            dtype=np.float32
+        )
             
     @classmethod
     def _rank(cls, predictions, train_data, input_texts, encoder_config, candidates=100, k=5):
@@ -233,50 +242,9 @@ class Predict():
             results.append((label_ids, scores))
 
         return results 
-           
-    @classmethod
-    def _predict_input(cls, htree, conc_input):
-        """
-        Recursively traverses hierarchical tree to find relevant candidates.
-        
-        Args:
-            htree (XMRTree): Current hierarchical tree node
-            conc_input (np.ndarray): Concatenated input embeddings
-            candidates (int): Number of candidates to retrieve. Defaults to 100.
-            
-        Returns:
-            tuple: (kb_indices, conc_input, conc_emb) where:
-                 - kb_indices: Knowledge base indices
-                 - conc_input: Original input embeddings
-                 - conc_emb: Candidate embeddings for ranking
-        """
-        current_htree = htree
-
-        while True:
-            # Get classifier and number of possible labels at current level
-            classifier = current_htree.classifier_model
-            classifier.model.model.n_jobs = -1
-            n_labels = len(current_htree.clustering_model.labels())
-            
-            probs = cls._predict_proba_classifier(classifier, conc_input)[0]
-            
-            top_label = np.argmax(probs)
-
-            if top_label in current_htree.children:
-                # Continue down the tree hierarchy
-                current_htree = current_htree.children[top_label]
-                continue
-                
-            else: 
-                # Reached leaf node - perform reranking
-                mask = current_htree.clustering_model.labels() == top_label
-                conc_emb = current_htree.concatenated_embeddings[mask]
-                kb_indices = np.array(current_htree.kb_indices)[mask]
-                
-                return (kb_indices, conc_input, conc_emb)
     
     @classmethod
-    def _predict(cls, htree, batch_conc_input, candidates=100):
+    def _predict(cls, htree, all_kb_ids, batch_conc_input, candidates=100):
         """ 
         Batch version of _predict_input that processes multiple inputs simultaneously.
         
@@ -307,7 +275,6 @@ class Predict():
             new_active_indices = []
             for node, group_indices in node_groups.items():
                 group_inputs = batch_conc_input[group_indices]
-                
                 # Batch predict probabilities
                 classifier = node.classifier_model
                 classifier.model.model.n_jobs = -1
@@ -326,28 +293,38 @@ class Predict():
                         new_active_indices.append(idx)
                     else:
                         # Reached leaf node - store results
+                        entity_centroids = node.entity_centroids
                         mask = node.clustering_model.labels() == top_label
-                        conc_emb = node.concatenated_embeddings[mask]
-                        kb_indices = np.array(node.kb_indices)[mask]
+                        # cand_embs = node.concatenated_embeddings[mask]
+                        cand_kb_indices = np.array(node.kb_indices)[mask]
+                        unique_kb_ids = np.array(all_kb_ids)[cand_kb_indices]
                         
-                        # Ensure we don't return more than candidates
-                        if len(kb_indices) > candidates:
-                            random_indices = np.random.choice(
-                                len(kb_indices), 
-                                candidates, 
-                                replace=False
-                            )
-                            kb_indices = kb_indices[random_indices]
-                            conc_emb = conc_emb[random_indices]
+                        # print(entity_centroids)
                         
-                        results[idx] = (kb_indices, batch_conc_input[idx], conc_emb)
+                        mention_emb = batch_conc_input[idx]
+                        
+                        rerank_X = np.vstack([
+                            np.hstack((mention_emb, entity_centroids[eid]))
+                            for eid in unique_kb_ids
+                        ])
+                        
+                        # print(rerank_X)
+                        
+                        scores = cls._predict_proba_classifier(node.reranker, rerank_X)[:, 1] # Get positive class scores
+
+                        top_k_indices = np.argsort(scores)[-candidates:][::-1]
+                        
+                        results[idx] = (
+                            cand_kb_indices[top_k_indices],
+                            scores[top_k_indices]
+                        )
             
             active_indices = new_active_indices
         
         return results
     
     @classmethod
-    def _predict_batch_memopt(cls, htree, batch_conc_input, candidates=100, batch_size=32768):
+    def _predict_batch_memopt(cls, htree, all_kb_ids, batch_conc_input, candidates=100, batch_size=32768):
         """
         Memory-optimized batch prediction that processes inputs in chunks.
         
@@ -366,7 +343,7 @@ class Predict():
         # Process in chunks to control memory usage
         for i in range(0, n_samples, batch_size):
             chunk = batch_conc_input[i:i+batch_size]
-            chunk_results = cls._predict(htree, chunk, candidates)
+            chunk_results = cls._predict(htree, all_kb_ids, chunk, candidates)
             results.extend(chunk_results)
             
             # Explicit cleanup if needed
@@ -377,7 +354,7 @@ class Predict():
                 
     @classmethod
     def inference(
-        cls, htree, input_text, transformer_config, encoder_config, k=3, dtype=np.float32
+        cls, htree, input_text, transformer_config, k=3, dtype=np.float32
     ):
         """
         End-to-end prediction pipeline for XMR system.
@@ -432,10 +409,16 @@ class Predict():
         del transformer_emb, dense_text_emb
         gc.collect()
 
-        predictions = cls._predict_batch_memopt(htree, concat_emb)
-        
-        results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=k)
-        
-        print(results)
+        all_kb_ids = list(htree.train_data.keys())
 
-        return cls._convert_predictions_into_csr(results)
+        predictions = cls._predict_batch_memopt(htree, all_kb_ids, concat_emb, candidates=10)
+        
+        # print(predictions)
+        
+        return cls._convert_predictions_into_csr(predictions)
+        
+        # results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=k)
+        
+        # print(results)
+
+        # return cls._convert_predictions_into_csr(results)

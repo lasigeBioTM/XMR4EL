@@ -45,6 +45,7 @@ class Skeleton:
         classifier_model=None,
         test_split=None,
         reranker=None,
+        entity_centroids=None,
         children=None,  # Dictionary of XMRTree nodes
         depth=0,
     ):
@@ -87,7 +88,9 @@ class Skeleton:
         self.clustering_model = clustering_model
         self.classifier_model = classifier_model
         self.test_split = test_split # Evaluation Data
+        
         self.reranker = reranker
+        self.entity_centroids = entity_centroids
 
         # Tree Structure
         self.children = children if children is not None else {} # Child Nodes
@@ -337,6 +340,10 @@ class Skeleton:
     def set_reranker(self, reranker):
         """Set Reranker for evaluation"""
         self.reranker = reranker
+        
+    def set_entity_centroids(self, entity_centroids):
+        """Set entity centroids from reranker"""
+        self.entity_centroids = entity_centroids
 
     def set_children(self, idx, child_tree):
         """Add a child node at the specified index."""

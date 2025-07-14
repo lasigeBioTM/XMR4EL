@@ -24,20 +24,9 @@ def main():
 
     k = 5
 
-    vectorizer_config = {
-        "type": "tfidf", 
-        "kwargs": {}
-    }
-
     transformer_config = {
-        # "type": "biobert",
         "type": "sentencetsapbert",
         "kwargs": {"batch_size": 400}
-    }
-    
-    encoder_config = {
-        "type": "biolinkbert",
-        "kwargs": {}
     }
 
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
@@ -49,13 +38,13 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-02_13-23-51"
+        "test/test_data/saved_trees/Skeleton_2025-07-14_13-41-46"
     )
 
     print(trained_xtree)
     
     predicted_labels = Predict.inference(
-        trained_xtree, input_text, transformer_config, encoder_config, k=k
+        trained_xtree, input_text, transformer_config, k=k
     )
 
     print(predicted_labels)

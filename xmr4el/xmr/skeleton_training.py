@@ -144,30 +144,27 @@ class SkeletonTraining():
         for eid, emb in zip(kb_ids, conc_array):
             entity_embs[eid].append(emb)
             
-        entity_emb_dict = {eid: np.mean(embs, axis=0) for eid, embs in entity_embs.items()}
-        
         X_pairs, y_labels = [], []
         
-        for i, m_emb in enumerate(conc_array):
-            true_eid = kb_ids[i]
-
-            # Positive pair
-            pos_pair = (m_emb, entity_emb_dict[true_eid])
-            X_pairs.append(np.hstack(pos_pair))
+        entity_centroids = {eid: np.mean(embs, axis=0) for eid, embs in entity_embs.items()}
+        
+        for i, mention_emb in enumerate(conc_array):
+            true_ied = kb_ids[i]
+            
+            pos_pair = np.hstack((mention_emb, entity_centroids[true_ied]))
+            X_pairs.append(pos_pair)
             y_labels.append(1)
-
-            # Sample 5 random *incorrect* entity IDs
-            negatives = random.sample([eid for eid in entity_emb_dict if eid != true_eid], k=5)
+            
+            # Sample negatives
+            negatives = random.sample([eid for eid in entity_centroids if eid != true_ied], k=5)
             for neg_eid in negatives:
-                neg_pair = (m_emb, entity_emb_dict[neg_eid])
-                X_pairs.append(np.hstack(neg_pair))
+                neg_pair = np.hstack((mention_emb, entity_centroids[neg_eid]))
+                X_pairs.append(neg_pair)
                 y_labels.append(0)
         
-        # Train Reranker with X_pairs and y_labels, postive or negative
-        
         reranker_model = self._train_classifier(
-            X_pairs, 
-            y_labels,
+            np.array(X_pairs), 
+            np.array(y_labels),
             self.classifier_config,
             self.dtype
         )
@@ -181,6 +178,7 @@ class SkeletonTraining():
         htree.set_test_split(test_split)
         
         htree.set_reranker(reranker_model)
+        htree.set_entity_centroids(entity_centroids)
 
         # Recurse to child nodes
         for children_htree in htree.children.values():
