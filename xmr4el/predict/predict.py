@@ -155,7 +155,7 @@ class Predict():
         return csr_matrix((vals, (rows, cols)), shape=(len(predictions), num_labels), dtype=np.float32)
             
     @classmethod
-    def _rank(cls, predictions, train_data, alias_data, input_texts, encoder_config, candidates=100, k=5):
+    def _rank(cls, predictions, train_data, input_texts, encoder_config, candidates=100, k=5):
         """
         Simplified two-stage ranking pipeline without batching
         
@@ -172,45 +172,44 @@ class Predict():
         candidate_retrieval = CandidateRetrieval()
         cross_encoder = CrossEncoder(encoder_config)
         trn_corpus = list(train_data.values())
-        
+
         LOGGER.info(f"Ranking {len(predictions)} predictions")
 
         # --- Phase 1: Candidate Retrieval ---
         LOGGER.info("First Stage Retrieval")
         indices_list = []
-        
+
         for kb_indices, conc_input, conc_emb in predictions:
             # Ensure proper input shape for FAISS
             query = np.atleast_2d(conc_input)
             candidates_emb = np.atleast_2d(conc_emb)
-            
+
             # Get candidates
             scores, indices = candidate_retrieval.retrival(query, candidates_emb, candidates)
-            
+
             # 30 candidates,
             candidates_indices = min(k, len(indices))
             indices = indices[indices != -1].flatten()[:candidates_indices]
-            
+
             indices_list.append(indices)
-            
-        
+
+
         # --- Phase 2: Cross-Encoder Scoring ---
         LOGGER.info("Second Stage Cross-Encoder")
-        
+
         text_pairs = []
-        entity_indices = []
-        
-        # ALIAS CHOOSING
-        for i, (kb_indices, _, _) in enumerate(predictions):
+        entity_indices = []  # Tracks entity index for each pair (no alias details)
+
+        for i, indices in enumerate(indices_list):
             query = input_texts[i]
-            for idx in kb_indices:
-                best_alias = alias_data.get(int(idx), trn_corpus[int(idx)][0])
-                text_pairs.append((query, best_alias))
-                entity_indices.append(idx)
+            for idx in indices:
+                aliases = trn_corpus[int(idx)]
+                text_pairs.extend([(query, alias) for alias in aliases])
+                entity_indices.extend([idx] * len(aliases))  # Repeat entity index
 
         # Batch scoring
         entity_scores_dict, _ = cross_encoder.predict(text_pairs, entity_indices)
-        
+
         # Recombine scores per query
         results = []
         for i, (kb_indices, _, _) in enumerate(predictions):
@@ -220,17 +219,17 @@ class Predict():
                 for idx in indices_list[i] 
                 if idx in entity_scores_dict
             }
-            
+
             # Sort entities by score (descending)
             sorted_entities = sorted(
                 query_entity_scores.items(),
                 key=lambda x: -x[1]
             )
-            
+
             # Map to final labels
             label_ids = [kb_indices[int(idx)] for idx, _ in sorted_entities]
             scores = [score for _, score in sorted_entities]
-            
+
             results.append((label_ids, scores))
 
         return results 

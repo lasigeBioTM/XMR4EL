@@ -216,13 +216,16 @@ class SkeletonBuilder():
     
     @staticmethod
     def _alias_data_collecting(trn_corpus, tfidf_matrix):
+        tfidf_matrix = tfidf_matrix.toarray()
+        print(len(trn_corpus), tfidf_matrix.shape)
         # For each entity, pick alias with highest max TF-IDF score
         best_aliases = {}
         for entity_id, aliases in enumerate(trn_corpus):
+            # print(type(aliases), aliases)
             if not aliases:
                 continue
-            alias_scores = tfidf_matrix[entity_id].max(axis=1).A1  # Max TF-IDF per alias
-            best_idx = alias_scores.argmax()
+            entity_scores = tfidf_matrix[entity_id] # Max TF-IDF per alias
+            best_idx = np.argmax(entity_scores)
             best_aliases[entity_id] = aliases[best_idx]
         return best_aliases
             
@@ -264,8 +267,10 @@ class SkeletonBuilder():
         htree.set_vectorizer(vec_model)
         
         # Step 1.5: Collect alias
-        alias_data = self._alias_data_collecting(trn_corpus, vec_emb)
+        alias_data = self._alias_data_collecting(x_cross_train, vec_emb)
         htree.set_alias_data(alias_data)
+        
+        print(alias_data)
         
         # Reduce dimensions, and save the model to use in predict method
         vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features)
