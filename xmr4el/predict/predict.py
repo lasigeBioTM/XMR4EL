@@ -434,7 +434,7 @@ class Predict():
 
         predictions = cls._predict_batch_memopt(htree, concat_emb)
         
-        results = cls._rank(predictions, htree.train_data, htree.alias_data, input_text, encoder_config, candidates=k)
+        results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=k)
         
         print(results)
 
