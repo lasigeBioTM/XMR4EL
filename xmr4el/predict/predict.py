@@ -326,16 +326,18 @@ class Predict():
     @classmethod
     def _predict_inference(cls, htree, all_kb_ids, batch_conc_input, batch_labels, candidates=100):
         """
-        Consolidated multi-label prediction handling.
+        Properly aligned prediction with golden label comparison.
+        
+        Args:
+            batch_labels: List of golden label IDs corresponding to batch_conc_input
+            batch_conc_input: Input embeddings (n_samples x n_features)
         """
         n_samples = batch_conc_input.shape[0]
         results = [None] * n_samples
+        hit_info = [{'found': False, 'candidates': []} for _ in range(n_samples)]
+        
         current_nodes = [htree] * n_samples
         active_indices = list(range(n_samples))
-        
-        # Initialize hit tracking
-        hit_counts = np.zeros(n_samples)
-        label_counts = np.zeros(n_samples)
         
         while active_indices:
             node_groups = defaultdict(list)
@@ -354,22 +356,20 @@ class Predict():
                 
                 for i, idx in enumerate(group_indices):
                     top_label = top_labels[i]
-                    current_labels = batch_labels[idx]  # List of golden labels
+                    golden_label = batch_labels[idx]  # Get the corresponding golden label
                     
                     if top_label in node.children:
                         current_nodes[idx] = node.children[top_label]
                         new_active_indices.append(idx)
                     else:
-                        # Leaf node processing
+                        # Leaf node processing - get candidates
                         mask = node.clustering_model.labels() == top_label
                         cand_kb_indices = np.array(node.kb_indices)[mask]
                         candidate_ids = np.array(all_kb_ids)[cand_kb_indices]
                         
-                        # Update hit counts for all golden labels
-                        for label in current_labels:
-                            label_counts[idx] += 1
-                            if label in candidate_ids:
-                                hit_counts[idx] += 1
+                        # Store whether golden label was found
+                        hit_info[idx]['found'] = golden_label in candidate_ids
+                        hit_info[idx]['candidates'] = candidate_ids
                         
                         # Reranking
                         mention_emb = batch_conc_input[idx]
@@ -388,13 +388,8 @@ class Predict():
             
             active_indices = new_active_indices
         
-        # Calculate final hit ratios
-        hit_ratios = np.divide(
-            hit_counts,
-            label_counts,
-            out=np.zeros_like(hit_counts),
-            where=label_counts!=0
-        )
+        # Calculate hit ratios (1 if found, 0 otherwise)
+        hit_ratios = [int(info['found']) for info in hit_info]
         
         return results, hit_ratios
         
