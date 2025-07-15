@@ -518,6 +518,8 @@ class Predict():
         del transformer_emb, dense_text_emb
         gc.collect()
 
+        print(concat_emb.shape, len(labels))
+
         # 2. Get predictions
         predictions, hit_ratios = cls._predict_inference(
             htree, 
