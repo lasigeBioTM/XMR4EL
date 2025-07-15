@@ -247,9 +247,9 @@ class SkeletonBuilder():
         # Initialize tree structure 
         htree = Skeleton(depth=0)
         
-        htree.set_labels = labels
-        htree.set_train_data = x_cross_train
-        htree.set_dict_data = train_data
+        htree.set_labels(labels)
+        htree.set_train_data(x_cross_train)
+        htree.set_dict_data(train_data)
         
         print(htree.labels)
 
@@ -308,7 +308,7 @@ class SkeletonBuilder():
             trn_corpus, self.transformer_config, self.dtype
         )
         transformer_emb = transformer_model.embeddings()
-        htree.set_transformer_config = self.transformer_config
+        htree.set_transformer_config(self.transformer_config)
         del transformer_model  # Clean up memory
 
         # Normalize and reduce transformer embeddings

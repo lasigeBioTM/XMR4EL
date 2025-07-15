@@ -556,8 +556,6 @@ class Predict():
         dense_text_emb = svd.transform(text_emb)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
-        print(htree.transformer_config)
-        
         transformer_model = cls._predict_transformer(
             input_text, 
             htree.transformer_config, 
@@ -574,10 +572,9 @@ class Predict():
         gc.collect()
 
         # 2. Get predictions
-        all_kb_ids = list(htree.train_data.keys())
         predictions, hit_ratios = cls._predict_batch_memopt_inference(
             htree, 
-            all_kb_ids, 
+            htree.labels, 
             concat_emb, 
             labels, 
             candidates=k*3  # Get more candidates for multi-label case
