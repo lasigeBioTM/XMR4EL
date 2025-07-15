@@ -427,55 +427,6 @@ class Predict():
                 gc.collect()
         
         return results
-    
-    @classmethod
-    def _predict_batch_memopt_inference(cls, htree, all_kb_ids, batch_conc_input, batch_labels, candidates=100, batch_size=640000):
-        """
-        Memory-optimized batch prediction with multi-label support.
-        
-        Args:
-            batch_labels: List of lists of label IDs
-            ... other params same as before ...
-            
-        Returns:
-            tuple: (predictions, hit_ratios)
-        """
-        n_samples = batch_conc_input.shape[0]
-        all_predictions = []
-        all_hit_ratios = []
-        
-        for i in range(0, n_samples, batch_size):
-            chunk = batch_conc_input[i:i+batch_size]
-            chunk_labels = batch_labels[i:i+batch_size]
-            
-            # Process each input's labels separately
-            chunk_predictions = []
-            chunk_hit_ratios = []
-            
-            for j in range(len(chunk)):
-                # For each input, check all its labels
-                input_labels = chunk_labels[j]
-                input_emb = chunk[j:j+1]  # Keep 2D shape
-                
-                # Get predictions for this single input
-                predictions, _, hit_ratio = cls._predict_inference(
-                    htree,
-                    all_kb_ids,
-                    input_emb,
-                    input_labels,  # Pass all labels for this input
-                    candidates
-                )
-                
-                chunk_predictions.extend(predictions)
-                chunk_hit_ratios.append(hit_ratio)
-            
-            all_predictions.extend(chunk_predictions)
-            all_hit_ratios.extend(chunk_hit_ratios)
-            
-            if i % (10 * batch_size) == 0:
-                gc.collect()
-        
-        return all_predictions, all_hit_ratios
                 
     @classmethod
     def predict(
@@ -572,7 +523,7 @@ class Predict():
         gc.collect()
 
         # 2. Get predictions
-        predictions, hit_ratios = cls._predict_batch_memopt_inference(
+        predictions, hit_ratios = cls._predict_inference(
             htree, 
             htree.labels, 
             concat_emb, 
