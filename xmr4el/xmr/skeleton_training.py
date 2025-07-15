@@ -70,8 +70,41 @@ class SkeletonTraining():
         """
         # Delegate training to ClassifierModel class
         return ClassifierModel.train(X_corpus, y_corpus, config, dtype)
+    
+    def _train_tree_classifier(self, X_corpus, y_corpus, config, dtype=np.float32):
+        
+        # Spit data for classifier training
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_corpus,
+            y_corpus,
+            test_size=self.test_size,
+            random_state=self.random_state,
+            stratify=y_corpus,
+        )
+        
+        # Save the results to tree node
+        test_split = {
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_test": X_test,
+            "y_test": y_test,
+        }
+        
+        model = self._train_classifier(X_train, y_train, config)
+        
+        return test_split, model
+    
+    def _train_flat_classifier(self, conc_syn_list, config, dtype=np.float32):
+        
+        for syn_list in conc_syn_list:
+            print(syn_list.keys())
+            exit()
+    
+    def train_reranker(self):
+        pass
+        
 
-    def execute(self, htree, all_kb_ids):
+    def execute(self, htree, all_kb_ids, embeddings_dict):
         """
         Recursively trains classifiers throughout the hierarchical tree.
         
@@ -113,30 +146,13 @@ class SkeletonTraining():
         # Create combined feature space
         conc_array = np.hstack((trans_emb, text_emb_array)) # The transformer embedings with text embeddings
 
-        # Spit data for classifier training
-        X_train, X_test, y_train, y_test = train_test_split(
-            conc_array, # trans_emb
-            cluster_labels,
-            test_size=self.test_size,
-            random_state=self.random_state,
-            stratify=cluster_labels,
-        )
+        tree_split, tree_model = self._train_tree_classifier(conc_array, cluster_labels, self.classifier_config)
 
-        # Train classifier for this node
-        classifier_model = self._train_classifier(
-            X_train, 
-            y_train, 
-            self.classifier_config, 
-            self.dtype
-        )
+        conc_syn_list = [embeddings_dict[ids] for ids in kb_ids]
 
-        # Save the results to tree node
-        test_split = {
-            "X_train": X_train,
-            "y_train": y_train,
-            "X_test": X_test,
-            "y_test": y_test,
-        }
+        flat_split, flat_model = self._train_flat_classifier(conc_syn_list, self.classifier_config)
+
+        self.classifier_config["kwargs"]["objective"] = "multiclass"
         
         # -- Step 2: Create positive and negative (x, e) pairs --        
 
@@ -161,6 +177,9 @@ class SkeletonTraining():
                 neg_pair = np.hstack((mention_emb, entity_centroids[neg_eid]))
                 X_pairs.append(neg_pair)
                 y_labels.append(0)
+        
+        # Hardoced for lightgbm
+        # self.classifier_config["kwargs"]["objective"] = "binary"
         
         reranker_model = self._train_classifier(
             np.array(X_pairs), 

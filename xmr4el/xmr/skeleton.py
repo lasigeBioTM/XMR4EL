@@ -31,19 +31,21 @@ class Skeleton:
     
     def __init__(
         self,
+        labels=None,
         train_data=None,
-        pifa_embeddings=None,
+        dict_data=None,
         text_embeddings=None,
-        text_features=None,
-        alias_data=None,
+        transformer_config=None,
         transformer_embeddings=None,
         concatenated_embeddings=None,
         kb_indices=None,
         vectorizer=None,
         dimension_model=None,
         clustering_model=None,
-        classifier_model=None,
-        test_split=None,
+        tree_classifier=None,
+        tree_test_split=None,
+        flat_classifier=None,
+        flat_test_split=None,
         reranker=None,
         entity_centroids=None,
         children=None,  # Dictionary of XMRTree nodes
@@ -66,30 +68,37 @@ class Skeleton:
             children: Dictionary of child nodes (key=cluster ID, value=XMRTree)
             depth: Current depth in the hierarchy (0=root)
         """
-        # Training data
-        self.train_data = train_data
+        self.labels = labels # raw labels
+        self.train_data = train_data # raw training data
         
-        # Label information
-        self.pifa_embeddings = pifa_embeddings
+        self.dict_data = dict_data # dict[label] = train_data
+        
+        self.kb_indices = kb_indices # Indices of data points in this node
 
         # Embeddings storage
         self.text_embeddings = text_embeddings
-        self.text_features = text_features
-        
-        self.alias_data = alias_data
-        
+
+        self.transformer_config = transformer_config
         self.transformer_embeddings = transformer_embeddings
         self.concatenated_embeddings = concatenated_embeddings
-        self.kb_indices = kb_indices # Indices of data points in this node
         
         # Models
         self.vectorizer = vectorizer
         self.dimension_model = dimension_model
         self.clustering_model = clustering_model
-        self.classifier_model = classifier_model
-        self.test_split = test_split # Evaluation Data
+        
+
+        self.tree_classifier = tree_classifier
+        self.tree_test_split = tree_test_split # Evaluation Data
+        
+        self.flat_classifier = flat_classifier
+        self.flat_test_split = flat_test_split # Evaluation Data
         
         self.reranker = reranker
+        
+        
+        self.reranker = reranker
+        
         self.entity_centroids = entity_centroids
 
         # Tree Structure
@@ -119,7 +128,7 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "dimension_model", "clustering_model", "classifier_model", "reranker"] # reranker
+        models = ["vectorizer", "dimension_model", "clustering_model", "tree_classifier", "flat_classifier", "reranker"] # reranker
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
@@ -231,7 +240,8 @@ class Skeleton:
             "vectorizer": Vectorizer if hasattr(Vectorizer, 'load') else None,
             "dimension_model": None,  # Will handle generically
             "clustering_model": ClusteringModel if hasattr(ClusteringModel, 'load') else None,
-            "classifier_model": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
+            "tree_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
+            "flat_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
             "reranker": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
         }
         
@@ -289,21 +299,29 @@ class Skeleton:
         LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
     
+    def set_labels(self, labels):
+        """Raw labels"""
+        self.labels = labels
+    
     def set_train_data(self, train_data):
         """Set Training Data"""
         self.train_data = train_data
         
-    def set_pifa_embeddings(self, pifa_embeddings):
-        """Set PIFA label embeddings for this node."""
-        self.pifa_embeddings = pifa_embeddings
+    def set_dict_data(self, dict_data):
+        """dict[labels] = train_data """
+        self.dict_data = dict_data
+        
+    def set_kb_indices(self, kb_indices):
+        """Set knowledge base indices for this node's data points."""
+        self.kb_indices = kb_indices
 
     def set_text_embeddings(self, text_embeddings):
         """Set text embeddings (e.g., TF-IDF) for this node."""
         self.text_embeddings = text_embeddings
         
-    def set_alias_data(self, alias_data):
-        """Set alias data according to tf-idf"""
-        self.alias_data = alias_data
+    def set_transformer_config(self, transformer_config):
+        """Set tranformer config"""
+        self.transformer_config = transformer_config
 
     def set_transformer_embeddings(self, transformer_embeddings):
         """Set transformer model embeddings for this node."""
@@ -312,10 +330,6 @@ class Skeleton:
     def set_concatenated_embeddings(self, concatenated_embeddings):
         """Set concatenated feature embeddings for this node."""
         self.concatenated_embeddings = concatenated_embeddings
-        
-    def set_kb_indices(self, kb_indices):
-        """Set knowledge base indices for this node's data points."""
-        self.kb_indices = kb_indices
 
     def set_vectorizer(self, vectorizer):
         """Set the text vectorizer model (typically only at root)."""
@@ -329,13 +343,21 @@ class Skeleton:
         """Set the clustering model for this node."""
         self.clustering_model = clustering_model
 
-    def set_classifier_model(self, classifier_model):
+    def set_tree_classifier(self, tree_classifier):
         """Set the classifier model for this node."""
-        self.classifier_model = classifier_model
+        self.tree_classifier = tree_classifier
 
-    def set_test_split(self, test_split):
+    def set_tree_test_split(self, tree_test_split):
         """Set train/test split data for evaluation."""
-        self.test_split = test_split
+        self.tree_test_split = tree_test_split
+        
+    def set_flat_classifier(self, flat_classifier):
+        """Set the classifier model for this node."""
+        self.flat_classifier = flat_classifier
+
+    def set_flat_test_split(self, flat_test_split):
+        """Set train/test split data for evaluation."""
+        self.flat_test_split = flat_test_split
         
     def set_reranker(self, reranker):
         """Set Reranker for evaluation"""

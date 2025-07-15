@@ -75,6 +75,7 @@ def main():
         }
     }
 
+    """
     classifier_config = {
         "type": "sklearnlogisticregression",
         "kwargs": {
@@ -86,13 +87,22 @@ def main():
             "max_iter":1000
             },
     }
-    
     """
+        
     classifier_config = {
         "type": "lightgbmclassifier",
-        "kwargs": {"random_state": 0}
+        "kwargs": {
+            "objective": "multiclass",
+            "boosting_type": "gbdt",
+            "learning_rate": 0.05,
+            "n_estimators": 300,
+            "num_leaves": 64,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "n_jobs": -1,
+            "random_state": 42
+        }
     }
-    """
     
     training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
@@ -100,19 +110,19 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=150
+        truncate_data=60
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix
     raw_labels = train_data["raw_labels"]
-    X_train = train_data["corpus"] # List
-    X_cross_train = train_data["cross_corpus"]
+    X_train = train_data["corpus"] # only List
+    X_cross_train = train_data["cross_corpus"] # list of lists
 
-    # print(raw_labels[8240])
-    # print(X_cross_train[8240])
+    # print(raw_labels[5686])
+    # print(X_cross_train[5686])
     
-    # print(raw_labels[9807])
-    # print(X_cross_train[9807])
+    # print(raw_labels[6312])
+    # print(X_cross_train[6312])
     
     # exit()
 

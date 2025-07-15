@@ -299,8 +299,6 @@ class Predict():
                         cand_kb_indices = np.array(node.kb_indices)[mask]
                         unique_kb_ids = np.array(all_kb_ids)[cand_kb_indices]
                         
-                        # print(entity_centroids)
-                        
                         mention_emb = batch_conc_input[idx]
                         
                         rerank_X = np.vstack([
@@ -324,7 +322,7 @@ class Predict():
         return results
     
     @classmethod
-    def _predict_batch_memopt(cls, htree, all_kb_ids, batch_conc_input, candidates=100, batch_size=32768):
+    def _predict_batch_memopt(cls, htree, all_kb_ids, batch_conc_input, candidates=100, batch_size=640000):
         """
         Memory-optimized batch prediction that processes inputs in chunks.
         
@@ -354,7 +352,7 @@ class Predict():
                 
     @classmethod
     def inference(
-        cls, htree, input_text, transformer_config, k=3, dtype=np.float32
+        cls, htree, input_text, k=3, dtype=np.float32
     ):
         """
         End-to-end prediction pipeline for XMR system.
@@ -371,19 +369,11 @@ class Predict():
         """
         LOGGER.info(f"Started inference")
         # Step 1: Generate text embeddings using stored vectorizer
-        # text_emb = cls._predict_vectorizer(htree.vectorizer, input_text)
-        
-        n_features = htree.text_features
-        
-        # print(n_features)
-        
-        # vec_config["kwargs"]["max_features"] = n_features
-        
         vec = htree.vectorizer
         text_emb = cls._predict_vectorizer(vec, input_text)
         
         
-        LOGGER.info(f"Truncating text_embeddings to {n_features} n features")
+        LOGGER.info(f"Truncating text_embedding")
         svd = htree.dimension_model
         dense_text_emb = svd.transform(text_emb) # turns it into dense auto
 
@@ -393,7 +383,7 @@ class Predict():
         # Step 2: Generate transformer embeddings with memory management
         transformer_model = cls._predict_transformer(
             input_text, 
-            transformer_config, 
+            htree.transformer_config, 
             dtype
         )
         

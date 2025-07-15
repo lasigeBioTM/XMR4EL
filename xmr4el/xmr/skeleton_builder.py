@@ -9,6 +9,8 @@ from sklearn.preprocessing import normalize
 
 from umap import UMAP
 
+from collections import defaultdict
+
 from scipy.sparse import csr_matrix
 
 from xmr4el.featurization.featurization import PIFAEmbeddingFactory
@@ -243,7 +245,11 @@ class SkeletonBuilder():
             train_data[label] = trn
         
         # Initialize tree structure 
-        htree = Skeleton(depth=0, train_data=train_data)
+        htree = Skeleton(depth=0)
+        
+        htree.set_labels = labels
+        htree.set_train_data = x_cross_train
+        htree.set_dict_data = train_data
 
         # Step 1: Text vectorization
         LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
@@ -261,13 +267,10 @@ class SkeletonBuilder():
         
         # Reduce dimensions, no need to save the model
         pifa_emb, _ = self._reduce_dimensionality(pifa_emb, self.n_features)
-        htree.set_pifa_embeddings(pifa_emb) # Set pifa embeddings
 
         # Attention Model to form conc_emb Unsupervised
         fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])        
         conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
-        
-        htree.text_features = conc_emb.shape[1]
 
         # Normalize PIFA embeddings
         dense_conc_emb = normalize(conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
@@ -303,10 +306,51 @@ class SkeletonBuilder():
             trn_corpus, self.transformer_config, self.dtype
         )
         transformer_emb = transformer_model.embeddings()
+        htree.set_transformer_config = self.transformer_config
         del transformer_model  # Clean up memory
 
         # Normalize and reduce transformer embeddings
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
+
+
+
+
+
+        # Embeddigns for flat classifier
+
+    
+        all_synonyms = [syn for group in x_cross_train for syn in group]
+        unique_synonyms = list(set(all_synonyms))
+        synonym_to_group = {syn: [] for syn in unique_synonyms}
+        for id, group in zip(labels, x_cross_train):
+            for syn in group:
+                synonym_to_group[syn].append(id)
+                
+        
+        tfidf_matrix = self._predict_vectorizer(vec_model, unique_synonyms)
+        tfidf_embeddings = svd.transform(tfidf_matrix)
+        tfidf_embeddings = normalize(tfidf_embeddings, norm="l2", axis=1)
+        tfidf_dict = dict(zip(unique_synonyms, tfidf_embeddings))
+        
+        # 3. Transformer processing using your method
+        transformer_model = self._predict_transformer(
+            unique_synonyms,  # Process all unique synonyms at once
+            self.transformer_config,
+            self.dtype
+        )
+        
+        transformer_emb = transformer_model.embeddings()
+        transformer_dict = dict(zip(unique_synonyms, transformer_emb))
+        
+        # 4. Create nested dictionary structure
+        embeddings_dict = defaultdict(dict)
+        for id, synonym_group in zip(labels, x_cross_train):
+            for syn in synonym_group:
+                concatenated = np.concatenate([
+                    tfidf_dict[syn],
+                    transformer_dict[syn]
+                ])
+                embeddings_dict[id][syn] = concatenated
 
         # Step 5: Train classifiers throughout hierarchy  
         LOGGER.info(f"Initializing SkeletonTraining")      
@@ -317,6 +361,6 @@ class SkeletonBuilder():
         LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         all_kb_ids = list(htree.train_data.keys())
         
-        skl_train.execute(htree, all_kb_ids)
+        skl_train.execute(htree, all_kb_ids, embeddings_dict)
 
         return htree
