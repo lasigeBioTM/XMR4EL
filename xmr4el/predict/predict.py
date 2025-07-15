@@ -530,9 +530,7 @@ class Predict():
         del transformer_emb, dense_text_emb
         gc.collect()
 
-        all_kb_ids = list(htree.train_data.keys())
-
-        predictions = cls._predict_batch_memopt(htree, all_kb_ids, concat_emb, candidates=10)
+        predictions = cls._predict_batch_memopt(htree, htree.labels, concat_emb, candidates=10)
         
         return cls._convert_predictions_into_csr(predictions)
         
@@ -583,9 +581,7 @@ class Predict():
         del transformer_emb, dense_text_emb
         gc.collect()
 
-        all_kb_ids = list(htree.train_data.keys())
-
-        predictions = cls._predict_batch_memopt_inference(htree, all_kb_ids, concat_emb, labels, candidates=10)
+        predictions = cls._predict_batch_memopt_inference(htree, htree.labels, concat_emb, labels, candidates=10)
         
         print(predictions)
         
