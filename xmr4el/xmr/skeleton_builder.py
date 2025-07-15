@@ -356,8 +356,7 @@ class SkeletonBuilder():
                                      dtype=self.dtype)
         
         LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
-        all_kb_ids = list(htree.train_data.keys())
         
-        skl_train.execute(htree, all_kb_ids)
+        skl_train.execute(htree, htree.labels)
 
         return htree
