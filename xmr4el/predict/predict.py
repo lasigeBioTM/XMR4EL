@@ -357,7 +357,7 @@ class Predict():
                 group_inputs = batch_conc_input[group_indices]
                 
                 # Batch predict probabilities
-                probs = cls._predict_proba_classifier(node.classifier_model, group_inputs)
+                probs = cls._predict_proba_classifier(node.tree_classifier, group_inputs)
                 top_labels = np.argmax(probs, axis=1)
                 
                 for i, idx in enumerate(group_indices):
