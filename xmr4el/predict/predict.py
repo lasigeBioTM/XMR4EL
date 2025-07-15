@@ -442,7 +442,6 @@ class Predict():
         """
         n_samples = batch_conc_input.shape[0]
         all_predictions = []
-        all_labels_list = []
         all_hit_ratios = []
         
         for i in range(0, n_samples, batch_size):
@@ -451,7 +450,6 @@ class Predict():
             
             # Process each input's labels separately
             chunk_predictions = []
-            chunk_labels = []
             chunk_hit_ratios = []
             
             for j in range(len(chunk)):
@@ -460,7 +458,7 @@ class Predict():
                 input_emb = chunk[j:j+1]  # Keep 2D shape
                 
                 # Get predictions for this single input
-                predictions, labels_list, hit_ratio = cls._predict_inference(
+                predictions, _, hit_ratio = cls._predict_inference(
                     htree,
                     all_kb_ids,
                     input_emb,
@@ -469,17 +467,15 @@ class Predict():
                 )
                 
                 chunk_predictions.extend(predictions)
-                chunk_labels.append(labels_list)
                 chunk_hit_ratios.append(hit_ratio)
             
             all_predictions.extend(chunk_predictions)
-            all_labels_list.extend(chunk_labels)
             all_hit_ratios.extend(chunk_hit_ratios)
             
             if i % (10 * batch_size) == 0:
                 gc.collect()
         
-        return all_predictions, all_labels_list, all_hit_ratios
+        return all_predictions, all_hit_ratios
                 
     @classmethod
     def predict(
@@ -537,41 +533,37 @@ class Predict():
     @classmethod
     def inference(cls, htree, labels, input_text, k=5, dtype=np.float32):
         """
-        End-to-end prediction pipeline for XMR system.
+        End-to-end prediction pipeline for XMR system with multi-label support.
         
         Args:
             htree (XMRTree): Trained hierarchical tree model
-            input_text (iterable): Input text(s) to predict
-            transformer_config (dict): Transformer configuration
-            k (int): Number of predictions to return per input. Defaults to 3.
-            dtype (np.dtype): Data type for embeddings. Defaults to np.float32.
+            labels: List of lists of label IDs (e.g., [['D002294', 'D002583'], ['D000223'], ...])
+            input_text: Input text(s) to predict
+            k: Number of predictions to return per input
+            dtype: Data type for embeddings
             
         Returns:
-            csr_matrix: Sparse prediction matrix of shape (n_inputs * n_labels)
+            tuple: (csr_matrix, list) where:
+                - csr_matrix: Sparse prediction matrix
+                - list: List of label hit ratios for each input
         """
-        LOGGER.info(f"Started inference")
-        # Step 1: Generate text embeddings using stored vectorizer
+        LOGGER.info("Started inference")
+        
+        # 1. Generate embeddings
         vec = htree.vectorizer
         text_emb = cls._predict_vectorizer(vec, input_text)
-        
-        
-        LOGGER.info(f"Truncating text_embedding")
         svd = htree.dimension_model
-        dense_text_emb = svd.transform(text_emb) # turns it into dense auto
-
-        # Normalize text embeddings (handling sparse)
+        dense_text_emb = svd.transform(text_emb)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
-        # Step 2: Generate transformer embeddings with memory management
+        print(htree.transformer_config)
+        
         transformer_model = cls._predict_transformer(
             input_text, 
             htree.transformer_config, 
             dtype
         )
-        
-        transformer_emb = transformer_model.model.embeddings
-
-        transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
+        transformer_emb = normalize(transformer_model.model.embeddings, norm="l2", axis=1)
         
         concat_emb = np.hstack((
             transformer_emb.astype(dtype),
@@ -581,9 +573,17 @@ class Predict():
         del transformer_emb, dense_text_emb
         gc.collect()
 
-        predictions = cls._predict_batch_memopt_inference(htree, htree.labels, concat_emb, labels, candidates=10)
+        # 2. Get predictions
+        all_kb_ids = list(htree.train_data.keys())
+        predictions, hit_ratios = cls._predict_batch_memopt_inference(
+            htree, 
+            all_kb_ids, 
+            concat_emb, 
+            labels, 
+            candidates=k*3  # Get more candidates for multi-label case
+        )
         
-        print(predictions)
-        
-        return cls._convert_predictions_into_csr(predictions)
+        # 3. Convert to CSR format
+        return cls._convert_predictions_into_csr(predictions), hit_ratios
+
         
