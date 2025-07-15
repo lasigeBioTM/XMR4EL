@@ -326,15 +326,23 @@ class Predict():
     @classmethod
     def _predict_inference(cls, htree, all_kb_ids, batch_conc_input, batch_labels, candidates=100):
         """
-        Properly aligned prediction with golden label comparison.
+        Predict with guaranteed alignment between inputs and golden labels.
         
         Args:
-            batch_labels: List of golden label IDs corresponding to batch_conc_input
+            htree: Trained hierarchical tree
+            all_kb_ids: List of all possible KB IDs
             batch_conc_input: Input embeddings (n_samples x n_features)
+            batch_labels: Golden labels (n_samples) - each can be single ID or list
+            candidates: Number of candidates to return
+            
+        Returns:
+            tuple: (predictions, hit_indicators)
+                predictions: List of (kb_indices, scores) tuples
+                hit_indicators: List indicating if golden label was found (1/0)
         """
         n_samples = batch_conc_input.shape[0]
         results = [None] * n_samples
-        hit_info = [{'found': False, 'candidates': []} for _ in range(n_samples)]
+        hit_indicators = [0] * n_samples  # 1 if golden label found, else 0
         
         current_nodes = [htree] * n_samples
         active_indices = list(range(n_samples))
@@ -349,36 +357,36 @@ class Predict():
                 group_inputs = batch_conc_input[group_indices]
                 
                 # Batch predict probabilities
-                classifier = node.tree_classifier
-                classifier.model.model.n_jobs = -1
-                probs = cls._predict_proba_classifier(classifier, group_inputs)
+                probs = cls._predict_proba_classifier(node.classifier_model, group_inputs)
                 top_labels = np.argmax(probs, axis=1)
                 
                 for i, idx in enumerate(group_indices):
                     top_label = top_labels[i]
-                    golden_label = batch_labels[idx]  # Get the corresponding golden label
+                    golden_label = batch_labels[idx]  # Get corresponding label(s)
                     
                     if top_label in node.children:
                         current_nodes[idx] = node.children[top_label]
                         new_active_indices.append(idx)
                     else:
-                        # Leaf node processing - get candidates
+                        # Get candidates at leaf node
                         mask = node.clustering_model.labels() == top_label
                         cand_kb_indices = np.array(node.kb_indices)[mask]
                         candidate_ids = np.array(all_kb_ids)[cand_kb_indices]
                         
-                        # Store whether golden label was found
-                        hit_info[idx]['found'] = golden_label in candidate_ids
-                        hit_info[idx]['candidates'] = candidate_ids
+                        # Check if golden label is in candidates (handles both str and list)
+                        if isinstance(golden_label, list):
+                            hit_indicators[idx] = int(any(label in candidate_ids for label in golden_label))
+                        else:
+                            hit_indicators[idx] = int(golden_label in candidate_ids)
                         
-                        # Reranking
-                        mention_emb = batch_conc_input[idx]
-                        rerank_X = np.vstack([
-                            np.hstack((mention_emb, node.entity_centroids[eid]))
+                        # Rerank candidates
+                        input_emb = batch_conc_input[idx]
+                        rerank_input = np.vstack([
+                            np.hstack((input_emb, node.entity_centroids[eid]))
                             for eid in candidate_ids
                         ])
                         
-                        scores = cls._predict_proba_classifier(node.reranker, rerank_X)[:, 1]
+                        scores = cls._predict_proba_classifier(node.reranker, rerank_input)[:, 1]
                         top_k_indices = np.argsort(scores)[-candidates:][::-1]
                         
                         results[idx] = (
@@ -388,10 +396,7 @@ class Predict():
             
             active_indices = new_active_indices
         
-        # Calculate hit ratios (1 if found, 0 otherwise)
-        hit_ratios = [int(info['found']) for info in hit_info]
-        
-        return results, hit_ratios
+        return results, hit_indicators
         
     @classmethod
     def _predict_batch_memopt(cls, htree, all_kb_ids, batch_conc_input, candidates=100, batch_size=640000):
@@ -517,8 +522,6 @@ class Predict():
 
         del transformer_emb, dense_text_emb
         gc.collect()
-
-        print(concat_emb.shape, len(labels))
 
         # 2. Get predictions
         predictions, hit_ratios = cls._predict_inference(
