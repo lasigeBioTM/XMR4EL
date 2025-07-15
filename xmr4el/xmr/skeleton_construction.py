@@ -35,8 +35,6 @@ class SkeletonConstruction():
     """
     
     def __init__(self, 
-                 max_n_clusters, 
-                 min_n_clusters,
                  min_leaf_size, 
                  dtype=np.float32):
         """
@@ -49,8 +47,6 @@ class SkeletonConstruction():
             dtype (np.dtype): Data type for computations. Defaults to np.float32.
         """
         # Configs
-        self.max_n_clusters = max_n_clusters
-        self.min_n_clusters = min_n_clusters
         self.min_leaf_size = min_leaf_size
         
         # Type
@@ -71,7 +67,7 @@ class SkeletonConstruction():
         # Delegate training to ClusteringModel class
         return ClusteringModel.train(trn_corpus, config, dtype)    
 
-    def execute(self, htree, comb_emb_idx, emb_idx, depth, clustering_config, root=False):
+    def execute(self, htree, comb_emb_idx, depth, clustering_config, root=False):
         """
         Recursively constructs the hierarchical clustering tree structure.
         
@@ -103,21 +99,17 @@ class SkeletonConstruction():
         if depth < 0:
             return htree
         
+        # Changing Config of model 
+        n_clusters = clustering_config["kwargs"]["n_clusters"]
+        
         # Convert indexed embeddings to array (sorted by index)
         indices = sorted(comb_emb_idx.keys())
         text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
 
-        min_clusterable_size = max(self.min_n_clusters, self.min_leaf_size)
+        min_clusterable_size = max(n_clusters, self.min_leaf_size)
 
         if len(text_emb_array) <= min_clusterable_size:
             return htree
-        
-        # Changing Config of model 
-        n_clusters = clustering_config["kwargs"]["n_clusters"]
-        
-        # print(text_emb_array)
-        
-        # print(text_emb_array.shape)
 
         clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)  
             
@@ -138,7 +130,7 @@ class SkeletonConstruction():
             
         LOGGER.info(f"Saving Clustering Model at depth {htree.depth}, with {n_clusters} clusters")
         htree.set_clustering_model(clustering_model)
-        htree.set_text_embeddings(emb_idx)
+        htree.set_text_embeddings(comb_emb_idx)
 
         # Process each cluster recursively
         unique_labels = np.unique(cluster_labels)
@@ -146,13 +138,11 @@ class SkeletonConstruction():
             cluster_indices = [idx for idx, label in zip(indices, cluster_labels) if label == cluster]
             
             filt_combined_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}
-            filt_text_dict = {idx: emb_idx[idx] for idx in cluster_indices}
             
             new_child_htree_instance = Skeleton(depth=htree.depth + 1)
             new_child_htree = self.execute(
                 new_child_htree_instance,
                 filt_combined_dict,
-                filt_text_dict,
                 depth - 1,
                 clustering_config,
             )

@@ -59,8 +59,6 @@ class SkeletonBuilder():
                  clustering_config,
                  classifier_config, 
                  n_features=1000,  # Number of Features
-                 max_n_clusters=16,
-                 min_n_clusters=6,
                  min_leaf_size=10,
                  depth=3,
                  dtype=np.float32):
@@ -88,8 +86,6 @@ class SkeletonBuilder():
         
         # Params
         self.n_features = n_features
-        self.max_n_clusters = max_n_clusters
-        self.min_n_clusters = min_n_clusters
         self.min_leaf_size = min_leaf_size
         if depth == -1:
             self.depth = 1000
@@ -216,7 +212,7 @@ class SkeletonBuilder():
         fused_all_tensor = torch.cat(fused_all, dim=0)
         return fused_all_tensor.numpy()
             
-    def execute(self, labels, x_cross_train, trn_corpus):
+    def execute(self, labels, x_cross_train):
         """
         Executes the complete XMR model building pipeline.
         
@@ -239,62 +235,78 @@ class SkeletonBuilder():
         # Clean up memory before starting
         gc.collect()
         
-        train_data = {}
-        
-        for label, trn in zip(labels, x_cross_train):
-            train_data[label] = trn
-        
-        # Initialize tree structure 
+                
+        # Step 0.5: Initialize tree
         htree = Skeleton(depth=0)
         
+        # Step 1: Flatten synonyms into corpus and build reverse mapping
+        trn_corpus = []
+        label_to_indices = defaultdict(list) # label -> indices of its synonyms in trn_corpus
+        
+        for label, synonyms in zip(labels, x_cross_train):
+            for synonym in synonyms:
+                idx = len(trn_corpus)
+                trn_corpus.append(synonym)
+                label_to_indices[label].append(idx)
+
         htree.set_labels(labels)
         htree.set_train_data(x_cross_train)
-        htree.set_dict_data(train_data)
         
-        print(htree.labels)
-
-        # Step 1: Text vectorization
+        print(trn_corpus[:5])
+        
+        # htree.set_dict_data()
+        
+        # Step 2: TF-IDF
         LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
+        
         vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
         vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
+        vec_emb = normalize(vec_emb, norm="l2", axis=1)        
         htree.set_vectorizer(vec_model)
         
-        # Reduce dimensions, and save the model to use in predict method
-        vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features)
+        # Reduce dimensions if needed, almost sure it will be needed will make n_features to be equal to transformers
+        dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features) # 768
         htree.set_dimension_model(svd)
         
-        # Step 2: PIFA embeddings
-        LOGGER.info("Computing PIFA")
-        pifa_emb = self._compute_pifa(trn_corpus)
+        # Step 3: Transformer Embeddings
+        LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
         
-        # Reduce dimensions, no need to save the model
-        pifa_emb, _ = self._reduce_dimensionality(pifa_emb, self.n_features)
-
-        # Attention Model to form conc_emb Unsupervised
-        fusion_model = AttentionFusion(vec_emb.shape[1], pifa_emb.shape[1])        
-        conc_emb = self._fused_emb(vec_emb, pifa_emb, fusion_model)
-
-        # Normalize PIFA embeddings
-        dense_conc_emb = normalize(conc_emb, norm="l2", axis=1) # Need to cap features in kwargs
-        dense_vec_emb = normalize(vec_emb, norm="l2", axis=1)
+        transformer_model = self._predict_transformer(
+            trn_corpus, self.transformer_config, self.dtype
+        )
+        transformer_emb = transformer_model.embeddings()
+        trans_emb = normalize(transformer_emb, norm="l2", axis=1)
         
-        # Create indexed versions for hierarchical processing
-        conc_emb_index = {idx: emb for idx, emb in enumerate(dense_conc_emb)}
-        vec_emb_idx = {idx: emb for idx, emb in enumerate(dense_vec_emb)}
+        htree.set_transformer_config(self.transformer_config)
+        
+        del transformer_model  # Clean up memory
+        
+        # Step 4: Combine both for each synonym
+        combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
 
-        # Step 3: Build hierarchical clustering structure 
+        label_emb_dict = {}
+        
+        for label in labels:
+            indices = label_to_indices[label]
+            emb_list = [combined_vecs[i] for i in indices]
+            label_emb_dict[label] = np.mean(emb_list, axis=0)
+
+        # print(label_emb_dict)
+
+        # Step 5: Build hierarchical clustering structure 
         LOGGER.info("Initializing SkeletonConstruction")
         skl_form = SkeletonConstruction(
-            max_n_clusters=self.max_n_clusters, 
-            min_n_clusters=self.min_n_clusters,
             min_leaf_size=self.min_leaf_size,
             dtype=self.dtype)
         
+        label_to_index = {label: idx for idx, label in enumerate(label_emb_dict.keys())}
+        index_to_label = {idx: label for label, idx in label_to_index.items()}
+        comb_emb_idx = {idx: label_emb_dict[label] for label, idx in label_to_index.items()}
+
         LOGGER.info(f"Executing Constructor -> {self.clustering_config}")
         htree = skl_form.execute(
             htree, 
-            conc_emb_index, 
-            vec_emb_idx, 
+            comb_emb_idx,
             depth=self.depth,
             clustering_config=self.clustering_config,
             root=True
@@ -302,59 +314,9 @@ class SkeletonBuilder():
         
         LOGGER.info(htree)
 
-        # Step 4: Transformer Embeddings
-        LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
-        transformer_model = self._predict_transformer(
-            trn_corpus, self.transformer_config, self.dtype
-        )
-        transformer_emb = transformer_model.embeddings()
-        htree.set_transformer_config(self.transformer_config)
-        del transformer_model  # Clean up memory
-
-        # Normalize and reduce transformer embeddings
-        transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
-
-        # Embeddigns for flat classifier
-        """
-
-        all_synonyms = [syn for group in x_cross_train for syn in group]
-        unique_synonyms = list(set(all_synonyms))
-        synonym_to_group = {syn: [] for syn in unique_synonyms}
-        for id, group in zip(labels, x_cross_train):
-            for syn in group:
-                synonym_to_group[syn].append(id)
-                
-        
-        tfidf_matrix = self._predict_vectorizer(vec_model, unique_synonyms)
-        tfidf_embeddings = svd.transform(tfidf_matrix)
-        tfidf_embeddings = normalize(tfidf_embeddings, norm="l2", axis=1)
-        tfidf_dict = dict(zip(unique_synonyms, tfidf_embeddings))
-        
-        # 3. Transformer processing using your method
-        transformer_model = self._predict_transformer(
-            unique_synonyms,  # Process all unique synonyms at once
-            self.transformer_config,
-            self.dtype
-        )
-        
-        transformer_emb = transformer_model.embeddings()
-        transformer_dict = dict(zip(unique_synonyms, transformer_emb))
-        
-        # 4. Create nested dictionary structure
-        embeddings_dict = defaultdict(dict)
-        for id, synonym_group in zip(labels, x_cross_train):
-            for syn in synonym_group:
-                concatenated = np.concatenate([
-                    tfidf_dict[syn],
-                    transformer_dict[syn]
-                ])
-                embeddings_dict[id][syn] = concatenated
-        """
-
         # Step 5: Train classifiers throughout hierarchy  
         LOGGER.info(f"Initializing SkeletonTraining")      
-        skl_train = SkeletonTraining(transformer_emb,
-                                     self.classifier_config, 
+        skl_train = SkeletonTraining(self.classifier_config, 
                                      dtype=self.dtype)
         
         LOGGER.info(f"Executing Trainer -> {self.classifier_config}")

@@ -24,9 +24,9 @@ def main():
     
     start = time.time()
 
-    min_leaf_size = 20
+    min_leaf_size = 2
     depth = 3
-    n_features = 5000
+    n_features = 768
     max_n_clusters = 6
     min_n_clusters = 2
 
@@ -110,7 +110,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=60
+        truncate_data=100
         )
     
     Y_train = train_data["labels_matrix"] # csr.matrix
@@ -140,16 +140,13 @@ def main():
         clustering_config, 
         classifier_config, 
         n_features, 
-        max_n_clusters, 
-        min_n_clusters, 
         min_leaf_size, 
         depth, 
         dtype=np.float32)
 
     htree = pipe.execute(
         raw_labels,
-        X_cross_train,
-        X_train,
+        X_cross_train
     )
 
     # Print the tree structure

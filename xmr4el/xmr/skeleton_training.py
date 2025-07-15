@@ -36,7 +36,7 @@ class SkeletonTraining():
         dtype (np.dtype): Data type for numerical operations
     """
     
-    def __init__(self, init_tfr_emb, classifier_config, test_size=0.2, random_state=42, dtype=np.float32):
+    def __init__(self, classifier_config, test_size=0.2, random_state=42, dtype=np.float32):
         """
         Initializes the SkeletonTraining with training parameters.
         
@@ -47,8 +47,6 @@ class SkeletonTraining():
             random_state (int): Random seed for reproducibility (default: 42)
             dtype (np.dtype): Data type for computations (default: np.float32)
         """
-        
-        self.init_tfr_emb = init_tfr_emb
         
         self.classifier_config = classifier_config
         
@@ -90,20 +88,10 @@ class SkeletonTraining():
             "y_test": y_test,
         }
         
-        # model = self._train_classifier(X_train, y_train, config) 
-        model = self._train_classifier(X_corpus, y_corpus, config)
+        model = self._train_classifier(X_train, y_train, config) 
+        # model = self._train_classifier(X_corpus, y_corpus, config)
         
-        return test_split, model
-    
-    def _train_flat_classifier(self, conc_syn_list, config, dtype=np.float32):
-        
-        for syn_list in conc_syn_list:
-            print(syn_list.keys())
-            exit()
-    
-    def train_reranker(self):
-        pass
-        
+        return test_split, model    
 
     def execute(self, htree, all_kb_ids):
         """
@@ -138,16 +126,13 @@ class SkeletonTraining():
         
         # Convert indexed embeddings to array (sorted)
         match_index = sorted(text_emb_idx.keys()) # Got the ids location
-        text_emb_array = np.array([text_emb_idx[idx] for idx in match_index]) # Return only the emb that match the index
+        comb_emb_array = np.array([text_emb_idx[idx] for idx in match_index]) # Return only the emb that match the index
         
         # Get corresponding transformer embeddings
-        trans_emb = self.init_tfr_emb[match_index]
         kb_ids = [all_kb_ids[idx] for idx in match_index] # Get the ids
 
-        # Create combined feature space
-        conc_array = np.hstack((trans_emb, text_emb_array)) # The transformer embedings with text embeddings
 
-        tree_split, tree_model = self._train_tree_classifier(conc_array, cluster_labels, self.classifier_config)
+        tree_split, tree_model = self._train_tree_classifier(comb_emb_array, cluster_labels, self.classifier_config)
 
         # conc_syn_list = [embeddings_dict[ids] for ids in kb_ids]
 
@@ -158,14 +143,14 @@ class SkeletonTraining():
         # -- Step 2: Create positive and negative (x, e) pairs --        
 
         entity_embs = defaultdict(list)
-        for eid, emb in zip(kb_ids, conc_array):
+        for eid, emb in zip(kb_ids, comb_emb_array):
             entity_embs[eid].append(emb)
             
         X_pairs, y_labels = [], []
         
         entity_centroids = {eid: np.mean(embs, axis=0) for eid, embs in entity_embs.items()}
         
-        for i, mention_emb in enumerate(conc_array):
+        for i, mention_emb in enumerate(comb_emb_array):
             true_ied = kb_ids[i]
             
             pos_pair = np.hstack((mention_emb, entity_centroids[true_ied]))
@@ -173,7 +158,9 @@ class SkeletonTraining():
             y_labels.append(1)
             
             # Sample negatives
-            negatives = random.sample([eid for eid in entity_centroids if eid != true_ied], k=5)
+            neg_pool = [eid for eid in entity_centroids if eid != true_ied]
+            k_neg = min(5, len(neg_pool))
+            negatives = random.sample(neg_pool, k=k_neg)
             for neg_eid in negatives:
                 neg_pair = np.hstack((mention_emb, entity_centroids[neg_eid]))
                 X_pairs.append(neg_pair)
@@ -190,9 +177,8 @@ class SkeletonTraining():
         )
         
         # Setters
-        htree.set_transformer_embeddings(trans_emb)
         htree.set_kb_indices(match_index)
-        htree.set_concatenated_embeddings(conc_array)
+        htree.set_concatenated_embeddings(comb_emb_array)
         
         htree.set_tree_classifier(tree_model)
         htree.set_tree_test_split(tree_split)
