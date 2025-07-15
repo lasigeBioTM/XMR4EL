@@ -6,7 +6,7 @@ import numpy as np
 
 from scipy.sparse import csr_matrix
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import TruncatedSVD
@@ -534,7 +534,7 @@ class Predict():
             candidates=k*3  # Get more candidates for multi-label case
         )
         
-        print(hit_ratios)
+        print(Counter(hit_ratios))
         
         # 3. Convert to CSR format
         return cls._convert_predictions_into_csr(predictions)
