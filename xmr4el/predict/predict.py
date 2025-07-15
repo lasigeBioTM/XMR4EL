@@ -346,7 +346,7 @@ class Predict():
             for node, group_indices in node_groups.items():
                 group_inputs = batch_conc_input[group_indices]
                 
-                classifier = node.classifier_model
+                classifier = node.tree_classifier
                 classifier.model.model.n_jobs = -1
                 probs = cls._predict_proba_classifier(classifier, group_inputs)
                 top_labels = np.argmax(probs, axis=1)
