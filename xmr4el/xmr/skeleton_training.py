@@ -104,7 +104,7 @@ class SkeletonTraining():
         pass
         
 
-    def execute(self, htree, all_kb_ids, embeddings_dict):
+    def execute(self, htree, all_kb_ids, embeddings_dict=None):
         """
         Recursively trains classifiers throughout the hierarchical tree.
         
@@ -148,9 +148,9 @@ class SkeletonTraining():
 
         tree_split, tree_model = self._train_tree_classifier(conc_array, cluster_labels, self.classifier_config)
 
-        conc_syn_list = [embeddings_dict[ids] for ids in kb_ids]
+        # conc_syn_list = [embeddings_dict[ids] for ids in kb_ids]
 
-        flat_split, flat_model = self._train_flat_classifier(conc_syn_list, self.classifier_config)
+        # flat_split, flat_model = self._train_flat_classifier(conc_syn_list, self.classifier_config)
 
         self.classifier_config["kwargs"]["objective"] = "multiclass"
         
@@ -193,8 +193,8 @@ class SkeletonTraining():
         htree.set_kb_indices(match_index)
         htree.set_concatenated_embeddings(conc_array)
         
-        htree.set_classifier_model(classifier_model)
-        htree.set_test_split(test_split)
+        htree.set_tree_classifier(tree_model)
+        htree.set_tree_test_split(tree_split)
         
         htree.set_reranker(reranker_model)
         htree.set_entity_centroids(entity_centroids)

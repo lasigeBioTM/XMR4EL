@@ -312,13 +312,9 @@ class SkeletonBuilder():
         # Normalize and reduce transformer embeddings
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
 
-
-
-
-
         # Embeddigns for flat classifier
+        """
 
-    
         all_synonyms = [syn for group in x_cross_train for syn in group]
         unique_synonyms = list(set(all_synonyms))
         synonym_to_group = {syn: [] for syn in unique_synonyms}
@@ -351,6 +347,7 @@ class SkeletonBuilder():
                     transformer_dict[syn]
                 ])
                 embeddings_dict[id][syn] = concatenated
+        """
 
         # Step 5: Train classifiers throughout hierarchy  
         LOGGER.info(f"Initializing SkeletonTraining")      
@@ -361,6 +358,6 @@ class SkeletonBuilder():
         LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         all_kb_ids = list(htree.train_data.keys())
         
-        skl_train.execute(htree, all_kb_ids, embeddings_dict)
+        skl_train.execute(htree, all_kb_ids)
 
         return htree
