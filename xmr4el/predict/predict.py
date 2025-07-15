@@ -6,6 +6,8 @@ import numpy as np
 
 from scipy.sparse import csr_matrix
 
+from collections import defaultdict
+
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import TruncatedSVD
 
@@ -322,6 +324,80 @@ class Predict():
         return results
     
     @classmethod
+    def _predict_inference(cls, htree, all_kb_ids, batch_conc_input, batch_labels, candidates=100):
+        """
+        Modified to handle multiple labels per input.
+        """
+        n_samples = batch_conc_input.shape[0]
+        results = [None] * n_samples
+        current_nodes = [htree] * n_samples
+        active_indices = list(range(n_samples))
+        
+        # Track hits for each label of each input
+        label_hits = [defaultdict(int) for _ in range(n_samples)]
+        label_counts = [defaultdict(int) for _ in range(n_samples)]
+        
+        while active_indices:
+            node_groups = defaultdict(list)
+            for idx in active_indices:
+                node_groups[current_nodes[idx]].append(idx)
+            
+            new_active_indices = []
+            for node, group_indices in node_groups.items():
+                group_inputs = batch_conc_input[group_indices]
+                
+                classifier = node.classifier_model
+                classifier.model.model.n_jobs = -1
+                probs = cls._predict_proba_classifier(classifier, group_inputs)
+                top_labels = np.argmax(probs, axis=1)
+                
+                for i, idx in enumerate(group_indices):
+                    top_label = top_labels[i]
+                    current_labels = batch_labels[idx]  # List of labels for this input
+                    
+                    if top_label in node.children:
+                        current_nodes[idx] = node.children[top_label]
+                        new_active_indices.append(idx)
+                    else:
+                        mask = node.clustering_model.labels() == top_label
+                        cand_kb_indices = np.array(node.kb_indices)[mask]
+                        unique_kb_ids = np.array(all_kb_ids)[cand_kb_indices]
+                        
+                        # Check each label for this input
+                        for label in current_labels:
+                            label_hits[idx][label] += int(label in unique_kb_ids)
+                            label_counts[idx][label] += 1
+                        
+                        # Reranking
+                        mention_emb = batch_conc_input[idx]
+                        rerank_X = np.vstack([
+                            np.hstack((mention_emb, node.entity_centroids[eid]))
+                            for eid in unique_kb_ids
+                        ])
+                        
+                        scores = cls._predict_proba_classifier(node.reranker, rerank_X)[:, 1]
+                        top_k_indices = np.argsort(scores)[-candidates:][::-1]
+                        
+                        results[idx] = (
+                            cand_kb_indices[top_k_indices],
+                            scores[top_k_indices]
+                        )
+            
+            active_indices = new_active_indices
+        
+        # Calculate hit ratios per input (average across all its labels)
+        hit_ratios = []
+        for i in range(n_samples):
+            if not label_counts[i]:
+                hit_ratios.append(0.0)
+            else:
+                total_hits = sum(label_hits[i].values())
+                total_checks = sum(label_counts[i].values())
+                hit_ratios.append(total_hits / total_checks)
+        
+        return results, label_hits, hit_ratios
+    
+    @classmethod
     def _predict_batch_memopt(cls, htree, all_kb_ids, batch_conc_input, candidates=100, batch_size=640000):
         """
         Memory-optimized batch prediction that processes inputs in chunks.
@@ -338,6 +414,8 @@ class Predict():
         n_samples = batch_conc_input.shape[0]
         results = []
         
+        
+        
         # Process in chunks to control memory usage
         for i in range(0, n_samples, batch_size):
             chunk = batch_conc_input[i:i+batch_size]
@@ -349,9 +427,62 @@ class Predict():
                 gc.collect()
         
         return results
+    
+    @classmethod
+    def _predict_batch_memopt_inference(cls, htree, all_kb_ids, batch_conc_input, batch_labels, candidates=100, batch_size=640000):
+        """
+        Memory-optimized batch prediction with multi-label support.
+        
+        Args:
+            batch_labels: List of lists of label IDs
+            ... other params same as before ...
+            
+        Returns:
+            tuple: (predictions, hit_ratios)
+        """
+        n_samples = batch_conc_input.shape[0]
+        all_predictions = []
+        all_labels_list = []
+        all_hit_ratios = []
+        
+        for i in range(0, n_samples, batch_size):
+            chunk = batch_conc_input[i:i+batch_size]
+            chunk_labels = batch_labels[i:i+batch_size]
+            
+            # Process each input's labels separately
+            chunk_predictions = []
+            chunk_labels = []
+            chunk_hit_ratios = []
+            
+            for j in range(len(chunk)):
+                # For each input, check all its labels
+                input_labels = chunk_labels[j]
+                input_emb = chunk[j:j+1]  # Keep 2D shape
+                
+                # Get predictions for this single input
+                predictions, labels_list, hit_ratio = cls._predict_inference(
+                    htree,
+                    all_kb_ids,
+                    input_emb,
+                    input_labels,  # Pass all labels for this input
+                    candidates
+                )
+                
+                chunk_predictions.extend(predictions)
+                chunk_labels.append(labels_list)
+                chunk_hit_ratios.append(hit_ratio)
+            
+            all_predictions.extend(chunk_predictions)
+            all_labels_list.extend(chunk_labels)
+            all_hit_ratios.extend(chunk_hit_ratios)
+            
+            if i % (10 * batch_size) == 0:
+                gc.collect()
+        
+        return all_predictions, all_labels_list, all_hit_ratios
                 
     @classmethod
-    def inference(
+    def predict(
         cls, htree, input_text, k=3, dtype=np.float32
     ):
         """
@@ -403,12 +534,60 @@ class Predict():
 
         predictions = cls._predict_batch_memopt(htree, all_kb_ids, concat_emb, candidates=10)
         
-        # print(predictions)
+        return cls._convert_predictions_into_csr(predictions)
+        
+    @classmethod
+    def inference(cls, htree, labels, input_text, k=5, dtype=np.float32):
+        """
+        End-to-end prediction pipeline for XMR system.
+        
+        Args:
+            htree (XMRTree): Trained hierarchical tree model
+            input_text (iterable): Input text(s) to predict
+            transformer_config (dict): Transformer configuration
+            k (int): Number of predictions to return per input. Defaults to 3.
+            dtype (np.dtype): Data type for embeddings. Defaults to np.float32.
+            
+        Returns:
+            csr_matrix: Sparse prediction matrix of shape (n_inputs * n_labels)
+        """
+        LOGGER.info(f"Started inference")
+        # Step 1: Generate text embeddings using stored vectorizer
+        vec = htree.vectorizer
+        text_emb = cls._predict_vectorizer(vec, input_text)
+        
+        
+        LOGGER.info(f"Truncating text_embedding")
+        svd = htree.dimension_model
+        dense_text_emb = svd.transform(text_emb) # turns it into dense auto
+
+        # Normalize text embeddings (handling sparse)
+        dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
+        
+        # Step 2: Generate transformer embeddings with memory management
+        transformer_model = cls._predict_transformer(
+            input_text, 
+            htree.transformer_config, 
+            dtype
+        )
+        
+        transformer_emb = transformer_model.model.embeddings
+
+        transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
+        
+        concat_emb = np.hstack((
+            transformer_emb.astype(dtype),
+            dense_text_emb.astype(dtype)
+        ))
+
+        del transformer_emb, dense_text_emb
+        gc.collect()
+
+        all_kb_ids = list(htree.train_data.keys())
+
+        predictions = cls._predict_batch_memopt_inference(htree, all_kb_ids, concat_emb, labels, candidates=10)
+        
+        print(predictions)
         
         return cls._convert_predictions_into_csr(predictions)
         
-        # results = cls._rank(predictions, htree.train_data, input_text, encoder_config, candidates=k)
-        
-        # print(results)
-
-        # return cls._convert_predictions_into_csr(results)

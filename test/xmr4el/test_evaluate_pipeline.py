@@ -43,7 +43,7 @@ def main():
 
     print(trained_xtree)
     
-    predicted_labels = Predict.inference(
+    predicted_labels = Predict.predict(
         trained_xtree, input_text, transformer_config, k=k
     )
 
