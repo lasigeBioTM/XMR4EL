@@ -396,6 +396,8 @@ class Predict():
             
             active_indices = new_active_indices
         
+        print(hit_indicators)
+        
         return results, hit_indicators
         
     @classmethod
@@ -532,7 +534,9 @@ class Predict():
             candidates=k*3  # Get more candidates for multi-label case
         )
         
+        print(hit_ratios)
+        
         # 3. Convert to CSR format
-        return cls._convert_predictions_into_csr(predictions), hit_ratios
+        return cls._convert_predictions_into_csr(predictions)
 
         
