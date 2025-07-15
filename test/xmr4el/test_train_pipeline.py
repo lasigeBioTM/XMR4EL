@@ -127,6 +127,12 @@ def main():
     # exit()
 
     # R_train = copy.deepcopy(Y_train)
+    
+    # print(raw_labels[:5])
+    # print(X_train[:5])
+    # print(X_cross_train[:5])
+    
+    # exit()
 
     pipe = SkeletonBuilder(
         vectorizer_config,

@@ -90,7 +90,8 @@ class SkeletonTraining():
             "y_test": y_test,
         }
         
-        model = self._train_classifier(X_train, y_train, config)
+        # model = self._train_classifier(X_train, y_train, config) 
+        model = self._train_classifier(X_corpus, y_corpus, config)
         
         return test_split, model
     
