@@ -152,7 +152,7 @@ class SkeletonTraining():
 
         # flat_split, flat_model = self._train_flat_classifier(conc_syn_list, self.classifier_config)
 
-        self.classifier_config["kwargs"]["objective"] = "multiclass"
+        # self.classifier_config["kwargs"]["objective"] = "multiclass"
         
         # -- Step 2: Create positive and negative (x, e) pairs --        
 
