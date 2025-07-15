@@ -326,16 +326,16 @@ class Predict():
     @classmethod
     def _predict_inference(cls, htree, all_kb_ids, batch_conc_input, batch_labels, candidates=100):
         """
-        Modified to handle multiple labels per input.
+        Consolidated multi-label prediction handling.
         """
         n_samples = batch_conc_input.shape[0]
         results = [None] * n_samples
         current_nodes = [htree] * n_samples
         active_indices = list(range(n_samples))
         
-        # Track hits for each label of each input
-        label_hits = [defaultdict(int) for _ in range(n_samples)]
-        label_counts = [defaultdict(int) for _ in range(n_samples)]
+        # Initialize hit tracking
+        hit_counts = np.zeros(n_samples)
+        label_counts = np.zeros(n_samples)
         
         while active_indices:
             node_groups = defaultdict(list)
@@ -346,6 +346,7 @@ class Predict():
             for node, group_indices in node_groups.items():
                 group_inputs = batch_conc_input[group_indices]
                 
+                # Batch predict probabilities
                 classifier = node.tree_classifier
                 classifier.model.model.n_jobs = -1
                 probs = cls._predict_proba_classifier(classifier, group_inputs)
@@ -353,26 +354,28 @@ class Predict():
                 
                 for i, idx in enumerate(group_indices):
                     top_label = top_labels[i]
-                    current_labels = batch_labels[idx]  # List of labels for this input
+                    current_labels = batch_labels[idx]  # List of golden labels
                     
                     if top_label in node.children:
                         current_nodes[idx] = node.children[top_label]
                         new_active_indices.append(idx)
                     else:
+                        # Leaf node processing
                         mask = node.clustering_model.labels() == top_label
                         cand_kb_indices = np.array(node.kb_indices)[mask]
-                        unique_kb_ids = np.array(all_kb_ids)[cand_kb_indices]
+                        candidate_ids = np.array(all_kb_ids)[cand_kb_indices]
                         
-                        # Check each label for this input
+                        # Update hit counts for all golden labels
                         for label in current_labels:
-                            label_hits[idx][label] += int(label in unique_kb_ids)
-                            label_counts[idx][label] += 1
+                            label_counts[idx] += 1
+                            if label in candidate_ids:
+                                hit_counts[idx] += 1
                         
                         # Reranking
                         mention_emb = batch_conc_input[idx]
                         rerank_X = np.vstack([
                             np.hstack((mention_emb, node.entity_centroids[eid]))
-                            for eid in unique_kb_ids
+                            for eid in candidate_ids
                         ])
                         
                         scores = cls._predict_proba_classifier(node.reranker, rerank_X)[:, 1]
@@ -385,18 +388,16 @@ class Predict():
             
             active_indices = new_active_indices
         
-        # Calculate hit ratios per input (average across all its labels)
-        hit_ratios = []
-        for i in range(n_samples):
-            if not label_counts[i]:
-                hit_ratios.append(0.0)
-            else:
-                total_hits = sum(label_hits[i].values())
-                total_checks = sum(label_counts[i].values())
-                hit_ratios.append(total_hits / total_checks)
+        # Calculate final hit ratios
+        hit_ratios = np.divide(
+            hit_counts,
+            label_counts,
+            out=np.zeros_like(hit_counts),
+            where=label_counts!=0
+        )
         
-        return results, label_hits, hit_ratios
-    
+        return results, hit_ratios
+        
     @classmethod
     def _predict_batch_memopt(cls, htree, all_kb_ids, batch_conc_input, candidates=100, batch_size=640000):
         """
