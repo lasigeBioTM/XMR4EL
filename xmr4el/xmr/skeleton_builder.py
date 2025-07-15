@@ -250,6 +250,8 @@ class SkeletonBuilder():
         htree.set_labels = labels
         htree.set_train_data = x_cross_train
         htree.set_dict_data = train_data
+        
+        print(htree.labels)
 
         # Step 1: Text vectorization
         LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
@@ -357,6 +359,6 @@ class SkeletonBuilder():
         
         LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         
-        skl_train.execute(htree, htree.labels)
+        skl_train.execute(htree, labels)
 
         return htree

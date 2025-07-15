@@ -104,7 +104,7 @@ class SkeletonTraining():
         pass
         
 
-    def execute(self, htree, all_kb_ids, embeddings_dict=None):
+    def execute(self, htree, all_kb_ids):
         """
         Recursively trains classifiers throughout the hierarchical tree.
         
