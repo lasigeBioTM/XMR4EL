@@ -505,11 +505,11 @@ class Predict():
         LOGGER.info("Started inference")
         
         # 1. Generate embeddings
-        vec = htree.vectorizer
-        text_emb = cls._predict_vectorizer(vec, input_text)
-        svd = htree.dimension_model
-        dense_text_emb = svd.transform(text_emb)
-        dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
+        # vec = htree.vectorizer
+        # text_emb = cls._predict_vectorizer(vec, input_text)
+        # svd = htree.dimension_model
+        # dense_text_emb = svd.transform(text_emb)
+        # dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
         transformer_model = cls._predict_transformer(
             input_text, 
@@ -518,13 +518,14 @@ class Predict():
         )
         transformer_emb = normalize(transformer_model.model.embeddings, norm="l2", axis=1)
         
-        concat_emb = np.hstack((
-            transformer_emb.astype(dtype),
-            dense_text_emb.astype(dtype)
-        ))
+        # concat_emb = np.hstack((
+        #      transformer_emb.astype(dtype),
+        #     dense_text_emb.astype(dtype)
+        # ))
 
-        del transformer_emb, dense_text_emb
         gc.collect()
+
+        concat_emb = transformer_emb
 
         # 2. Get predictions
         predictions, hit_ratios = cls._predict_inference(
