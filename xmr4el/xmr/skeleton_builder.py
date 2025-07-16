@@ -252,7 +252,7 @@ class SkeletonBuilder():
         htree.set_dict_data(label_to_indices)
         
         # Step 2: TF-IDF
-        # LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
+        LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
         
         # vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
         # vec_emb = self._predict_vectorizer(vec_model, trn_corpus)

@@ -115,10 +115,11 @@ class SkeletonTraining():
         """
 
         gc.collect()
+        children = list(htree.children.values())
+        if not children:
+            return # Leaf Node
 
-        # print(all_kb_ids)
-
-        LOGGER.info(f"Using Classifier at depth {htree.depth}")
+        # 1. Filter sampels 
 
         # Get embeddings and cluster assignments from current node
         text_emb_idx = htree.text_embeddings 

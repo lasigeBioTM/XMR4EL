@@ -450,15 +450,15 @@ class Predict():
         """
         LOGGER.info(f"Started inference")
         # Step 1: Generate text embeddings using stored vectorizer
-        vec = htree.vectorizer
-        text_emb = cls._predict_vectorizer(vec, input_text)
+        # vec = htree.vectorizer
+        # text_emb = cls._predict_vectorizer(vec, input_text)
         
         
         LOGGER.info(f"Truncating text_embedding")
-        svd = htree.dimension_model
-        dense_text_emb = svd.transform(text_emb) # turns it into dense auto
+        # svd = htree.dimension_model
+        # dense_text_emb = svd.transform(text_emb) # turns it into dense auto
         # Normalize text embeddings (handling sparse)
-        dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
+        # dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         
         # Step 2: Generate transformer embeddings with memory management
         transformer_model = cls._predict_transformer(
@@ -471,10 +471,12 @@ class Predict():
 
         transformer_emb = normalize(transformer_emb, norm="l2", axis=1)
         
-        concat_emb = np.hstack((
-            transformer_emb.astype(dtype),
-            dense_text_emb.astype(dtype)
-        ))
+        # concat_emb = np.hstack((
+        #     transformer_emb.astype(dtype),
+        #     dense_text_emb.astype(dtype)
+        # ))
+        
+        concat_emb = transformer_emb
 
         del transformer_emb, dense_text_emb
         gc.collect()
