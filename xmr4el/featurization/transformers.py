@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import os
 import gc
 import logging
@@ -164,55 +165,99 @@ class Transformer(metaclass=TransformersMeta):
 
         batch_dir = f"{cls._get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}"
-
+        cls._create_batch_dir(batch_dir)
+        
         model = SentenceTransformer(model_name).to(device)
         len_corpus = len(trn_corpus)
-        
-        cls._create_batch_dir(batch_dir)
-        # os.makedirs(batch_dir, exist_ok=True)
 
         if batch_size == 0:
-            batch_size = 32  # A safe default, or you could implement auto-tuning
+            batch_size = 400  # A safe default, or you could implement auto-tuning
 
-        num_batches = (len_corpus + batch_size - 1) // batch_size
+        # Process batches with OOM recovery
+        current_batch_idx = 0
+        processed_indices = set()
+        original_batch_size = batch_size
 
-        for batch_idx in range(num_batches):
-            LOGGER.info(f"Processing batch {batch_idx + 1}/{num_batches}")
-
-            start, end = batch_idx * batch_size, min((batch_idx + 1) * batch_size, len_corpus)
-            batch = trn_corpus[start:end]
-
-            try:
-                batch_results = model.encode(
-                    batch,
-                    convert_to_tensor=False,
-                    device=device,
-                    batch_size=batch_size,
-                    normalize_embeddings=False,
-                    show_progress_bar=False,
-                )
+        while current_batch_idx * batch_size < len_corpus:
+            batch_idx = current_batch_idx
+            start = batch_idx * batch_size
+            end = min((batch_idx + 1) * batch_size, len_corpus)
+            
+            # Skip if this batch was already processed successfully
+            if batch_idx in processed_indices:
+                current_batch_idx += 1
+                continue
                 
-                batch_filename = f"{emb_file}_batch{batch_idx}.npz"
-                np.savez_compressed(batch_filename, embeddings=np.array(batch_results, dtype=dtype))
-
-            except torch.cuda.OutOfMemoryError:
-                LOGGER.error(f"OOM error - reducing batch size")
+            LOGGER.info(f"Processing batch {batch_idx + 1}/{(len_corpus + batch_size - 1) // batch_size} (size: {batch_size})")
+            
+            batch = trn_corpus[start:end]
+            batch_filename = f"{emb_file}_batch{batch_idx}.npz"
+            
+            # Skip if this batch was already processed (from previous OOM)
+            if os.path.exists(batch_filename):
+                current_batch_idx += 1
+                processed_indices.add(batch_idx)
+                continue
+                
+            try:
+                with torch.no_grad():  # Disable gradient calculation
+                    # Process batch
+                    batch_results = model.encode(
+                        batch,
+                        convert_to_tensor=False,
+                        device=device,
+                        batch_size=batch_size,
+                        normalize_embeddings=False,
+                        show_progress_bar=False,
+                    )
+                    
+                    # Save results
+                    np.savez_compressed(batch_filename, embeddings=np.array(batch_results, dtype=dtype))
+                    processed_indices.add(batch_idx)
+                    current_batch_idx += 1
+                    
+                    # Reset batch size if we had reduced it previously
+                    if batch_size != original_batch_size:
+                        batch_size = original_batch_size
+                        LOGGER.info(f"Resetting batch size to original: {batch_size}")
+                    
+            except torch.cuda.OutOfMemoryError as oom:
+                LOGGER.warning(f"OOM error processing batch {batch_idx} (size: {batch_size})")
+                
+                # Clean up memory
                 torch.cuda.empty_cache()
                 gc.collect()
-                batch_size = max(1, batch_size - 100)  # Reduce batch size by at least 8
-                num_batches = (len_corpus + batch_size - 1) // batch_size  # Recalculate batches
-                continue  # Retry batch with new size
+                
+                # Reduce batch size more aggressively based on error frequency
+                reduction_factor = min(0.5, max(0.1, 1 - (0.2 * max_oom_retries)))
+                new_batch_size = max(1, int(batch_size * reduction_factor))
+                
+                LOGGER.info(f"Reducing batch size from {batch_size} to {new_batch_size}")
+                batch_size = new_batch_size
+                
+                # Recalculate where we should be in processing
+                current_batch_idx = start // batch_size
+                
+                # If we've retried too many times, give up
+                if max_oom_retries <= 0:
+                    raise RuntimeError("Failed to process batch after multiple OOM retries") from oom
+                max_oom_retries -= 1
 
-            # Free memory after each batch
-            gc.collect()
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect() if torch.cuda.is_available() else None
-
-        # Merge batches
-        all_embeddings = [
-            np.load(file)["embeddings"] for file in sorted(glob.glob(f"{emb_file}_batch*.npz"))
-        ]
+            except Exception as e:
+                LOGGER.error(f"Unexpected error processing batch {batch_idx}: {str(e)}")
+                cls._del_batch_dir(batch_dir)
+                raise
         
+        # Parallel loading of batch files
+        def load_embedding_file(file):
+            with np.load(file) as data:
+                return data["embeddings"]
+        
+        batch_files = sorted(glob.glob(f"{emb_file}_batch*.npz"))
+        with ThreadPoolExecutor(max_workers=min(4, os.cpu_count())) as executor:
+            all_embeddings = list(executor.map(load_embedding_file, batch_files))
+        
+        # Clean up
         cls._del_batch_dir(batch_dir)
         
         return np.vstack(all_embeddings).astype(dtype)

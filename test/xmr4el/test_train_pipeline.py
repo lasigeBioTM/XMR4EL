@@ -113,9 +113,9 @@ def main():
         truncate_data=100
         )
     
-    Y_train = train_data["labels_matrix"] # csr.matrix
+    # Y_train = train_data["labels_matrix"] # csr.matrix
     raw_labels = train_data["raw_labels"]
-    X_train = train_data["corpus"] # only List
+    # X_train = train_data["corpus"] # only List
     X_cross_train = train_data["cross_corpus"] # list of lists
 
     # print(raw_labels[5686])
