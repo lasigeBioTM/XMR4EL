@@ -199,7 +199,7 @@ class Transformer(metaclass=TransformersMeta):
                 LOGGER.error(f"OOM error - reducing batch size")
                 torch.cuda.empty_cache()
                 gc.collect()
-                batch_size = max(1, batch_size - 8)  # Reduce batch size by at least 8
+                batch_size = max(1, batch_size - 100)  # Reduce batch size by at least 8
                 num_batches = (len_corpus + batch_size - 1) // batch_size  # Recalculate batches
                 continue  # Retry batch with new size
 

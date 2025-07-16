@@ -75,7 +75,7 @@ class Preprocessor:
             return " ".join(unique_texts)  # Return merged string for corpus
 
         # Apply deduplication to `joined_text` (for TF-IDF/clustering)
-        grouped_texts["joined_text"] = grouped_texts["text"].apply(deduplicate_texts)
+        # grouped_texts["joined_text"] = grouped_texts["text"].apply(deduplicate_texts)
         
         # Keep original texts for `cross_corpus` (untouched for cross-encoder)
         grouped_texts["original_texts"] = grouped_texts["text"]  # Backup for cross_corpus
@@ -99,16 +99,16 @@ class Preprocessor:
                 raise Exception(f"Labels and Train length mismatch, Train > Labels. Exiting. Labels: {len(labels)}, Train: {len(grouped_texts)}")
 
         # Prepare labels (original code)
-        labels_list = [[label] for label in labels]
-        mlb = MultiLabelBinarizer(sparse_output=True)
-        labels_matrix = mlb.fit_transform(labels_list)
+        # labels_list = [[label] for label in labels]
+        # mlb = MultiLabelBinarizer(sparse_output=True)
+        # labels_matrix = mlb.fit_transform(labels_list)
 
         return {
-            'corpus': grouped_texts["joined_text"].tolist(),      # Deduplicated for TF-IDF
+            # 'corpus': grouped_texts["joined_text"].tolist(),      # Deduplicated for TF-IDF
             'cross_corpus': grouped_texts["original_texts"].tolist(),  # Original for cross-encoder
             'raw_labels': labels,
-            'labels_matrix': labels_matrix,
-            'label_encoder': mlb
+            # 'labels# _matrix': labels_matrix,
+            # 'label_encoder': mlb
         }
 
             
