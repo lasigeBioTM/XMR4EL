@@ -457,7 +457,6 @@ class Predict():
         LOGGER.info(f"Truncating text_embedding")
         svd = htree.dimension_model
         dense_text_emb = svd.transform(text_emb) # turns it into dense auto
-
         # Normalize text embeddings (handling sparse)
         dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
         

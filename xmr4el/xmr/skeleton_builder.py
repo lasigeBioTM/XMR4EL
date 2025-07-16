@@ -252,7 +252,7 @@ class SkeletonBuilder():
         htree.set_labels(labels)
         htree.set_train_data(x_cross_train)
         
-        print(trn_corpus[:5])
+        # print(trn_corpus[:5])
         
         # htree.set_dict_data()
         
