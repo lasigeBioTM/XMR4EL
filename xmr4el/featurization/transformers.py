@@ -153,7 +153,8 @@ class Transformer(metaclass=TransformersMeta):
         dtype=np.float32,
         batch_size=400,
         batch_dir="batch_dir",
-        output_prefix="st_emb"
+        output_prefix="st_emb",
+        max_oom_retries=3
     ):
         """
         Optimized function for efficient memory usage during CPU or GPU-based embedding extraction.
