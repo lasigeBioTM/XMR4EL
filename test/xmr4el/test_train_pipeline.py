@@ -25,10 +25,8 @@ def main():
     start = time.time()
 
     min_leaf_size = 2
-    depth = 3
+    depth = 1
     n_features = 768
-    max_n_clusters = 6
-    min_n_clusters = 2
 
     vectorizer_config = {
         "type": "tfidf", 
@@ -36,7 +34,6 @@ def main():
         }
     
     transformer_config = {
-        # "type": "biobert",
         "type": "sentencetbiobert",
         "kwargs": {"batch_size": 3000}
     }
@@ -75,7 +72,6 @@ def main():
         }
     }
 
-    """
     classifier_config = {
         "type": "sklearnlogisticregression",
         "kwargs": {
@@ -87,8 +83,9 @@ def main():
             "max_iter":1000
             },
     }
+
+    
     """
-        
     classifier_config = {
         "type": "lightgbmclassifier",
         "kwargs": {
@@ -103,6 +100,7 @@ def main():
             "random_state": 42
         }
     }
+    """
     
     training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
@@ -113,24 +111,10 @@ def main():
         truncate_data=100
         )
     
-    # Y_train = train_data["labels_matrix"] # csr.matrix
     raw_labels = train_data["raw_labels"]
-    # X_train = train_data["corpus"] # only List
     X_cross_train = train_data["cross_corpus"] # list of lists
 
-    # print(raw_labels[5686])
-    # print(X_cross_train[5686])
-    
-    # print(raw_labels[6312])
-    # print(X_cross_train[6312])
-    
-    # exit()
-
-    # R_train = copy.deepcopy(Y_train)
-    
-    # print(raw_labels[:5])
-    # print(X_train[:5])
-    # print(X_cross_train[:5])
+    print(X_cross_train[:5])
     
     # exit()
 

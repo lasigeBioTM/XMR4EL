@@ -198,7 +198,6 @@ class SkeletonBuilder():
         with torch.no_grad():
             
             for i in range(0, X.shape[0], batch_size):
-                # LOGGER.info(f"Batch: {counter}")
                 X_batch = X[i:i+batch_size]
                 Y_batch = Y[i:i+batch_size]
 
@@ -235,7 +234,6 @@ class SkeletonBuilder():
         # Clean up memory before starting
         gc.collect()
         
-                
         # Step 0.5: Initialize tree
         htree = Skeleton(depth=0)
         
@@ -251,22 +249,19 @@ class SkeletonBuilder():
 
         htree.set_labels(labels)
         htree.set_train_data(x_cross_train)
-        
-        # print(trn_corpus[:5])
-        
-        # htree.set_dict_data()
+        htree.set_dict_data(label_to_indices)
         
         # Step 2: TF-IDF
-        LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
+        # LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
         
-        vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
-        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
-        vec_emb = normalize(vec_emb, norm="l2", axis=1)        
-        htree.set_vectorizer(vec_model)
+        # vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
+        # vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
+        # vec_emb = normalize(vec_emb, norm="l2", axis=1)        
+        # htree.set_vectorizer(vec_model)
         
         # Reduce dimensions if needed, almost sure it will be needed will make n_features to be equal to transformers
-        dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features) # 768
-        htree.set_dimension_model(svd)
+        # dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features) # 768
+        # htree.set_dimension_model(svd)
         
         # Step 3: Transformer Embeddings
         LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
@@ -282,7 +277,9 @@ class SkeletonBuilder():
         del transformer_model  # Clean up memory
         
         # Step 4: Combine both for each synonym
-        combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
+        # combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
+
+        combined_vecs = trans_emb
 
         label_emb_dict = {}
         
