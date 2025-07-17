@@ -290,7 +290,7 @@ class SkeletonBuilder():
             emb_list = [combined_vecs[i] for i in indices]
             label_emb_dict[label] = np.mean(emb_list, axis=0)
 
-        # print(label_emb_dict)
+        htree.set_entity_centroids(label_emb_dict)
 
         # Step 5: Build hierarchical clustering structure 
         LOGGER.info("Initializing SkeletonConstruction")
