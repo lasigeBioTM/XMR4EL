@@ -7,8 +7,10 @@ import numpy as np
 from collections import defaultdict
 
 from sklearn.model_selection import train_test_split
+from sklearn.multiclass import OneVsRestClassifier
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
+from xmr4el.ranker.reranker import Reranker
 
 
 LOGGER = logging.getLogger(__name__)
@@ -36,7 +38,7 @@ class SkeletonTraining():
         dtype (np.dtype): Data type for numerical operations
     """
     
-    def __init__(self, classifier_config, test_size=0.2, random_state=42, dtype=np.float32):
+    def __init__(self, classifier_config, reranker_config, num_negatives=5, test_size=0.2, random_state=42):
         """
         Initializes the SkeletonTraining with training parameters.
         
@@ -49,10 +51,10 @@ class SkeletonTraining():
         """
         
         self.classifier_config = classifier_config
-        
+        self.reranker_config = reranker_config
+        self.num_negatives = num_negatives
         self.test_size = test_size
         self.random_state = random_state
-        self.dtype = dtype
 
     @staticmethod
     def _train_classifier(X_corpus, y_corpus, config, dtype=np.float32):
@@ -69,127 +71,119 @@ class SkeletonTraining():
         # Delegate training to ClassifierModel class
         return ClassifierModel.train(X_corpus, y_corpus, config, dtype)
     
-    def _train_tree_classifier(self, X_corpus, y_corpus, config, dtype=np.float32):
-        
-        # Spit data for classifier training
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_corpus,
-            y_corpus,
-            test_size=self.test_size,
-            random_state=self.random_state,
-            stratify=y_corpus,
-        )
-        
-        # Save the results to tree node
-        test_split = {
-            "X_train": X_train,
-            "y_train": y_train,
-            "X_test": X_test,
-            "y_test": y_test,
-        }
-        
-        model = self._train_classifier(X_train, y_train, config) 
-        # model = self._train_classifier(X_corpus, y_corpus, config)
-        
-        return test_split, model    
-
-    def execute(self, htree, all_kb_ids):
+    def _build_targets(self, true_ids, children_kb_sets):
         """
-        Recursively trains classifiers throughout the hierarchical tree.
-        
-        For each node:
-        1. Retrieves embeddings and cluster assignments
-        2. Creates combined feature space
-        3. Performs stratified train-test split
-        4. Trains classifier
-        5. Stores results in tree node
-        6. Recurses to child nodes
+        Build multi-hot routing targets for a node's children
         
         Args:
-            htree (XMRTree): Current tree node being processed
-            
-        Note:
-            - Automatically handles memory cleanup via gc.collect()
-            - Maintains consistent feature space across tree levels
-            - Preserves cluster proportions in train-test split
+            true_ids (List[Any]): Gold entity IDs for each sample
+            children_kb_sets (List[Set]): Each child's set of leaf IDs.
+        
+        Returns:
+            np.ndarray of shape [n_samples, n_children]
+                Y[i, j] = 1 if true_ids[i] in children_kb_sets[j], else 0.
         """
+        n = len(true_ids)
+        k = len(children_kb_sets)
+        Y = np.zeros((n, k), dtype=np.int8) # Int 8 ?
+        for i, eid in enumerate(true_ids):
+            for j, kb_set in enumerate(children_kb_sets ):
+                if eid in kb_set:
+                    Y[i, j] = 1
+        return Y
+    
+    def _train_node(self, X_node, true_ids, children, htree):
+        """
+        Train a node-level classifier to route to its children.
 
-        gc.collect()
+        Args:
+            X_node (np.ndarray): Embeddings of samples at this node, shape (N,d).
+            true_ids (List[Any]): Corresponding gold entity IDs, length N.
+            children (List[XMRTree]): Node's immediate children.
+            htree: Current tree node (for setters).
+        """
+        # Build routing targets
+        children_kb_sets = [set(child.kb_indices) for child in children]
+        # Map indices to actual IDs for matching
+        # true_ids here are the indices into all_kb_ids
+        Y_node = self._build_targets(true_ids, children_kb_sets)
+        
+        # print(Y_node)
+        
+        # Split data (shuffle, no stratify for multi-label)
+        X_tr, X_te, Y_tr, Y_te = train_test_split(
+            X_node, Y_node,
+            test_size=self.test_size,
+            random_state=self.random_state,
+            shuffle=True
+        )
+        
+        
+        model = self._train_classifier(X_tr, Y_tr, self.classifier_config)
+        
+        # Store model and splits on the tree node
+        htree.set_tree_classifier(model)
+        htree.set_tree_test_split({
+            'X_train': X_tr, 'y_train': Y_tr,
+            'X_test': X_te, 'y_test': Y_te
+        })
+
+    def _train_routing_nodes(self, htree, all_kb_ids, all_embeddings):
         children = list(htree.children.values())
+        # print("INSIDE 1")
         if not children:
             return # Leaf Node
 
+        # print("INSIDE 2")
         # 1. Filter sampels 
+        # Indentify indices whose true ID is under this node
+        node_indices = htree.kb_indices # Get all ids from the indices
+        if not node_indices:
+            return 
+        
+        # print(type(node_indices), node_indices)
+        # print(type(all_embeddings), all_embeddings)
+        X_node = [all_embeddings[idx] for idx in node_indices]
+        true_ids = node_indices
+        
+        # print("TRAIN NODE")
+        
+        self._train_node(X_node, true_ids, children, htree)
+        
+        for child in children:
+            self._train_routing_nodes(child, all_kb_ids, all_embeddings)
 
-        # Get embeddings and cluster assignments from current node
-        text_emb_idx = htree.text_embeddings 
-        cluster_labels = htree.clustering_model.labels()
-        
-        # Convert indexed embeddings to array (sorted)
-        match_index = sorted(text_emb_idx.keys()) # Got the ids location
-        comb_emb_array = np.array([text_emb_idx[idx] for idx in match_index]) # Return only the emb that match the index
-        
-        # Get corresponding transformer embeddings
-        kb_ids = [all_kb_ids[idx] for idx in match_index] # Get the ids
+    def _train_leaf_rerankers(self, htree, all_embeddings, entity_embs_dict):
+        if not htree.children:
+            # at leaf_node
+            mention_indices = htree.kb_indices
+            if not mention_indices:
+                return
+            # positive mentions and true KB indices
+            m_embs = [all_embeddings[idx]for idx in mention_indices]
+            true_inds = mention_indices # each mention row maps to one KB index
+            # negatives: KB indices under this leaf (hard negatives from same leaf cluster)
+            # here, negatives are other true_inds in this leaf
+            reranker = Reranker(self.reranker_config, num_negatives=self.num_negatives)
+            # entity_embs_dict must include centroids for all_kb_ids
+            reranker.train(m_embs, true_inds, entity_embs_dict={idx: entity_embs_dict[idx] for idx in htree.kb_indices})
+            htree.set_reranker(reranker)
+        else:
+            for child in htree.children.values():
+                self._train_leaf_rerankers(child, all_embeddings, entity_embs_dict)
 
+    def execute(self, htree, all_kb_ids, all_embeddings, entity_embs_dict):
+        """
+        Recursively train routing classifiers and leaf rerankers.
 
-        tree_split, tree_model = self._train_tree_classifier(comb_emb_array, cluster_labels, self.classifier_config)
-
-        # conc_syn_list = [embeddings_dict[ids] for ids in kb_ids]
-
-        # flat_split, flat_model = self._train_flat_classifier(conc_syn_list, self.classifier_config)
-
-        # self.classifier_config["kwargs"]["objective"] = "multiclass"
+        Args:
+            htree: current XMRTree node.
+            all_kb_ids: list mapping embedding rows to KB indices.
+            all_embeddings: np.ndarray of mention embeddings (N,d).
+            entity_embs_dict: mapping KB index -> centroid embedding.
+        """
+        # First, train routing classifiers as before
+        self._train_routing_nodes(htree, all_kb_ids, all_embeddings)
+        # Then, train rerankers at leaf nodes
+        self._train_leaf_rerankers(htree, all_embeddings, entity_embs_dict)
         
-        # -- Step 2: Create positive and negative (x, e) pairs --        
-
-        entity_embs = defaultdict(list)
-        for eid, emb in zip(kb_ids, comb_emb_array):
-            entity_embs[eid].append(emb)
-            
-        X_pairs, y_labels = [], []
-        
-        entity_centroids = {eid: np.mean(embs, axis=0) for eid, embs in entity_embs.items()}
-        
-        for i, mention_emb in enumerate(comb_emb_array):
-            true_ied = kb_ids[i]
-            
-            pos_pair = np.hstack((mention_emb, entity_centroids[true_ied]))
-            X_pairs.append(pos_pair)
-            y_labels.append(1)
-            
-            # Sample negatives
-            neg_pool = [eid for eid in entity_centroids if eid != true_ied]
-            k_neg = min(5, len(neg_pool))
-            negatives = random.sample(neg_pool, k=k_neg)
-            for neg_eid in negatives:
-                neg_pair = np.hstack((mention_emb, entity_centroids[neg_eid]))
-                X_pairs.append(neg_pair)
-                y_labels.append(0)
-        
-        # Hardoced for lightgbm
-        # self.classifier_config["kwargs"]["objective"] = "binary"
-        
-        reranker_model = self._train_classifier(
-            np.array(X_pairs), 
-            np.array(y_labels),
-            self.classifier_config,
-            self.dtype
-        )
-        
-        # Setters
-        htree.set_kb_indices(match_index)
-        htree.set_concatenated_embeddings(comb_emb_array)
-        
-        htree.set_tree_classifier(tree_model)
-        htree.set_tree_test_split(tree_split)
-        
-        htree.set_reranker(reranker_model)
-        htree.set_entity_centroids(entity_centroids)
-
-        # Recurse to child nodes
-        for children_htree in htree.children.values():
-            self.execute(
-                children_htree,
-                all_kb_ids
-            )

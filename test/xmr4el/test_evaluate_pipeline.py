@@ -4,6 +4,7 @@
 import time
 
 from xmr4el.predict.predict import Predict
+from xmr4el.predict.skeleton_inference import SkeletonInference
 from xmr4el.xmr.skeleton import Skeleton
 
 """
@@ -38,14 +39,22 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-14_13-41-46"
+        "test/test_data/saved_trees/Skeleton_2025-07-16_16-52-17"
     )
 
     print(trained_xtree)
     
-    predicted_labels = Predict.predict(
-        trained_xtree, input_text, transformer_config, k=k
+    si = SkeletonInference(
+        trained_xtree,
+        trained_xtree.labels
     )
+    
+    with open("test/test_data/labels_bc5cdr_disease_medic.txt", 'r') as gold_labels_f:
+        gold_labels = gold_labels_f.read()
+    
+    input_embs = si.transform_input_text(input_text)
+    
+    predicted_labels = si.batch_inference(input_embs, gold_labels)
 
     print(predicted_labels)
 

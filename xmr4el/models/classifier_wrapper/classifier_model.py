@@ -15,7 +15,7 @@ from abc import ABCMeta
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC as SVC
-
+from sklearn.multiclass import OneVsRestClassifier
 
 classifier_dict = {}
 
@@ -248,6 +248,7 @@ class SklearnLogisticRegression(ClassifierModel):
         try:
             config = {**defaults, **config}
             model = LogisticRegression(**config)
+            model = OneVsRestClassifier(model)
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"

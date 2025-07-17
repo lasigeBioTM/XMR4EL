@@ -87,7 +87,6 @@ class Skeleton:
         self.dimension_model = dimension_model
         self.clustering_model = clustering_model
         
-
         self.tree_classifier = tree_classifier
         self.tree_test_split = tree_test_split # Evaluation Data
         
@@ -95,7 +94,6 @@ class Skeleton:
         self.flat_test_split = flat_test_split # Evaluation Data
         
         self.reranker = reranker
-        
         
         self.reranker = reranker
         

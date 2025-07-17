@@ -108,7 +108,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=100
+        truncate_data=50
         )
     
     raw_labels = train_data["raw_labels"]
@@ -123,6 +123,7 @@ def main():
         transformer_config, 
         clustering_config, 
         classifier_config, 
+        classifier_config, # Same as the classifier, but is the reranker
         n_features, 
         min_leaf_size, 
         depth, 

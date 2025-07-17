@@ -58,6 +58,7 @@ class SkeletonBuilder():
                  transformer_config,
                  clustering_config,
                  classifier_config, 
+                 reranker_config,
                  n_features=1000,  # Number of Features
                  min_leaf_size=10,
                  depth=3,
@@ -83,6 +84,7 @@ class SkeletonBuilder():
         self.transformer_config = transformer_config
         self.clustering_config = clustering_config
         self.classifier_config = classifier_config
+        self.reranker_config = reranker_config
         
         # Params
         self.n_features = n_features
@@ -314,10 +316,10 @@ class SkeletonBuilder():
         # Step 5: Train classifiers throughout hierarchy  
         LOGGER.info(f"Initializing SkeletonTraining")      
         skl_train = SkeletonTraining(self.classifier_config, 
-                                     dtype=self.dtype)
+                                     self.reranker_config)
         
         LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         
-        skl_train.execute(htree, labels)
+        skl_train.execute(htree, labels, list(comb_emb_idx.values()), comb_emb_idx)
 
         return htree

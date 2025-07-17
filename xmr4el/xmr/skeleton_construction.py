@@ -105,6 +105,8 @@ class SkeletonConstruction():
         # Convert indexed embeddings to array (sorted by index)
         indices = sorted(comb_emb_idx.keys())
         text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
+        
+        htree.set_kb_indices(indices)
 
         min_clusterable_size = max(n_clusters, self.min_leaf_size)
 
