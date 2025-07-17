@@ -1,5 +1,7 @@
-from concurrent.futures import ThreadPoolExecutor
 import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 import gc
 import logging
 import json
@@ -13,6 +15,8 @@ from pathlib import Path
 from abc import ABCMeta
 
 from sentence_transformers import SentenceTransformer
+
+from concurrent.futures import ThreadPoolExecutor
 
 transformer_dict = {}
 
@@ -165,10 +169,6 @@ class Transformer(metaclass=TransformersMeta):
 
         device = torch.device("cuda" if device == "gpu" and torch.cuda.is_available() else "cpu")
         LOGGER.info(f"Using PyTorch device: {device}")
-
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        LOGGER.info(f"Using as device {device}")
 
         batch_dir = f"{cls._get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}"
