@@ -45,56 +45,103 @@ class SkeletonInference:
     
     def inference(self, input_emb, k=5, beam_size=3):
         """
-        Route a single mention embedding through the tree, then rerank.
+        Route a single mention embedding through the tree using the classifiers.
+        Then rerank entities at the leaf nodes using their respective rerankers.
+
         Args:
-            input_emb: np.ndarray shape (d,)
-            k: final top-k reranked
-            beam_size: number of children to explore per level
+            input_emb (np.ndarray): shape (d,) - Embedding for a mention
+            k (int): Top-k results to return
+            beam_size (int): Number of children to keep at each level (beam search)
+
         Returns:
-            list of (kb_index, score)
+            List[Tuple[str, float]]: List of (kb_id, score) pairs for top-k candidates
         """
-        # Initialize beams: list of tuples (node, score)
-        beams = [(self.htree, 1.0)]
-        # Beam search down the tree
+        beams = [(self.htree, 1.0)]  # Start at the root with path score = 1.0
+
+        # ---- Beam search routing ----
         while True:
             next_beams = []
-            for node, score in beams:
-                children = list(node.children.items()) # list of (child_label, child_node)
-                if not children:
-                    next_beams.append((node, score))
+
+            for node, path_score in beams:
+                if not node.children:
+                    # Reached a leaf node, keep as is
+                    next_beams.append((node, path_score))
                     continue
-                # predict child probabilities
+
+                # Predict class probabilities for children
                 probs = self._predict_proba_classifier(node.tree_classifier, input_emb.reshape(1, -1))[0]
-                # select top beam_size children
-                top_idxs = np.argsort(probs)[-beam_size:]
-                for idx in top_idxs:
-                    child_label, child_node = children[idx]
-                    next_beams.append((child_node, score * probs[idx]))
-            # check if all beams are leaves
-            if all(not node.children for node, _ in next_beams):
+
+                class_labels = node.tree_classifier.model.model.classes_
+
+                # 2b) Build (label, child_node, prob) only for valid children
+                candidates = []
+                for label, child_node in node.children.items():
+                    # find the probability for this label (0.0 if absent)
+                    prob = float(probs[list(class_labels).index(label)])
+                    candidates.append((label, child_node, prob))
+
+                # 2c) Select top beam_size children by their prob
+                candidates.sort(key=lambda x: x[2], reverse=True)
+                for label, child_node, prob in candidates[:beam_size]:
+                    # update path score
+                    next_beams.append((child_node, path_score * prob))
+
+            # 2d) Stop once every beam is at a node that can rerank
+            #    i.e. either it's a true leaf (no children) or it has a reranker
+            if all(
+                (not node.children) or hasattr(node, "reranker")
+                for node, _ in next_beams
+            ):
+                beams = next_beams
                 break
+
             beams = next_beams
-        
-        # Collect candidate KB indices from leaf beams
-        candidate_eids = set()
+
+        # print(beams)
+
+        # ---- Rerank in each leaf node ----
+        # Use entity_centroids stored globally in the root
+        all_entity_centroids = self.htree.entity_centroids
+        final_candidates = []
+
         for node, path_score in beams:
-            # use clustering to map leaf cluster to kb_indices
-            mask = (node.clustering_model.labels() == node.kb_indices) # Makes no sense
-            candidate_eids.update(node.kb_indices)
-            
-        # Final reranking
-        reranker = self.htree.reranker # assume global reranker trained across all
-        entity_centroids = self.htree.entity_centroids
-        # prepare pairs 
-        X_pairs = []
-        eids = list(candidate_eids)
-        for eid in eids:
-            X_pairs.append(np.hstack((input_emb, entity_centroids[eid])))
-        X_pairs = np.vstack(X_pairs)
-        scores = self._predict_proba_classifier(reranker, X_pairs)[:, 1]
-        # top-k
-        top_idxs = np.argsort(scores)[-k:][::-1]
-        return [(eids[i], float(scores[i])) for i in top_idxs]
+            print(node, path_score)
+            print(node.reranker)
+            if not hasattr(node, "reranker") or node.reranker is None:
+                # print("Donest have an reranker, odd")
+                continue  # Skip if this node has no reranker (shouldn't happen)
+
+            reranker = node.reranker
+            kb_indices = node.kb_indices  # List of indices into self.all_kb_ids
+
+            # Get corresponding kb_ids
+            kb_ids = [self.htree.labels[i] for i in kb_indices]
+
+            # Build feature pairs for reranking: [mention_emb | entity_centroid]
+            X_pairs = []
+            valid_ids = []
+            for eid in kb_ids:
+                if eid not in all_entity_centroids:
+                    continue  # Skip if no centroid (shouldn’t happen ideally)
+                eid_emb = all_entity_centroids[eid]
+                pair_emb = np.hstack((input_emb, eid_emb))  # Concatenate mention + entity
+                X_pairs.append(pair_emb)
+                valid_ids.append(eid)
+
+            if not X_pairs:
+                continue
+
+            X_pairs = np.vstack(X_pairs)
+            scores = self._predict_proba_classifier(reranker.model, X_pairs)[:, 1]  # Binary classification score (prob. of match)
+
+            # Scale score by path probability
+            reranked = [(eid, float(score * path_score)) for eid, score in zip(valid_ids, scores)]
+            final_candidates.extend(reranked)
+
+        # ---- Final Top-K ----
+        final_candidates.sort(key=lambda x: x[1], reverse=True)
+        return final_candidates[:k]
+
     
     def batch_inference(self, input_embs, labels, k=5, candidates=15):
         """

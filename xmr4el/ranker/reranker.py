@@ -10,10 +10,10 @@ from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 class Reranker():
     
-    def __init__(self, config, num_negatives):
+    def __init__(self, config, num_negatives, model=None):
         self.config = config
         self.num_negatives = num_negatives
-        self.model = None
+        self.model = model
     
     def save(self, save_dir):
         """
@@ -44,6 +44,8 @@ class Reranker():
         assert os.path.exists(model_path), f"Model not found in {load_dir}"
         with open(model_path, "rb") as fin:
             model = pickle.load(fin)
+        
+        print("RERANKER LOADED")
         return cls(config=config, num_negatives=config.get("num_negatives", 5), model=model)
     
     @staticmethod

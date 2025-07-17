@@ -13,6 +13,7 @@ from collections import Counter
 from xmr4el.featurization.vectorizers import Vectorizer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
+from xmr4el.ranker.reranker import Reranker
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(
@@ -126,7 +127,7 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "dimension_model", "clustering_model", "tree_classifier", "flat_classifier", "reranker"] # reranker
+        models = ["vectorizer", "dimension_model", "clustering_model", "tree_classifier", "flat_classifier", "reranker_model"] # reranker
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
@@ -240,12 +241,12 @@ class Skeleton:
             "clustering_model": ClusteringModel if hasattr(ClusteringModel, 'load') else None,
             "tree_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
             "flat_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
-            "reranker_model": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
+            "reranker_model": Reranker if hasattr(Reranker, 'load') else None,
         }
         
         for model_name, model_class in model_files.items():
             model_path = os.path.join(load_dir, model_name)
-            
+        
             # First check for model-specific save format
             if os.path.exists(model_path) and model_class is not None:
                 setattr(model, model_name, model_class.load(model_path))

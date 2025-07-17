@@ -39,8 +39,10 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-16_16-52-17"
+        "test/test_data/saved_trees/Skeleton_2025-07-17_15-03-58"
     )
+
+    # exit()
 
     print(trained_xtree)
     
@@ -54,9 +56,11 @@ def main():
     
     input_embs = si.transform_input_text(input_text)
     
-    predicted_labels = si.batch_inference(input_embs, gold_labels)
+    predicted_labels, hits = si.batch_inference(input_embs[:10], gold_labels[:10])
 
     print(predicted_labels)
+    
+    print(hits)
 
     end = time.time()
 
