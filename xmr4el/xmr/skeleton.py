@@ -240,7 +240,7 @@ class Skeleton:
             "clustering_model": ClusteringModel if hasattr(ClusteringModel, 'load') else None,
             "tree_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
             "flat_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
-            "reranker": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
+            "reranker_model": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
         }
         
         for model_name, model_class in model_files.items():
