@@ -132,7 +132,7 @@ class Transformer(metaclass=TransformersMeta):
             "output_prefix": "st_emb",
             "dtype": np.float32,
             "max_oom_retries": 3,
-            "device": "gpu"
+            "device": "cpu"
         }
         
         config = {**defaults, **config['kwargs']}
@@ -157,17 +157,14 @@ class Transformer(metaclass=TransformersMeta):
         batch_dir="batch_dir",
         output_prefix="st_emb",
         max_oom_retries=3,
-        device = "gpu"
+        device = "cpu"
     ):
         """
         Optimized function for efficient memory usage during CPU or GPU-based embedding extraction.
         """
 
-        if device == "cpu":
-            device = torch.device("cpu")
-        else:
-            device = torch.device("cuda")
-            exit()
+        device = torch.device("cuda" if device == "gpu" and torch.cuda.is_available() else "cpu")
+        LOGGER.info(f"Using PyTorch device: {device}")
 
         # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
