@@ -213,7 +213,7 @@ class SkeletonBuilder():
         fused_all_tensor = torch.cat(fused_all, dim=0)
         return fused_all_tensor.numpy()
             
-    def execute(self, labels, x_cross_train):
+    def execute(self, labels, x_cross_train, device="cpu"):
         """
         Executes the complete XMR model building pipeline.
         

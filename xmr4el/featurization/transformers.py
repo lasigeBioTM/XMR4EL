@@ -127,10 +127,12 @@ class Transformer(metaclass=TransformersMeta):
 
         LOGGER.info(f"Training transformer of type {transformer_type}")
         defaults = {
-            "batch_size": 400,
+            "batch_size": 1000,
             "batch_dir": "batch_dir",
             "output_prefix": "st_emb",
-            "dtype": np.float32
+            "dtype": np.float32,
+            "max_oom_retries": 3,
+            "device": "gpu"
         }
         
         config = {**defaults, **config['kwargs']}
@@ -151,16 +153,23 @@ class Transformer(metaclass=TransformersMeta):
         model_name,
         trn_corpus,
         dtype=np.float32,
-        batch_size=400,
+        batch_size=100,
         batch_dir="batch_dir",
         output_prefix="st_emb",
-        max_oom_retries=3
+        max_oom_retries=3,
+        device = "gpu"
     ):
         """
         Optimized function for efficient memory usage during CPU or GPU-based embedding extraction.
         """
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device == "cpu":
+            device = torch.device("cpu")
+        else:
+            device = torch.device("cuda")
+            exit()
+
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         LOGGER.info(f"Using as device {device}")
 
