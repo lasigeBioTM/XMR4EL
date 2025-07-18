@@ -23,10 +23,10 @@ from xmr4el.xmr.skeleton_training import SkeletonTraining
 from xmr4el.xmr.skeleton import Skeleton
 
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 class SkeletonBuilder():
     """
@@ -225,9 +225,8 @@ class SkeletonBuilder():
         5. Classifier training throughout hierarchy
         
         Args:
-            labels (iterable): Label identifiers
-            x_cross_train (iterable): Training text data
-            trn_corpus (iterable): Processed training corpus
+            labels (iterable): Label identifiers []
+            x_cross_train (iterable): Training text data # [[]]
             
         Returns:
             Skeleton: Fully trained hierarchical XMR model
@@ -242,58 +241,62 @@ class SkeletonBuilder():
         # Step 1: Flatten synonyms into corpus and build reverse mapping
         trn_corpus = []
         label_to_indices = defaultdict(list) # label -> indices of its synonyms in trn_corpus
-        
+
         for label, synonyms in zip(labels, x_cross_train):
             for synonym in synonyms:
                 idx = len(trn_corpus)
                 trn_corpus.append(synonym)
-                label_to_indices[label].append(idx)
+                label_to_indices[label].append(idx) # Has {id: [indices of the embeddings]}
 
         htree.set_labels(labels)
         htree.set_train_data(x_cross_train)
         htree.set_dict_data(label_to_indices)
         
         # Step 2: TF-IDF
-        LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
+        # LOGGER.info(f"Started to train Vectorizer -> {self.vectorizer_config}")
         
-        # vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
-        # vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
-        # vec_emb = normalize(vec_emb, norm="l2", axis=1)        
-        # htree.set_vectorizer(vec_model)
+        vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
+        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
+        vec_emb = normalize(vec_emb, norm="l2", axis=1)        
+        htree.set_vectorizer(vec_model)
         
         # Reduce dimensions if needed, almost sure it will be needed will make n_features to be equal to transformers
-        # dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features) # 768
-        # htree.set_dimension_model(svd)
+        dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features) # 768
+        htree.set_dimension_model(svd)
         
         # Step 3: Transformer Embeddings
-        LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
+        # LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
         
-        transformer_model = self._predict_transformer(
-            trn_corpus, self.transformer_config, self.dtype
-        )
-        transformer_emb = transformer_model.embeddings()
-        trans_emb = normalize(transformer_emb, norm="l2", axis=1)
+        # transformer_model = self._predict_transformer(
+        #     trn_corpus, self.transformer_config, self.dtype
+        # )
+        # transformer_emb = transformer_model.embeddings()
+        # trans_emb = normalize(transformer_emb, norm="l2", axis=1)
         
-        htree.set_transformer_config(self.transformer_config)
+        # htree.set_transformer_config(self.transformer_config)
         
-        del transformer_model  # Clean up memory
+        # del transformer_model  # Clean up memory
         
         # Step 4: Combine both for each synonym
         # combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
 
-        combined_vecs = trans_emb
+        # combined_vecs = trans_emb
 
+        combined_vecs = dense_vec_emb # This have all the embeddings and each 
+        
         label_emb_dict = {}
+        all_embeddings = [] # has [[]], inside list has all the embeddings that correspond to each id
         
         for label in labels:
             indices = label_to_indices[label]
             emb_list = [combined_vecs[i] for i in indices]
+            all_embeddings.append(emb_list)
             label_emb_dict[label] = np.mean(emb_list, axis=0)
 
         htree.set_entity_centroids(label_emb_dict)
 
         # Step 5: Build hierarchical clustering structure 
-        LOGGER.info("Initializing SkeletonConstruction")
+        # LOGGER.info("Initializing SkeletonConstruction")
         skl_form = SkeletonConstruction(
             min_leaf_size=self.min_leaf_size,
             dtype=self.dtype)
@@ -302,7 +305,7 @@ class SkeletonBuilder():
         index_to_label = {idx: label for label, idx in label_to_index.items()}
         comb_emb_idx = {idx: label_emb_dict[label] for label, idx in label_to_index.items()}
 
-        LOGGER.info(f"Executing Constructor -> {self.clustering_config}")
+        # LOGGER.info(f"Executing Constructor -> {self.clustering_config}")
         htree = skl_form.execute(
             htree, 
             comb_emb_idx,
@@ -311,15 +314,15 @@ class SkeletonBuilder():
             root=True
         )
         
-        LOGGER.info(htree)
+        # LOGGER.info(htree)
 
         # Step 5: Train classifiers throughout hierarchy  
-        LOGGER.info(f"Initializing SkeletonTraining")      
+        # LOGGER.info(f"Initializing SkeletonTraining")      
         skl_train = SkeletonTraining(self.classifier_config, 
                                      self.reranker_config)
         
-        LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
+        # LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         
-        skl_train.execute(htree, labels, list(comb_emb_idx.values()), comb_emb_idx)
+        skl_train.execute(htree, labels, comb_emb_idx, all_embeddings)
 
         return htree

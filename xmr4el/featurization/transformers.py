@@ -20,10 +20,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 transformer_dict = {}
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 # Disable parallelism
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
@@ -63,7 +63,7 @@ class Transformer(metaclass=TransformersMeta):
             transformer_folder (str): Folder to save to.
         """
 
-        LOGGER.info(f"Saving transformer to {transformer_folder}")
+        # LOGGER.info(f"Saving transformer to {transformer_folder}")
         os.makedirs(transformer_folder, exist_ok=True)
         with open(
             os.path.join(transformer_folder, "best_vec_config.json"),
@@ -84,13 +84,13 @@ class Transformer(metaclass=TransformersMeta):
             Berttransformer: The loaded object.
         """
 
-        LOGGER.info(f"Loading transformer from {transformer_folder}")
+        # LOGGER.info(f"Loading transformer from {transformer_folder}")
         config_path = os.path.join(transformer_folder, "bert_vec_config.json")
 
         if not os.path.exists(config_path):
-            LOGGER.warning(
-                f"Config file not found in {transformer_folder}, using default config"
-            )
+            # LOGGER.warning(
+            #     f"Config file not found in {transformer_folder}, using default config"
+            # )
             config = {"type": "biobert", "kwargs": {}}
         else:
             with open(config_path, "r", encoding="utf-8") as fin:
@@ -120,7 +120,7 @@ class Transformer(metaclass=TransformersMeta):
             Berttransformer: Trained Berttransformer.
         """
 
-        LOGGER.info("Starting training for a Transformer")
+        # LOGGER.info("Starting training for a Transformer")
         config = config if config is not None else {"type": "biobert", "kwargs": {}}
 
         transformer_type = config.get("type", None)
@@ -129,7 +129,7 @@ class Transformer(metaclass=TransformersMeta):
         ), f"config {config} should contain a key 'type' for the transformer type"
         # assert isinstance(trn_corpus, list), "No model supports from file training"
 
-        LOGGER.info(f"Training transformer of type {transformer_type}")
+        # LOGGER.info(f"Training transformer of type {transformer_type}")
         defaults = {
             "batch_size": 1000,
             "batch_dir": "batch_dir",
@@ -168,7 +168,7 @@ class Transformer(metaclass=TransformersMeta):
         """
 
         device = torch.device("cuda" if device == "gpu" and torch.cuda.is_available() else "cpu")
-        LOGGER.info(f"Using PyTorch device: {device}")
+        # LOGGER.info(f"Using PyTorch device: {device}")
 
         batch_dir = f"{cls._get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}"
@@ -195,7 +195,7 @@ class Transformer(metaclass=TransformersMeta):
                 current_batch_idx += 1
                 continue
                 
-            LOGGER.info(f"Processing batch {batch_idx + 1}/{(len_corpus + batch_size - 1) // batch_size} (size: {batch_size})")
+            # LOGGER.info(f"Processing batch {batch_idx + 1}/{(len_corpus + batch_size - 1) // batch_size} (size: {batch_size})")
             
             batch = trn_corpus[start:end]
             batch_filename = f"{emb_file}_batch{batch_idx}.npz"
@@ -226,10 +226,10 @@ class Transformer(metaclass=TransformersMeta):
                     # Reset batch size if we had reduced it previously
                     if batch_size != original_batch_size:
                         batch_size = original_batch_size
-                        LOGGER.info(f"Resetting batch size to original: {batch_size}")
+                        # LOGGER.info(f"Resetting batch size to original: {batch_size}")
                     
             except torch.cuda.OutOfMemoryError as oom:
-                LOGGER.warning(f"OOM error processing batch {batch_idx} (size: {batch_size})")
+                # LOGGER.warning(f"OOM error processing batch {batch_idx} (size: {batch_size})")
                 
                 # Clean up memory
                 torch.cuda.empty_cache()
@@ -239,7 +239,7 @@ class Transformer(metaclass=TransformersMeta):
                 reduction_factor = min(0.5, max(0.1, 1 - (0.2 * max_oom_retries)))
                 new_batch_size = max(1, int(batch_size * reduction_factor))
                 
-                LOGGER.info(f"Reducing batch size from {batch_size} to {new_batch_size}")
+                # LOGGER.info(f"Reducing batch size from {batch_size} to {new_batch_size}")
                 batch_size = new_batch_size
                 
                 # Recalculate where we should be in processing
@@ -251,7 +251,7 @@ class Transformer(metaclass=TransformersMeta):
                 max_oom_retries -= 1
 
             except Exception as e:
-                LOGGER.error(f"Unexpected error processing batch {batch_idx}: {str(e)}")
+                # LOGGER.error(f"Unexpected error processing batch {batch_idx}: {str(e)}")
                 cls._del_batch_dir(batch_dir)
                 raise
         
@@ -314,7 +314,7 @@ class Transformer(metaclass=TransformersMeta):
                 emb_path = os.path.join(batch_dir, item)
                 os.remove(emb_path)
         else:
-            LOGGER.warning("Directory does not exist, Creating")
+            # LOGGER.warning("Directory does not exist, Creating")
             os.makedirs(batch_dir)
 
     def _del_batch_dir(batch_dir):
@@ -358,7 +358,7 @@ class BioBert(Transformer):
             save_dir (str): Folder to save the model.
         """
 
-        LOGGER.info(f"Saving BioBERT transformer to {save_dir}")
+        # LOGGER.info(f"Saving BioBERT transformer to {save_dir}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
             pickle.dump(self.__dict__, fout)
@@ -374,7 +374,7 @@ class BioBert(Transformer):
             BioBert: The loaded object.
         """
 
-        LOGGER.info(f"Loading BioBERT transformer from {load_dir}")
+        # LOGGER.info(f"Loading BioBERT transformer from {load_dir}")
         transformer_path = os.path.join(load_dir, "transformer.pkl")
         assert os.path.exists(
             transformer_path
@@ -411,7 +411,7 @@ class SentenceTBioBert(Transformer):
             save_dir (str): Folder to save the model.
         """
 
-        LOGGER.info(f"Saving Sentence BioBERT transformer to {save_dir}")
+        # LOGGER.info(f"Saving Sentence BioBERT transformer to {save_dir}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
             pickle.dump(self.__dict__, fout)
@@ -427,7 +427,7 @@ class SentenceTBioBert(Transformer):
             BioBert: The loaded object.
         """
 
-        LOGGER.info(f"Loading BioBERT transformer from {load_dir}")
+        # LOGGER.info(f"Loading BioBERT transformer from {load_dir}")
         transformer_path = os.path.join(load_dir, "transformer.pkl")
         assert os.path.exists(
             transformer_path
@@ -466,7 +466,7 @@ class SentenceTSapBert(Transformer):
             save_dir (str): Folder to save the model.
         """
 
-        LOGGER.info(f"Saving Sentence SapBERT transformer to {save_dir}")
+        # LOGGER.info(f"Saving Sentence SapBERT transformer to {save_dir}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
             pickle.dump(self.__dict__, fout)
@@ -482,7 +482,7 @@ class SentenceTSapBert(Transformer):
             BioBert: The loaded object.
         """
 
-        LOGGER.info(f"Loading Sentence SapBERT transformer from {load_dir}")
+        # LOGGER.info(f"Loading Sentence SapBERT transformer from {load_dir}")
         transformer_path = os.path.join(load_dir, "transformer.pkl")
         assert os.path.exists(
             transformer_path

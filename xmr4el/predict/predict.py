@@ -19,10 +19,10 @@ from xmr4el.ranker.candidate_retrieval import CandidateRetrieval
 from xmr4el.ranker.cross_encoder import CrossEncoder
 
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 
 class Predict():
@@ -59,8 +59,8 @@ class Predict():
         effective_dim = min(n_features, emb.shape[0])
         
         if n_features_emb >= n_features_emb or effective_dim <= 0:
-            LOGGER.info("Maintaining original number of features," 
-                        f"impossible to reduce, min({n_samples}, {n_features})={n_features_emb}")
+            # LOGGER.info("Maintaining original number of features," 
+            #             f"impossible to reduce, min({n_samples}, {n_features})={n_features_emb}")
             return emb  # Return original if reduction not possible
         
         # Perform PCA with effective dimension
@@ -259,7 +259,7 @@ class Predict():
                 - csr_matrix: Sparse prediction matrix
                 - list: List of label hit ratios for each input
         """
-        LOGGER.info("Started inference")
+        # LOGGER.info("Started inference")
         
         # 1. Generate embeddings
         # vec = htree.vectorizer

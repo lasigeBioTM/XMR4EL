@@ -19,10 +19,10 @@ from sklearn.multiclass import OneVsRestClassifier
 
 classifier_dict = {}
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 if torch.cuda.is_available():
     from cuml.linear_model import LogisticRegression as CUMLLogisticRegression
@@ -121,9 +121,9 @@ class ClassifierModel(metaclass=ClassifierMeta):
             if config is not None
             else {"type": "sklearnlogisticregression", "kwargs": {}}
         )
-        LOGGER.debug(
-            f"Training classifier with config: {json.dumps(config, indent=True)}"
-        )
+        # LOGGER.debug(
+        #     f"Training classifier with config: {json.dumps(config, indent=True)}"
+        # )
         classifier_type = config.get("type", None)
         assert (
             classifier_type is not None
@@ -200,9 +200,9 @@ class SklearnLogisticRegression(ClassifierModel):
             SklearnLogisticRegression: The loaded object.
         """
 
-        LOGGER.info(
-            f"Loading Sklearn Logistic Regression Classifier Model from {load_dir}"
-        )
+        # LOGGER.info(
+        #     f"Loading Sklearn Logistic Regression Classifier Model from {load_dir}"
+        # )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
             classifier_path
@@ -248,7 +248,7 @@ class SklearnLogisticRegression(ClassifierModel):
         try:
             config = {**defaults, **config}
             model = LogisticRegression(**config)
-            model = OneVsRestClassifier(model)
+            # model = OneVsRestClassifier(model)
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
@@ -292,7 +292,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
             SklearnLogisticRegression: The loaded object.
         """
 
-        LOGGER.info(f"Loading Sklearn Random Forest Classifier Model from {load_dir}")
+        # LOGGER.info(f"Loading Sklearn Random Forest Classifier Model from {load_dir}")
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
             classifier_path
@@ -383,7 +383,7 @@ class SklearnSupportVectorClassification(ClassifierModel):
             SklearnLogisticRegression: The loaded object.
         """
 
-        LOGGER.info(f"Loading Sklearn Support Vector Classifier Model from {load_dir}")
+        # LOGGER.info(f"Loading Sklearn Support Vector Classifier Model from {load_dir}")
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
             classifier_path
@@ -469,9 +469,9 @@ class CumlLogisticRegression(ClassifierModel):
             SklearnLogisticRegression: The loaded object.
         """
 
-        LOGGER.info(
-            f"Loading Cuml Logistic Regression Classifier Model from {load_dir}"
-        )
+        # LOGGER.info(
+        #     f"Loading Cuml Logistic Regression Classifier Model from {load_dir}"
+        # )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
             classifier_path
@@ -554,9 +554,9 @@ class LightGBMClassifier(ClassifierModel):
             SklearnLogisticRegression: The loaded object.
         """
 
-        LOGGER.info(
-            f"Loading LightGBM Classifier Model from {load_dir}"
-        )
+        # LOGGER.info(
+        #     f"Loading LightGBM Classifier Model from {load_dir}"
+        # )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
             classifier_path
@@ -621,24 +621,3 @@ class LightGBMClassifier(ClassifierModel):
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)
-    
-
-class DeepMLPClassifier(ClassifierModel):
-
-    def __init__(self, config, model):
-        self.config = config
-        self.model = model
-        
-    def save(self, save_dir):
-        pass
-    
-    @classmethod
-    def load(cls, load_dir, config):
-        pass
-    
-    @classmethod
-    def train(cls, X_train, y_train, config={}):
-        pass
-    
-    
-    

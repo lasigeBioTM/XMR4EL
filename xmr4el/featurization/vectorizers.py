@@ -11,10 +11,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 vectorizer_dict = {}
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 
 class VectorizerMeta(ABCMeta):
@@ -103,7 +103,7 @@ class Vectorizer(metaclass=VectorizerMeta):
         """
 
         config = config if config is not None else {"type": "tfidf", "kwargs": {}}
-        LOGGER.debug(f"Train Vectorizer with config: {json.dumps(config, indent=True)}")
+        # LOGGER.debug(f"Train Vectorizer with config: {json.dumps(config, indent=True)}")
         vectorizer_type = config.get("type", None)
         assert (
             vectorizer_type is not None

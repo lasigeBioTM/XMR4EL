@@ -11,10 +11,10 @@ from sentence_transformers import CrossEncoder as STCrossEncoder
 cross_encoder_dict = {}
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 class CrossEncoderMeta(ABCMeta):
     """Metaclass for keeping track of all 'CrossEncoder' subclasses"""

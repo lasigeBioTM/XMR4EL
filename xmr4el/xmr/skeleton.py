@@ -15,10 +15,10 @@ from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 from xmr4el.ranker.reranker import Reranker
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 
 class Skeleton:
@@ -96,8 +96,6 @@ class Skeleton:
         
         self.reranker = reranker
         
-        self.reranker = reranker
-        
         self.entity_centroids = entity_centroids
 
         # Tree Structure
@@ -127,12 +125,11 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "dimension_model", "clustering_model", "tree_classifier", "flat_classifier", "reranker_model"] # reranker
+        models = ["vectorizer", "dimension_model", "clustering_model", "tree_classifier", "flat_classifier", "reranker"] # reranker
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
             if model is not None:  # Ensure model exists before saving
-                print(type(model))
                 model_path = os.path.join(save_dir, models[idx])
                 # Handle models with different save methods
                 if hasattr(model, 'save'):
@@ -144,7 +141,7 @@ class Skeleton:
                     except ImportError:
                         with open(f"{model_path}.pkl", "wb") as f:
                             pickle.dump(model, f)
-                LOGGER.debug(f"Saved {models[idx]} to {model_path}")
+                # LOGGER.debug(f"Saved {models[idx]} to {model_path}")
 
         # Remove models from state to avoid duplicate saving
         for model in models:
@@ -157,7 +154,7 @@ class Skeleton:
             with open(train_data_path, 'w', encoding='utf-8') as train_f:
                 json.dump(self.train_data, train_f, indent=4)
             state.pop("train_data", None)
-            LOGGER.info(f"Loaded Training data, {train_data_path}")
+            # LOGGER.info(f"Loaded Training data, {train_data_path}")
 
         # Save large embeddings as numpy files
         for attr in [
@@ -169,9 +166,10 @@ class Skeleton:
             if emb_data is not None:
                 np.save(os.path.join(save_dir, f"{attr}.npy"), emb_data)
                 state.pop(attr, None) # Remove from state dict
-                LOGGER.info(f"Saved {attr} embeddings")
+                # LOGGER.info(f"Saved {attr} embeddings")
             else:
-                LOGGER.warning(f"{attr} is None and will not be saved.")
+                # LOGGER.warning(f"{attr} is None and will not be saved.")
+                pass
 
         # Handle child trees recursively
         state.pop("children", {}) # Children saved separately
@@ -183,13 +181,13 @@ class Skeleton:
                     children_dir, f"child_{idx}"
                 )  # Unique directory for each child
                 child.save(child_save_dir, child_tree=True)
-                LOGGER.info(f"Saved child {idx} to {child_save_dir}")
+                # LOGGER.info(f"Saved child {idx} to {child_save_dir}")
 
         # Save remaining metadata as pickle
         with open(os.path.join(save_dir, "xmrtree.pkl"), "wb") as fout:
             pickle.dump(state, fout)
 
-        LOGGER.info(f"Model saved successfully at {save_dir}")
+        # LOGGER.info(f"Model saved successfully at {save_dir}")
 
     @classmethod
     def load(cls, load_dir=None, child_tree=False):
@@ -214,7 +212,7 @@ class Skeleton:
                     f"No saved {cls.__name__} models found in saved_trees."
                 )
             load_dir = all_saves[0]  # Load the most recent one
-            LOGGER.info(f"Loading latest model from: {load_dir}")
+            # LOGGER.info(f"Loading latest model from: {load_dir}")
             
         # Load main metadata
         tree_path = os.path.join(load_dir, "xmrtree.pkl")
@@ -241,7 +239,7 @@ class Skeleton:
             "clustering_model": ClusteringModel if hasattr(ClusteringModel, 'load') else None,
             "tree_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
             "flat_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
-            "reranker_model": Reranker if hasattr(Reranker, 'load') else None,
+            "reranker": Reranker if hasattr(Reranker, 'load') else None,
         }
         
         for model_name, model_class in model_files.items():
@@ -250,7 +248,7 @@ class Skeleton:
             # First check for model-specific save format
             if os.path.exists(model_path) and model_class is not None:
                 setattr(model, model_name, model_class.load(model_path))
-                LOGGER.debug(f"Loaded {model_name} using class-specific loader")
+                # LOGGER.debug(f"Loaded {model_name} using class-specific loader")
             else:
                 # Check for generic save formats
                 for ext in ['.joblib', '.pkl']:
@@ -262,7 +260,7 @@ class Skeleton:
                             with open(full_path, "rb") as f:
                                 loaded_model = pickle.load(f)
                         setattr(model, model_name, loaded_model)
-                        LOGGER.debug(f"Loaded {model_name} from {full_path}")
+                        # LOGGER.debug(f"Loaded {model_name} from {full_path}")
                         break
 
         # Load embeddings if they exist
@@ -274,10 +272,10 @@ class Skeleton:
             emb_path = os.path.join(load_dir, f"{attr}.npy")
             if os.path.exists(emb_path):
                 setattr(model, attr, np.load(emb_path, allow_pickle=True))
-                LOGGER.debug(f"Loaded {attr} embeddings from {emb_path}")
+                # LOGGER.debug(f"Loaded {attr} embeddings from {emb_path}")
             else:
                 pass
-                LOGGER.debug(f"{attr} not found at {emb_path}")
+                # LOGGER.debug(f"{attr} not found at {emb_path}")
 
         # Recursively load child trees
         children_dir = os.path.join(load_dir, "children")
@@ -289,13 +287,14 @@ class Skeleton:
                         child_index = int(child_name.replace("child_", ""))  # Convert 'child_0' -> 0
                         child_model = cls.load(child_tree_path, child_tree=True)  # Recursively load child
                         model.children[child_index] = child_model
-                        LOGGER.debug(
-                        f"Loading child tree from {child_tree_path} as index {child_index}"
-                        )
+                        # LOGGER.debug(
+                        # f"Loading child tree from {child_tree_path} as index {child_index}"
+                        # )
                     except ValueError:
-                        LOGGER.debug(f"Skipping unexpected child folder: {child_name}")
+                        pass
+                        # LOGGER.debug(f"Skipping unexpected child folder: {child_name}")
 
-        LOGGER.info(f"Model loaded successfully from {load_dir}")
+        # LOGGER.info(f"Model loaded successfully from {load_dir}")
         return model
     
     def set_labels(self, labels):

@@ -18,10 +18,10 @@ from sklearn.cluster import AgglomerativeClustering, KMeans, MiniBatchKMeans
 
 cluster_dict = {}
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 if torch.cuda.is_available():
     from cuml.cluster import KMeans as CUMLKMeans
@@ -116,7 +116,7 @@ class ClusteringModel(metaclass=ClusterMeta):
         config = (
             config if config is not None else {"type": "sklearnkmeans", "kwargs": {}}
         )
-        LOGGER.debug(f"Train Clustering with config: {json.dumps(config, indent=True)}")
+        # LOGGER.debug(f"Train Clustering with config: {json.dumps(config, indent=True)}")
         cluster_type = config.get("type", None)
         assert (
             cluster_type is not None
@@ -194,7 +194,7 @@ class SklearnAgglomerativeClustering(ClusteringModel):
             SklearnAgglmerativeClustering: The loaded object.
         """
 
-        LOGGER.info(f"Loading Agglomerative Clustering Model from {load_dir}")
+        # LOGGER.info(f"Loading Agglomerative Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
@@ -277,7 +277,7 @@ class SklearnKMeans(ClusteringModel):
             SklearnKMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading Sklearn Kmeans Clustering Model from {load_dir}")
+        # LOGGER.info(f"Loading Sklearn Kmeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
@@ -373,7 +373,7 @@ class SklearnMiniBatchKMeans(ClusteringModel):
             KMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading Sklearn MiniBatchKMeans Clustering Model from {load_dir}")
+        # LOGGER.info(f"Loading Sklearn MiniBatchKMeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
@@ -479,7 +479,7 @@ class CumlKMeans(ClusteringModel):
             CumlKMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading Cuml KMeans Clustering Model from {load_dir}")
+        # LOGGER.info(f"Loading Cuml KMeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path
@@ -585,7 +585,7 @@ class FaissKMeans(ClusteringModel):
             CumlKMeans: The loaded object.
         """
 
-        LOGGER.info(f"Loading FAISS KMeans Clustering Model from {load_dir}")
+        # LOGGER.info(f"Loading FAISS KMeans Clustering Model from {load_dir}")
         clustering_path = os.path.join(load_dir, "clustering.pkl")
         assert os.path.exists(
             clustering_path

@@ -15,6 +15,20 @@ class SkeletonInference:
         self.all_kb_ids = all_kb_ids
 
     @staticmethod
+    def _predict_vectorizer(text_vec, corpus):
+        """Predicts the training data with the Vectorizer model
+
+        Args:
+            text_vec (Vectorizer): The Vectorizer Model
+            corpus (np.array or sparse ?): The data array to be predicted
+
+        Return:
+            Transformed text embeddings (nd.array or scipy.sparse)
+        """
+        # Use trained vectorizer to transform input corpus
+        return text_vec.predict(corpus)
+
+    @staticmethod
     def _predict_transformer(trn_corpus, config, dtype=np.float32):
         """Predicts the training data with the transformer model
 
@@ -99,14 +113,19 @@ class SkeletonInference:
 
         # print(beams)
 
+        # print(beams)
+
         # ---- Rerank in each leaf node ----
         # Use entity_centroids stored globally in the root
         all_entity_centroids = self.htree.entity_centroids
+        
+        # print(all_entity_centroids)
+        
+        # exit()
+        
         final_candidates = []
 
         for node, path_score in beams:
-            print(node, path_score)
-            print(node.reranker)
             if not hasattr(node, "reranker") or node.reranker is None:
                 # print("Donest have an reranker, odd")
                 continue  # Skip if this node has no reranker (shouldn't happen)
@@ -140,6 +159,9 @@ class SkeletonInference:
 
         # ---- Final Top-K ----
         final_candidates.sort(key=lambda x: x[1], reverse=True)
+        print(final_candidates)
+        
+        exit()
         return final_candidates[:k]
 
     
@@ -159,6 +181,9 @@ class SkeletonInference:
             results[i] = ([self.all_kb_ids.index(eid) for eid, _ in pred], [score for _, score in pred])
             gold = labels[i]
             cand_ids = [eid for eid, _ in pred]
+            print(gold, cand_ids)
+            
+            # exit()
             if isinstance(gold, list):
                 hits[i] = int(any(g in cand_ids for g in gold))
             else:
@@ -172,7 +197,16 @@ class SkeletonInference:
                 data.append(score)
         csr = csr_matrix((data, (rows, cols)), shape=(n, len(self.all_kb_ids)))
         return csr, hits
-                
+    
+    def vectorize_input_text(self, input_text):
+        # 1. Generate embeddings
+        vec = self.htree.vectorizer
+        text_emb = self._predict_vectorizer(vec, input_text)
+        svd = self.htree.dimension_model
+        dense_text_emb = svd.transform(text_emb)
+        dense_text_emb = normalize(dense_text_emb, norm='l2', axis=1)
+        return dense_text_emb
+    
     def transform_input_text(self, input_text):
         transformer_model = self._predict_transformer(
             input_text, 
@@ -181,3 +215,14 @@ class SkeletonInference:
         transformer_emb = normalize(transformer_model.model.embeddings, norm="l2", axis=1)
 
         return transformer_emb
+    
+    def generate_input_embeddigns(self, input_text):
+        text_emb = self.vectorize_input_text(input_text)
+        # transformer_emb = self.transform_input_text(input_text)
+        
+        # concat_emb = np.hstack((
+        #     transformer_emb,
+        #     text_emb
+        # ))
+        
+        return text_emb

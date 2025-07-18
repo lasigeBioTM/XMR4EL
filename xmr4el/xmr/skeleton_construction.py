@@ -10,10 +10,10 @@ from xmr4el.xmr.tuner import XMRTuner
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 
 class SkeletonConstruction():
@@ -124,13 +124,13 @@ class SkeletonConstruction():
         for c in cluster_counts:
             if cluster_counts[c] < self.min_leaf_size:
                 # Min leaf size not reached
-                LOGGER.info("Removing Clustering, Minimal Leaf Size reached")
+                # LOGGER.info("Removing Clustering, Minimal Leaf Size reached")
                 if root:
-                    LOGGER.info(cluster_counts)
+                    # LOGGER.info(cluster_counts)
                     raise Exception(f"Exiting Training, model has too many clusters being formed, mininal leaf size being reached")
                 return htree
             
-        LOGGER.info(f"Saving Clustering Model at depth {htree.depth}, with {n_clusters} clusters")
+        # LOGGER.info(f"Saving Clustering Model at depth {htree.depth}, with {n_clusters} clusters")
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(comb_emb_idx)
 

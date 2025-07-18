@@ -13,10 +13,10 @@ from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.ranker.reranker import Reranker
 
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 
 class SkeletonTraining():
@@ -153,26 +153,32 @@ class SkeletonTraining():
         for child in children:
             self._train_routing_nodes(child, all_kb_ids, all_embeddings)
 
-    def _train_leaf_rerankers(self, htree, all_embeddings, entity_embs_dict):
+    def _train_leaf_rerankers(self, htree, comb_emb_idx, all_embeddings):
+        """
+            all_kb_ids (list): has all ids
+            comb_emb_idx (dict): idx: mean embeddings
+            all_embeddings (list list): [[individual synonyms embedddings]]
+        """
         if not htree.children:
-            # at leaf_node
-            mention_indices = htree.kb_indices
+            mention_indices = htree.kb_indices # All the indices of the cluster
+            # kb_ids = [all_kb_ids[idx] for idx in mention_indices] # each mention row maps to one KB index
             if not mention_indices:
                 return
             # positive mentions and true KB indices
-            m_embs = [all_embeddings[idx]for idx in mention_indices]
-            true_inds = mention_indices # each mention row maps to one KB index
+            m_embs = [all_embeddings[idx]for idx in mention_indices] # mentions
+            centroid_emb = [comb_emb_idx[idx] for idx in mention_indices] # mean of synonyms
             # negatives: KB indices under this leaf (hard negatives from same leaf cluster)
             # here, negatives are other true_inds in this leaf
             reranker = Reranker(self.reranker_config, num_negatives=self.num_negatives)
             # entity_embs_dict must include centroids for all_kb_ids
-            reranker.train(m_embs, true_inds, entity_embs_dict={idx: entity_embs_dict[idx] for idx in htree.kb_indices})
+            reranker.train(m_embs, centroid_emb, mention_indices)
+            print(reranker)
             htree.set_reranker(reranker)
         else:
             for child in htree.children.values():
-                self._train_leaf_rerankers(child, all_embeddings, entity_embs_dict)
+                self._train_leaf_rerankers(child, comb_emb_idx, all_embeddings)
 
-    def execute(self, htree, all_kb_ids, all_embeddings, entity_embs_dict):
+    def execute(self, htree, all_kb_ids, comb_emb_idx, all_embeddings):
         """
         Recursively train routing classifiers and leaf rerankers.
 
@@ -183,7 +189,7 @@ class SkeletonTraining():
             entity_embs_dict: mapping KB index -> centroid embedding.
         """
         # First, train routing classifiers as before
-        self._train_routing_nodes(htree, all_kb_ids, all_embeddings)
+        # self._train_routing_nodes(htree, all_kb_ids, all_embeddings)
         # Then, train rerankers at leaf nodes
-        self._train_leaf_rerankers(htree, all_embeddings, entity_embs_dict)
+        self._train_leaf_rerankers(htree, comb_emb_idx, all_embeddings)
         

@@ -5,6 +5,8 @@ import json
 
 import numpy as np
 
+from sklearn.metrics.pairwise import cosine_similarity
+
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 
@@ -45,7 +47,6 @@ class Reranker():
         with open(model_path, "rb") as fin:
             model = pickle.load(fin)
         
-        print("RERANKER LOADED")
         return cls(config=config, num_negatives=config.get("num_negatives", 5), model=model)
     
     @staticmethod
@@ -63,30 +64,45 @@ class Reranker():
         # Delegate training to ClassifierModel class
         return ClassifierModel.train(X_corpus, y_corpus, config, dtype)
     
-    def train(self, mention_embeddings, true_indices, entity_embs_dict):
+    def train(self, mention_embeddings, centroid_embeddings, mention_indices):
         """
         Train the reranker on positive and negative mention-entity pairs.
 
         Args:
             mention_embeddings (np.ndarray): shape (N, d), mention vectors.
-            true_indices (List[int]): KB indices of true entities for each mention.
+            true_ids (List[int]): KB ids of true entities for each mention.
             entity_embs_dict (Dict[int, np.ndarray]): mapping KB index to centroid vector.
         """
         X_pairs = []
         y = []
         # Build positive and negative pairs
-        all_eids = list(entity_embs_dict.keys())
-        for i, m_emb in enumerate(mention_embeddings):
-            true_eid = true_indices[i]
-            # positive
-            pos = np.hstack((m_emb, entity_embs_dict[true_eid]))
-            X_pairs.append(pos); y.append(1)
-            # negatives
-            neg_candidates = [e for e in all_eids if e != true_eid]
-            sampled = random.sample(neg_candidates, min(self.num_negatives, len(neg_candidates)))
-            for neg in sampled:
-                neg_pair = np.hstack((m_emb, entity_embs_dict[neg]))
-                X_pairs.append(neg_pair); y.append(0)
+        
+        # Convert Centroids into matrix, 
+        centroid_matrix = np.vstack(centroid_embeddings)
+        
+        for _, (syn_emb_list, true_idx) in enumerate(zip(mention_embeddings, mention_indices)):
+            true_centroid = centroid_embeddings[true_idx]
+            # print(true_centroid, type(true_centroid))
+            for syn_emb in syn_emb_list:
+                pos = np.hstack((syn_emb, true_centroid))
+                X_pairs.append(pos)
+                y.append(1)
+                
+            # -------- Hard Negatives --------
+            # Compute cosine similarity between true_centroid and all other centroids
+            sims = cosine_similarity(true_centroid.reshape(1, -1), centroid_matrix)[0]
+            
+            hard_neg_idxs = [idx for idx in np.argsort(-sims) if idx != true_idx][:self.num_negatives]
+            print(hard_neg_idxs)
+
+            for neg_idx in hard_neg_idxs:
+                neg_centroid = centroid_embeddings[neg_idx]
+                for syn_emb in syn_emb_list:
+                    neg_pair = np.hstack((syn_emb, neg_centroid))
+                    X_pairs.append(neg_pair)
+                    y.append(0)
+                    
+            
         X = np.vstack(X_pairs)
         y = np.array(y, dtype=np.int8)
 

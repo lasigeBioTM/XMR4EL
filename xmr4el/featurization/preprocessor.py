@@ -6,10 +6,10 @@ from fuzzywuzzy import fuzz
 
 from sklearn.preprocessing import MultiLabelBinarizer
 
-LOGGER = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# LOGGER = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+# )
 
 class Preprocessor:
     """Preprocess text to numerical values"""
@@ -92,8 +92,8 @@ class Preprocessor:
                 labels = [line.strip() for line in f if line.strip()]
             
             if len(labels) > len(grouped_texts):
-                LOGGER.warning("Labels and Train length mismatch, Labels > Train. Truncating Labels. "
-                            f"Labels length: {len(labels)}, Train length: {len(grouped_texts)}")
+                # LOGGER.warning("Labels and Train length mismatch, Labels > Train. Truncating Labels. "
+                #             f"Labels length: {len(labels)}, Train length: {len(grouped_texts)}")
                 labels = labels[:len(grouped_texts)]
             elif len(labels) < len(grouped_texts):
                 raise Exception(f"Labels and Train length mismatch, Train > Labels. Exiting. Labels: {len(labels)}, Train: {len(grouped_texts)}")
