@@ -164,7 +164,7 @@ class SkeletonInference:
         # ---- Final Top-K ----
         final_candidates.sort(key=lambda x: x[1], reverse=True)
         # exit()
-        return final_candidates[:k]
+        return final_candidates
 
     
     def batch_inference(self, input_embs, labels, k=5, candidates=15):
@@ -222,10 +222,12 @@ class SkeletonInference:
     
     def generate_input_embeddigns(self, input_text):
         text_emb = self.vectorize_input_text(input_text)
-        transformer_emb = self.transform_input_text(input_text)
+        # transformer_emb = self.transform_input_text(input_text)
         
-        concat_emb = np.hstack((
-            transformer_emb,
-            text_emb
-        ))
+        # concat_emb = np.hstack((
+        #     transformer_emb,
+        #     text_emb
+        # ))
+        
+        concat_emb = text_emb
         return concat_emb

@@ -271,22 +271,22 @@ class SkeletonBuilder():
         # Step 3: Transformer Embeddings
         # LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
         
-        transformer_model = self._predict_transformer(
-            trn_corpus, self.transformer_config, self.dtype
-        )
-        transformer_emb = transformer_model.embeddings()
-        trans_emb = normalize(transformer_emb, norm="l2", axis=1)
+        # transformer_model = self._predict_transformer(
+        #     trn_corpus, self.transformer_config, self.dtype
+        # )
+        # transformer_emb = transformer_model.embeddings()
+        # trans_emb = normalize(transformer_emb, norm="l2", axis=1)
         
-        htree.set_transformer_config(self.transformer_config)
+        # htree.set_transformer_config(self.transformer_config)
         
-        del transformer_model  # Clean up memory
+        # del transformer_model  # Clean up memory
         
         # Step 4: Combine both for each synonym
-        combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
+        # combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
 
         # combined_vecs = trans_emb
 
-        # combined_vecs = dense_vec_emb # This have all the embeddings and each 
+        combined_vecs = dense_vec_emb # This have all the embeddings and each 
         
         label_emb_dict = {}
         all_embeddings = [] # has [[]], inside list has all the embeddings that correspond to each id
