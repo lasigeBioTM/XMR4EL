@@ -76,9 +76,13 @@ class Preprocessor:
             grouped_texts = grouped_texts.head(truncate_data)
             raw_labels = raw_labels[:truncate_data]
 
-        # Check length match
-        if len(raw_labels) != len(grouped_texts):
-            raise Exception(f"Mismatch: {len(raw_labels)} labels vs {len(grouped_texts)} mention groups")
+        # Check length match with new behavior
+        if len(raw_labels) > len(grouped_texts):
+            # Truncate labels to match texts length
+            raw_labels = raw_labels[:len(grouped_texts)]
+            print(f"Warning: Truncated labels from {len(raw_labels)} to {len(grouped_texts)} to match text groups")
+        elif len(raw_labels) < len(grouped_texts):
+            raise Exception(f"Mismatch: Not enough labels ({len(raw_labels)}) for text groups ({len(grouped_texts)})")
 
         # Step 4: Inject labels into grouped_texts
         grouped_texts["concept_id"] = raw_labels
