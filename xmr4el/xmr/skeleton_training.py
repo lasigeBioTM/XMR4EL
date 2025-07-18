@@ -130,7 +130,7 @@ class SkeletonTraining():
             shuffle=True
         )
         
-        classifier_config["kwargs"]["onevsrest"] = True
+        classifier_config["kwargs"]["onevsrest"] = False
         model = self._train_classifier(X_tr, Y_tr, self.classifier_config)
         
         # Store model and splits on the tree node
