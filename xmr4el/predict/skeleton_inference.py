@@ -86,12 +86,16 @@ class SkeletonInference:
                 probs = self._predict_proba_classifier(node.tree_classifier, input_emb.reshape(1, -1))[0]
 
                 class_labels = node.tree_classifier.model.model.classes_
-
+                # print(class_labels)
+                # print(node.children.items())
+                print(probs)
                 # 2b) Build (label, child_node, prob) only for valid children
+                children_keys = list(node.children.keys())
+                # print(children_keys)
                 candidates = []
-                for label, child_node in node.children.items():
-                    # find the probability for this label (0.0 if absent)
-                    prob = float(probs[list(class_labels).index(label)])
+                for i, prob in enumerate(probs):
+                    label = children_keys[class_labels[i]]
+                    child_node = node.children[label]
                     candidates.append((label, child_node, prob))
 
                 # 2c) Select top beam_size children by their prob
@@ -159,9 +163,7 @@ class SkeletonInference:
 
         # ---- Final Top-K ----
         final_candidates.sort(key=lambda x: x[1], reverse=True)
-        print(final_candidates)
-        
-        exit()
+        # exit()
         return final_candidates[:k]
 
     
@@ -181,7 +183,9 @@ class SkeletonInference:
             results[i] = ([self.all_kb_ids.index(eid) for eid, _ in pred], [score for _, score in pred])
             gold = labels[i]
             cand_ids = [eid for eid, _ in pred]
-            print(gold, cand_ids)
+            # print(gold, cand_ids)
+            # print(gold, pred)
+            # exit()
             
             # exit()
             if isinstance(gold, list):
@@ -218,11 +222,10 @@ class SkeletonInference:
     
     def generate_input_embeddigns(self, input_text):
         text_emb = self.vectorize_input_text(input_text)
-        # transformer_emb = self.transform_input_text(input_text)
+        transformer_emb = self.transform_input_text(input_text)
         
-        # concat_emb = np.hstack((
-        #     transformer_emb,
-        #     text_emb
-        # ))
-        
-        return text_emb
+        concat_emb = np.hstack((
+            transformer_emb,
+            text_emb
+        ))
+        return concat_emb

@@ -247,9 +247,13 @@ class SkeletonBuilder():
                 idx = len(trn_corpus)
                 trn_corpus.append(synonym)
                 label_to_indices[label].append(idx) # Has {id: [indices of the embeddings]}
+                
+        # print(labels[77])
+        # print(x_cross_train[77])
+        # exit()
 
         htree.set_labels(labels)
-        htree.set_train_data(x_cross_train)
+        htree.set_train_data(trn_corpus)
         htree.set_dict_data(label_to_indices)
         
         # Step 2: TF-IDF
@@ -267,31 +271,61 @@ class SkeletonBuilder():
         # Step 3: Transformer Embeddings
         # LOGGER.info(f"Creating Transformer Embeddings -> {self.transformer_config}")
         
-        # transformer_model = self._predict_transformer(
-        #     trn_corpus, self.transformer_config, self.dtype
-        # )
-        # transformer_emb = transformer_model.embeddings()
-        # trans_emb = normalize(transformer_emb, norm="l2", axis=1)
+        transformer_model = self._predict_transformer(
+            trn_corpus, self.transformer_config, self.dtype
+        )
+        transformer_emb = transformer_model.embeddings()
+        trans_emb = normalize(transformer_emb, norm="l2", axis=1)
         
-        # htree.set_transformer_config(self.transformer_config)
+        htree.set_transformer_config(self.transformer_config)
         
-        # del transformer_model  # Clean up memory
+        del transformer_model  # Clean up memory
         
         # Step 4: Combine both for each synonym
-        # combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
+        combined_vecs = np.hstack([trans_emb, dense_vec_emb])  # [N_synonyms x (768 + tfidf_dim)]
 
         # combined_vecs = trans_emb
 
-        combined_vecs = dense_vec_emb # This have all the embeddings and each 
+        # combined_vecs = dense_vec_emb # This have all the embeddings and each 
         
         label_emb_dict = {}
         all_embeddings = [] # has [[]], inside list has all the embeddings that correspond to each id
         
         for label in labels:
             indices = label_to_indices[label]
-            emb_list = [combined_vecs[i] for i in indices]
-            all_embeddings.append(emb_list)
-            label_emb_dict[label] = np.mean(emb_list, axis=0)
+            synonyms = [trn_corpus[i] for i in indices]
+            embeddings = [combined_vecs[i] for i in indices]
+            
+            embeddings = np.vstack(embeddings)
+            embeddings = normalize(embeddings, norm="l2", axis=1)
+            
+            all_embeddings.append(embeddings)
+            
+            tfidf_vec = self._predict_vectorizer(vec_model, synonyms)
+            weights = tfidf_vec.sum(axis=1).A1  # sum TF-IDF per synonym
+            
+            mask = weights > 0
+            if not mask.any():
+                # fallback: all zero weights -> uniform weights on all synonyms
+                weights = np.ones(len(weights)) / len(weights)
+                embeddings_masked = embeddings
+            else:
+                # only keep embeddings with positive weight
+                weights = weights[mask]
+                embeddings_masked = embeddings[mask, :]
+
+            weights = weights / (weights.sum() + 1e-8)  # safe normalization now
+
+            weighted_centroid = np.average(embeddings_masked, axis=0, weights=weights)
+            weighted_centroid = weighted_centroid / (np.linalg.norm(weighted_centroid) + 1e-8)
+            
+            label_emb_dict[label] = weighted_centroid
+            
+            # for i, idx in enumerate(indices):
+            #     emb = combined_vecs[idx]
+            #     emb = normalize(emb.reshape(1, -1))[0]
+            #      sim = np.dot(weighted_centroid, emb)
+            #     print(f"Synonym: {trn_corpus[idx]} similarity to centroid: {sim}")
 
         htree.set_entity_centroids(label_emb_dict)
 
@@ -314,12 +348,15 @@ class SkeletonBuilder():
             root=True
         )
         
-        # LOGGER.info(htree)
+        print(htree)
+        
+        #exit()
 
         # Step 5: Train classifiers throughout hierarchy  
         # LOGGER.info(f"Initializing SkeletonTraining")      
         skl_train = SkeletonTraining(self.classifier_config, 
-                                     self.reranker_config)
+                                     self.reranker_config,
+                                     num_negatives=10)
         
         # LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         

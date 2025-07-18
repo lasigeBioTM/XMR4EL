@@ -64,13 +64,6 @@ def main():
 
     start = time.time()
 
-    k = 5
-
-    transformer_config = {
-        "type": "sentencetsapbert",
-        "kwargs": {"batch_size": 400}
-    }
-
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
 
     with open(file_test_input, "r") as file:
@@ -78,7 +71,7 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-18_12-58-11"
+        "test/test_data/saved_trees/Skeleton_2025-07-18_18-01-10"
     )
 
     # exit()
@@ -94,7 +87,19 @@ def main():
     
     filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.labels)
     
+    # print(filtered_labels[0], filtered_texts[0])
+    # print(filtered_labels[0], filtered_texts[0])
+    # print(trained_xtree.dict_data[filtered_labels[0][0]])
+    # for idx, _ in enumerate(filtered_labels):
+    #     train_data_filtered_label_texts = [trained_xtree.train_data[idx] for idx in trained_xtree.dict_data[filtered_labels[idx][0]]]
+    #     print(train_data_filtered_label_texts)
+    # print(train_data_filtered_label_texts)
+    
+    print(filtered_labels)
+    
     input_embs = si.generate_input_embeddigns(filtered_texts)
+    
+    
     
     # print(filtered_labels)
     # print(filtered_labels[0][0]) # 
@@ -102,13 +107,16 @@ def main():
     # print(input_embs[0])
     # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
     
-    sim = cosine_similarity(input_embs[0].reshape(1, -1), trained_xtree.entity_centroids[filtered_labels[0][0]].reshape(1, -1))[0][0]
+    for idx, _ in enumerate(filtered_labels):
+        sim = cosine_similarity(input_embs[idx].reshape(1, -1), trained_xtree.entity_centroids[filtered_labels[idx][0]].reshape(1, -1))[0][0]
+        print(sim)
+    # exit()
     
-    print(sim)
+    # print(sim)
     
-    exit()
+    # exit()
     
-    predicted_labels, hits = si.batch_inference(input_embs, filtered_labels, k=50)
+    predicted_labels, hits = si.batch_inference(input_embs, filtered_labels, k=10)
 
     print(predicted_labels)
     

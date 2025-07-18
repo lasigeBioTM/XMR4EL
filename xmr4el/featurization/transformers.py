@@ -195,7 +195,7 @@ class Transformer(metaclass=TransformersMeta):
                 current_batch_idx += 1
                 continue
                 
-            # LOGGER.info(f"Processing batch {batch_idx + 1}/{(len_corpus + batch_size - 1) // batch_size} (size: {batch_size})")
+            print(f"Processing batch {batch_idx + 1}/{(len_corpus + batch_size - 1) // batch_size} (size: {batch_size})")
             
             batch = trn_corpus[start:end]
             batch_filename = f"{emb_file}_batch{batch_idx}.npz"

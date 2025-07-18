@@ -24,13 +24,13 @@ def main():
     
     start = time.time()
 
-    min_leaf_size = 2
-    depth = 0
+    min_leaf_size = 10
+    depth = 1
     n_features = 768
 
     vectorizer_config = {
         "type": "tfidf", 
-        "kwargs": {'max_features': 15000}
+        "kwargs": {'max_features': 20000}
         }
     
     transformer_config = {
@@ -38,11 +38,10 @@ def main():
         "kwargs": {"batch_size": 3000}
     }
     
-    """
     clustering_config = {
         "type": "sklearnminibatchkmeans",
         "kwargs": {
-            "n_clusters": 8,  # This should be determined by your tuning process
+            "n_clusters": 4,  # This should be determined by your tuning process
             "init": "k-means++",
             "max_iter": 500,  # Increased from 300
             "batch_size": 0,  # Larger batch size for more stable updates
@@ -71,7 +70,7 @@ def main():
         "tol": 1e-4,               # Early stopping tolerance
         }
     }
-
+    """
     classifier_config = {
         "type": "sklearnlogisticregression",
         "kwargs": {
@@ -114,6 +113,8 @@ def main():
     raw_labels = train_data["raw_labels"]
     X_cross_train = train_data["cross_corpus"] # list of lists
     
+    # print(raw_labels)
+    # print(X_cross_train)
     # exit()
 
     pipe = SkeletonBuilder(

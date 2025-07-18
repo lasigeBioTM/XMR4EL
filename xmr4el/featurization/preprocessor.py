@@ -54,61 +54,41 @@ class Preprocessor:
         return labels_matrix, mlb
     
     def load_data_labels_from_file(self, train_filepath, labels_filepath, truncate_data=0):
-        # Load and group texts (original code)
+        # Step 1: Load TSV (mentions file)
         train_df = pd.read_csv(
             train_filepath, 
             header=None,
-            names=["id", "text"],
+            names=["group_id", "text"],
             delimiter="\t",
+            dtype={"group_id": int, "text": str}
         )
-        train_df["text"] = train_df["text"].astype(str).fillna("")
-        grouped_texts = train_df.groupby("id")["text"].apply(list).reset_index()
+        train_df["text"] = train_df["text"].fillna("")
 
-        # --- NEW: Deduplicate texts for `corpus` only (keep `cross_corpus` untouched) ---
-        def deduplicate_texts(texts, similarity_threshold=85):
-            """Keep only semantically distinct texts per ID using fuzzy matching."""
-            unique_texts = []
-            for text in sorted(texts, key=len, reverse=True):  # Longest first
-                if not any(fuzz.ratio(text, existing) >= similarity_threshold 
-                        for existing in unique_texts):
-                    unique_texts.append(text)
-            return " ".join(unique_texts)  # Return merged string for corpus
+        # Step 2: Group synonyms by group_id
+        grouped_texts = train_df.groupby("group_id")["text"].apply(list).reset_index()
 
-        # Apply deduplication to `joined_text` (for TF-IDF/clustering)
-        # grouped_texts["joined_text"] = grouped_texts["text"].apply(deduplicate_texts)
-        
-        # Keep original texts for `cross_corpus` (untouched for cross-encoder)
-        grouped_texts["original_texts"] = grouped_texts["text"]  # Backup for cross_corpus
+        # Step 3: Load labels.txt (concept codes)
+        with open(labels_filepath, 'r') as f:
+            raw_labels = [line.strip() for line in f if line.strip()]
 
-        # Truncate data if requested (original code)
+        # Optional truncation (truncate both mentions and labels to same number)
         if truncate_data > 0:
             grouped_texts = grouped_texts.head(truncate_data)
+            raw_labels = raw_labels[:truncate_data]
 
-        # Load labels (original code)
-        with open(labels_filepath, 'r') as f:
-            if truncate_data > 0:
-                labels = [line.strip() for line in f if line.strip()][:truncate_data]
-            else:
-                labels = [line.strip() for line in f if line.strip()]
-            
-            if len(labels) > len(grouped_texts):
-                # LOGGER.warning("Labels and Train length mismatch, Labels > Train. Truncating Labels. "
-                #             f"Labels length: {len(labels)}, Train length: {len(grouped_texts)}")
-                labels = labels[:len(grouped_texts)]
-            elif len(labels) < len(grouped_texts):
-                raise Exception(f"Labels and Train length mismatch, Train > Labels. Exiting. Labels: {len(labels)}, Train: {len(grouped_texts)}")
+        # Check length match
+        if len(raw_labels) != len(grouped_texts):
+            raise Exception(f"Mismatch: {len(raw_labels)} labels vs {len(grouped_texts)} mention groups")
 
-        # Prepare labels (original code)
-        # labels_list = [[label] for label in labels]
-        # mlb = MultiLabelBinarizer(sparse_output=True)
-        # labels_matrix = mlb.fit_transform(labels_list)
+        # Step 4: Inject labels into grouped_texts
+        grouped_texts["concept_id"] = raw_labels
+
+        # Step 5: Keep original synonyms for cross-encoder
+        grouped_texts["original_texts"] = grouped_texts["text"]
 
         return {
-            # 'corpus': grouped_texts["joined_text"].tolist(),      # Deduplicated for TF-IDF
-            'cross_corpus': grouped_texts["original_texts"].tolist(),  # Original for cross-encoder
-            'raw_labels': labels,
-            # 'labels# _matrix': labels_matrix,
-            # 'label_encoder': mlb
+            "cross_corpus": grouped_texts["original_texts"].tolist(),  # List[List[str]]
+            "raw_labels": grouped_texts["concept_id"].tolist()         # List[str]
         }
 
             

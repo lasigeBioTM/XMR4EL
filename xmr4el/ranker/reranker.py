@@ -70,7 +70,7 @@ class Reranker():
 
         Args:
             mention_embeddings (np.ndarray): shape (N, d), mention vectors.
-            true_ids (List[int]): KB ids of true entities for each mention.
+            centroid_embeddings (List[np.array]): centroids embeddings
             entity_embs_dict (Dict[int, np.ndarray]): mapping KB index to centroid vector.
         """
         X_pairs = []
@@ -80,7 +80,11 @@ class Reranker():
         # Convert Centroids into matrix, 
         centroid_matrix = np.vstack(centroid_embeddings)
         
+        # print(mention_indices)
+        
         for _, (syn_emb_list, true_idx) in enumerate(zip(mention_embeddings, mention_indices)):
+            # print(true_idx)
+            # print(type(centroid_embeddings), len(centroid_embeddings))
             true_centroid = centroid_embeddings[true_idx]
             # print(true_centroid, type(true_centroid))
             for syn_emb in syn_emb_list:
@@ -93,7 +97,7 @@ class Reranker():
             sims = cosine_similarity(true_centroid.reshape(1, -1), centroid_matrix)[0]
             
             hard_neg_idxs = [idx for idx in np.argsort(-sims) if idx != true_idx][:self.num_negatives]
-            print(hard_neg_idxs)
+            # print(hard_neg_idxs)
 
             for neg_idx in hard_neg_idxs:
                 neg_centroid = centroid_embeddings[neg_idx]
@@ -107,6 +111,7 @@ class Reranker():
         y = np.array(y, dtype=np.int8)
 
         # train binary classifier
+        self.config["kwargs"]["onevsrest"] = False
         model = self._train_classifier(X, y, self.config)
         self.model = model
         return model

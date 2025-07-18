@@ -170,7 +170,6 @@ class ClassifierModel(metaclass=ClassifierMeta):
             )
         return classifier_config
 
-
 class SklearnLogisticRegression(ClassifierModel):
     """Sklearn Logistic Regression"""
 
@@ -243,12 +242,19 @@ class SklearnLogisticRegression(ClassifierModel):
             "warm_start": False,
             "n_jobs": None,
             "l1_ratio": None,
+            "onevsrest": False,
         }
 
         try:
             config = {**defaults, **config}
-            model = LogisticRegression(**config)
-            # model = OneVsRestClassifier(model)
+            
+            if config["onevsrest"]:
+                config.pop("onevsrest")
+                model = LogisticRegression(**config)
+                model = OneVsRestClassifier(model)
+            else:
+                config.pop("onevsrest")
+                model = LogisticRegression(**config)
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
@@ -261,7 +267,6 @@ class SklearnLogisticRegression(ClassifierModel):
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)
-
 
 class SklearnRandomForestClassifier(ClassifierModel):
     """SKlearn Random Forest"""

@@ -83,6 +83,7 @@ class SkeletonTraining():
             np.ndarray of shape [n_samples, n_children]
                 Y[i, j] = 1 if true_ids[i] in children_kb_sets[j], else 0.
         """
+        """
         n = len(true_ids)
         k = len(children_kb_sets)
         Y = np.zeros((n, k), dtype=np.int8) # Int 8 ?
@@ -91,8 +92,19 @@ class SkeletonTraining():
                 if eid in kb_set:
                     Y[i, j] = 1
         return Y
+        """
+        
+        n = len(true_ids)
+        k = len(children_kb_sets)
+        Y = np.zeros((n,), dtype=np.int64)  # For multiclass
+        for i, eid in enumerate(true_ids):
+            for j, kb_set in enumerate(children_kb_sets):
+                if eid in kb_set:
+                    Y[i] = j
+                    break  # First match wins
+        return Y
     
-    def _train_node(self, X_node, true_ids, children, htree):
+    def _train_node(self, X_node, true_ids, children, htree, classifier_config):
         """
         Train a node-level classifier to route to its children.
 
@@ -118,7 +130,7 @@ class SkeletonTraining():
             shuffle=True
         )
         
-        
+        classifier_config["kwargs"]["onevsrest"] = True
         model = self._train_classifier(X_tr, Y_tr, self.classifier_config)
         
         # Store model and splits on the tree node
@@ -128,7 +140,7 @@ class SkeletonTraining():
             'X_test': X_te, 'y_test': Y_te
         })
 
-    def _train_routing_nodes(self, htree, all_kb_ids, all_embeddings):
+    def _train_routing_nodes(self, htree, all_kb_ids, comb_emb_idx):
         children = list(htree.children.values())
         # print("INSIDE 1")
         if not children:
@@ -143,15 +155,15 @@ class SkeletonTraining():
         
         # print(type(node_indices), node_indices)
         # print(type(all_embeddings), all_embeddings)
-        X_node = [all_embeddings[idx] for idx in node_indices]
+        X_node = [comb_emb_idx[idx] for idx in node_indices]
         true_ids = node_indices
         
         # print("TRAIN NODE")
         
-        self._train_node(X_node, true_ids, children, htree)
+        self._train_node(X_node, true_ids, children, htree, self.classifier_config)
         
         for child in children:
-            self._train_routing_nodes(child, all_kb_ids, all_embeddings)
+            self._train_routing_nodes(child, all_kb_ids, comb_emb_idx)
 
     def _train_leaf_rerankers(self, htree, comb_emb_idx, all_embeddings):
         """
@@ -161,17 +173,19 @@ class SkeletonTraining():
         """
         if not htree.children:
             mention_indices = htree.kb_indices # All the indices of the cluster
+            # print(mention_indices)
             # kb_ids = [all_kb_ids[idx] for idx in mention_indices] # each mention row maps to one KB index
             if not mention_indices:
                 return
-            # positive mentions and true KB indices
-            m_embs = [all_embeddings[idx]for idx in mention_indices] # mentions
-            centroid_emb = [comb_emb_idx[idx] for idx in mention_indices] # mean of synonyms
-            # negatives: KB indices under this leaf (hard negatives from same leaf cluster)
-            # here, negatives are other true_inds in this leaf
+            m_embs = [all_embeddings[idx] for idx in mention_indices]
+            centroid_emb = [comb_emb_idx[idx] for idx in mention_indices]
+
+            # Map from global KB index to local index in centroid_emb
+            global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(mention_indices)}
+            local_mention_indices = [global_to_local[idx] for idx in mention_indices]
+
             reranker = Reranker(self.reranker_config, num_negatives=self.num_negatives)
-            # entity_embs_dict must include centroids for all_kb_ids
-            reranker.train(m_embs, centroid_emb, mention_indices)
+            reranker.train(m_embs, centroid_emb, local_mention_indices)
             print(reranker)
             htree.set_reranker(reranker)
         else:
@@ -189,7 +203,7 @@ class SkeletonTraining():
             entity_embs_dict: mapping KB index -> centroid embedding.
         """
         # First, train routing classifiers as before
-        # self._train_routing_nodes(htree, all_kb_ids, all_embeddings)
+        self._train_routing_nodes(htree, all_kb_ids, comb_emb_idx)
         # Then, train rerankers at leaf nodes
         self._train_leaf_rerankers(htree, comb_emb_idx, all_embeddings)
         
