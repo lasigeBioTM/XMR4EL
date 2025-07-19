@@ -84,7 +84,7 @@ class SkeletonConstruction():
         valid_clusters = []
         fallback_indices = []
         for cluster_id in cluster_counts:
-            if cluster_counts[cluster_id] >= self.min_leaf_size:
+            if cluster_counts[cluster_id] >= (self.min_leaf_size/2 * (n_clusters)):
                 valid_clusters.append(cluster_id)
             else:
                 fallback_indices.extend([
