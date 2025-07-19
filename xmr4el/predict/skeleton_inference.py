@@ -164,7 +164,7 @@ class SkeletonInference:
         # ---- Final Top-K ----
         final_candidates.sort(key=lambda x: x[1], reverse=True)
         # exit()
-        return final_candidates
+        return final_candidates[:k]
 
     
     def batch_inference(self, input_embs, labels, k=5, candidates=15):

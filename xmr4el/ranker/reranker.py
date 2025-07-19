@@ -96,9 +96,9 @@ class Reranker():
             # Compute cosine similarity between true_centroid and all other centroids
             sims = cosine_similarity(true_centroid.reshape(1, -1), centroid_matrix)[0]
             
-            # 1) Collect indices in the desired similarity band [0.4, 0.6], excluding the true index
+            # 1) Collect indices in the desired similarity band [0.4, 0.6] tested 3 rights, excluding the true index
             band_idxs = [i for i, s in enumerate(sims)
-                        if i != true_idx and 0.4 <= s <= 0.7]
+                        if i != true_idx and 0.2 <= s <= 0.5]
             
             # 2) If we have enough, take the top-N by descending similarity
             hard_neg_idxs = sorted(band_idxs, key=lambda i: sims[i], reverse=True)[:self.num_negatives]

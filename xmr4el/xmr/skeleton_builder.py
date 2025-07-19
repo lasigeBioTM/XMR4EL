@@ -348,8 +348,6 @@ class SkeletonBuilder():
             root=True
         )
         
-        print(htree)
-        
         #exit()
 
         # Step 5: Train classifiers throughout hierarchy  
@@ -357,9 +355,11 @@ class SkeletonBuilder():
         skl_train = SkeletonTraining(self.classifier_config, 
                                      self.reranker_config,
                                      num_negatives=10)
-        
+
         # LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         
         skl_train.execute(htree, labels, comb_emb_idx, all_embeddings)
+        
+        print(htree)
 
         return htree
