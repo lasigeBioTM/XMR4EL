@@ -82,20 +82,17 @@ class SkeletonConstruction():
 
         # Separate valid and small clusters
         valid_clusters = [cluster_id for cluster_id in cluster_counts if cluster_counts[cluster_id] >= self.min_leaf_size]
-        # print(cluster_counts, valid_clusters)
+        print(cluster_counts, valid_clusters)
         # exit()
         fallback_indices = []
         
-        if len(valid_clusters) > 1:
-            for cluster_id in cluster_counts:
-                if cluster_counts[cluster_id] >= self.min_leaf_size:
-                    valid_clusters.append(cluster_id)
-                else:
-                    fallback_indices.extend([
-                        idx for idx, lbl in zip(indices, cluster_labels) if lbl == cluster_id
-                    ])
-        else:
-            return htree
+        for cluster_id in cluster_counts:
+            if cluster_counts[cluster_id] >= self.min_leaf_size:
+                valid_clusters.append(cluster_id)
+            else:
+                fallback_indices.extend([
+                    idx for idx, lbl in zip(indices, cluster_labels) if lbl == cluster_id
+                ])
 
         # If all clusters are invalid and this is the root, raise
         if not valid_clusters and fallback_indices and root:
@@ -105,6 +102,8 @@ class SkeletonConstruction():
         htree.set_text_embeddings(comb_emb_idx)
 
         # print(Counter(cluster_labels), valid_clusters)
+
+        formed_clusters = []
 
         # Process valid clusters
         for cluster in valid_clusters:
@@ -118,6 +117,8 @@ class SkeletonConstruction():
                 depth - 1,
                 clustering_config,
             )
+            
+            # Do a check how many clusters were saved ? 
 
             if not child_subtree.is_empty():
                 htree.set_children(int(cluster), child_subtree)

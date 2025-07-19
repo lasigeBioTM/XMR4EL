@@ -88,7 +88,7 @@ class SkeletonInference:
                 class_labels = node.tree_classifier.model.model.classes_
                 # print(class_labels)
                 # print(node.children.items())
-                print(probs)
+                # print(probs)
                 # 2b) Build (label, child_node, prob) only for valid children
                 children_keys = list(node.children.keys())
                 # print(children_keys)
