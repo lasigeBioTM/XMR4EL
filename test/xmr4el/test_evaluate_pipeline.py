@@ -71,7 +71,7 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-19_15-20-54"
+        "test/test_data/saved_trees/Skeleton_2025-07-19_15-25-21"
     )
 
     # exit()

@@ -66,65 +66,64 @@ class Reranker():
     
     def train(self, mention_embeddings, centroid_embeddings, mention_indices):
         """
-        Train the reranker on positive and negative mention-entity pairs.
-
+        Train a reranker (LogisticRegression) on positive and hard-negative
+        mention–entity pairs, with memory‑efficient preallocation.
+        
         Args:
-            mention_embeddings (np.ndarray): shape (N, d), mention vectors.
-            centroid_embeddings (List[np.array]): centroids embeddings
-            entity_embs_dict (Dict[int, np.ndarray]): mapping KB index to centroid vector.
+            mention_embeddings: List[List[np.ndarray]] of shape (num_mentions, num_synonyms, d)
+            centroid_embeddings: List[np.ndarray] of shape (num_entities, d)
+            mention_indices: List[int] of true-entity indices per mention
         """
-        X_pairs = []
-        y = []
-        # Build positive and negative pairs
+        num_neg = self.num_negatives
+        D = centroid_embeddings[0].shape[0]
         
-        # Convert Centroids into matrix, 
-        centroid_matrix = np.vstack(centroid_embeddings)
+        # Precompute centroid similarity matrix once
+        centroid_matrix = np.vstack(centroid_embeddings)  # shape (E, d)
         
-        # print(mention_indices)
+        # Compute total number of pairs we will generate
+        total_pairs = 0
+        for syn_list in mention_embeddings:
+            total_pairs += len(syn_list) * (1 + num_neg)
         
-        for _, (syn_emb_list, true_idx) in enumerate(zip(mention_embeddings, mention_indices)):
-            # print(true_idx)
-            # print(type(centroid_embeddings), len(centroid_embeddings))
-            true_centroid = centroid_embeddings[true_idx]
-            # print(true_centroid, type(true_centroid))
-            for syn_emb in syn_emb_list:
-                pos = np.hstack((syn_emb, true_centroid))
-                X_pairs.append(pos)
-                y.append(1)
-                
-            # -------- Hard Negatives --------
-            # Compute cosine similarity between true_centroid and all other centroids
-            sims = cosine_similarity(true_centroid.reshape(1, -1), centroid_matrix)[0]
+        # Preallocate feature and label arrays
+        X = np.empty((total_pairs, 2 * D), dtype=np.float32)
+        y = np.empty((total_pairs,), dtype=np.int8)
+        
+        ptr = 0
+        # For each mention
+        for syn_list, true_idx in zip(mention_embeddings, mention_indices):
+            true_cent = centroid_embeddings[true_idx]
             
-            # 1) Collect indices in the desired similarity band [0.4, 0.6] tested 3 rights, excluding the true index
-            band_idxs = [i for i, s in enumerate(sims)
-                        if i != true_idx and 0.2 <= s <= 0.5]
+            # Positive pairs
+            for syn_emb in syn_list:
+                X[ptr, :D] = syn_emb.astype(np.float32)
+                X[ptr, D:] = true_cent.astype(np.float32)
+                y[ptr] = 1
+                ptr += 1
             
-            # 2) If we have enough, take the top-N by descending similarity
-            hard_neg_idxs = sorted(band_idxs, key=lambda i: sims[i], reverse=True)[:self.num_negatives]
-            # print(hard_neg_idxs)
+            # Hard negatives: find candidates in desired sim band
+            sims = cosine_similarity(true_cent.reshape(1, -1), centroid_matrix)[0]
+            band = [i for i, s in enumerate(sims) if i != true_idx and 0.2 <= s <= 0.5]
+            hard_negs = sorted(band, key=lambda i: sims[i], reverse=True)[:num_neg]
+            if len(hard_negs) < num_neg:
+                # backfill if needed
+                backup = [i for i in np.argsort(-sims) if i != true_idx and i not in hard_negs]
+                hard_negs += backup[:(num_neg - len(hard_negs))]
             
-            # 3) If we’re short, backfill from the remaining negatives by highest similarity
-            if len(hard_neg_idxs) < self.num_negatives:
-                # All other candidates, sorted by descending sim, excluding true_idx and already chosen
-                remaining = [i for i in np.argsort(-sims)
-                            if i != true_idx and i not in hard_neg_idxs]
-                need = self.num_negatives - len(hard_neg_idxs)
-                hard_neg_idxs += remaining[:need]
-
-            for neg_idx in hard_neg_idxs:
-                neg_centroid = centroid_embeddings[neg_idx]
-                for syn_emb in syn_emb_list:
-                    neg_pair = np.hstack((syn_emb, neg_centroid))
-                    X_pairs.append(neg_pair)
-                    y.append(0)
-                    
-            
-        X = np.vstack(X_pairs)
-        y = np.array(y, dtype=np.int8)
-
-        # train binary classifier
-        self.config["kwargs"]["onevsrest"] = False
+            # Negative pairs
+            for neg_idx in hard_negs:
+                neg_cent = centroid_embeddings[neg_idx]
+                for syn_emb in syn_list:
+                    X[ptr, :D] = syn_emb.astype(np.float32)
+                    X[ptr, D:] = neg_cent.astype(np.float32)
+                    y[ptr] = 0
+                    ptr += 1
+        
+        # Sanity check
+        assert ptr == total_pairs, f"Expected {total_pairs} pairs, built {ptr}"
+        
+        # Fit a logistic regression model
+        # You can tune solver/penalty as needed
         model = self._train_classifier(X, y, self.config)
         self.model = model
         return model

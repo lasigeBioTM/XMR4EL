@@ -82,7 +82,7 @@ class SkeletonConstruction():
 
         # Separate valid and small clusters
         valid_clusters = [cluster_id for cluster_id in cluster_counts if cluster_counts[cluster_id] >= self.min_leaf_size]
-        print(cluster_counts, valid_clusters)
+        # print(cluster_counts, valid_clusters)
         # exit()
         fallback_indices = []
         

@@ -135,14 +135,14 @@ class SkeletonTraining():
         
         # Store model and splits on the tree node
         htree.set_tree_classifier(model)
-        htree.set_tree_test_split({
-            'X_train': X_tr, 'y_train': Y_tr,
-            'X_test': X_te, 'y_test': Y_te
-        })
+        # htree.set_tree_test_split({
+        #     'X_train': X_tr, 'y_train': Y_tr,
+        #     'X_test': X_te, 'y_test': Y_te
+        # })
 
     def _train_routing_nodes(self, htree, all_kb_ids, comb_emb_idx):
         children = list(htree.children.values())
-        print(children)
+        # print(children)
         
         if len(children) < 2:
             htree.children = None
@@ -192,7 +192,7 @@ class SkeletonTraining():
 
             reranker = Reranker(self.reranker_config, num_negatives=self.num_negatives)
             reranker.train(m_embs, centroid_emb, local_mention_indices)
-            print(reranker)
+            # print(reranker)
             htree.set_reranker(reranker)
         else:
             for child in htree.children.values():
