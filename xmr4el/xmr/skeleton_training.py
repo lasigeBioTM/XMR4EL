@@ -142,6 +142,7 @@ class SkeletonTraining():
 
     def _train_routing_nodes(self, htree, all_kb_ids, comb_emb_idx):
         children = list(htree.children.values())
+        print(children)
         # print("INSIDE 1")
         if not children:
             return # Leaf Node

@@ -25,7 +25,7 @@ def main():
     start = time.time()
 
     min_leaf_size = 10
-    depth = 1
+    depth = 2
     n_features = 768
 
     vectorizer_config = {
