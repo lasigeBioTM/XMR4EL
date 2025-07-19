@@ -1,8 +1,5 @@
 import os
-import logging
 import pandas as pd
-
-from fuzzywuzzy import fuzz
 
 from sklearn.preprocessing import MultiLabelBinarizer
 

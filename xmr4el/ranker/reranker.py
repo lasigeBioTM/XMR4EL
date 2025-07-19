@@ -96,8 +96,21 @@ class Reranker():
             # Compute cosine similarity between true_centroid and all other centroids
             sims = cosine_similarity(true_centroid.reshape(1, -1), centroid_matrix)[0]
             
-            hard_neg_idxs = [idx for idx in np.argsort(-sims) if idx != true_idx][:self.num_negatives]
+            # 1) Collect indices in the desired similarity band [0.4, 0.6], excluding the true index
+            band_idxs = [i for i, s in enumerate(sims)
+                        if i != true_idx and 0.4 <= s <= 0.7]
+            
+            # 2) If we have enough, take the top-N by descending similarity
+            hard_neg_idxs = sorted(band_idxs, key=lambda i: sims[i], reverse=True)[:self.num_negatives]
             # print(hard_neg_idxs)
+            
+            # 3) If we’re short, backfill from the remaining negatives by highest similarity
+            if len(hard_neg_idxs) < self.num_negatives:
+                # All other candidates, sorted by descending sim, excluding true_idx and already chosen
+                remaining = [i for i in np.argsort(-sims)
+                            if i != true_idx and i not in hard_neg_idxs]
+                need = self.num_negatives - len(hard_neg_idxs)
+                hard_neg_idxs += remaining[:need]
 
             for neg_idx in hard_neg_idxs:
                 neg_centroid = centroid_embeddings[neg_idx]
