@@ -62,73 +62,68 @@ class SkeletonConstruction():
     def execute(self, htree, comb_emb_idx, depth, clustering_config, root=False):
         gc.collect()
 
+        # 1) Depth cutoff
         if depth < 0:
             return htree
 
-        n_clusters = clustering_config["kwargs"]["n_clusters"]
         indices = sorted(comb_emb_idx.keys())
-        text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
-
+        N = len(indices)
         htree.set_kb_indices(indices)
 
-        min_clusterable_size = max(n_clusters, self.min_leaf_size)
-        if len(text_emb_array) <= min_clusterable_size:
+        # 2) Compute how many clusters we can actually form
+        requested = clustering_config["kwargs"]["n_clusters"]
+        max_clusters = N // self.min_leaf_size
+        k = min(requested, max_clusters)
+
+        # If we can’t form at least 2 clusters of size >= min_leaf_size, stop splitting
+        if k < 2:
             return htree
 
-        # Train clustering
+        # 3) Prepare data & train clustering with adjusted k
+        clustering_config["kwargs"]["n_clusters"] = k
+        text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
         clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)
         cluster_labels = clustering_model.labels().flatten()
         cluster_counts = Counter(cluster_labels)
 
-        # Separate valid and small clusters
-        valid_clusters = []
-        fallback_indices = []
-        for cluster_id in cluster_counts:
-            if cluster_counts[cluster_id] >= (self.min_leaf_size/2 * (n_clusters)):
-                valid_clusters.append(cluster_id)
-            else:
-                fallback_indices.extend([
-                    idx for idx, lbl in zip(indices, cluster_labels) if lbl == cluster_id
-                ])
-
-        # If all clusters are invalid and this is the root, raise
-        if not valid_clusters and fallback_indices and root:
-            raise Exception("All clusters are too small at root. Try reducing n_clusters or min_leaf_size.")
+        # 4) If clustering didn’t actually split (say all points in one cluster), stop
+        if len(cluster_counts) < 2:
+            return htree
 
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(comb_emb_idx)
 
-        print(Counter(cluster_labels), valid_clusters)
+        # print(f"Requested={requested}, used={k}, counts={cluster_counts}")
 
-        # Process valid clusters
-        for cluster in valid_clusters:
-            cluster_indices = [idx for idx, lbl in zip(indices, cluster_labels) if lbl == cluster]
-            child_comb_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}
-            child_htree = Skeleton(depth=htree.depth + 1)
+        # 5) Separate valid vs fallback
+        valid_clusters, fallback_indices = [], []
+        for cid, count in cluster_counts.items():
+            if count >= self.min_leaf_size:
+                valid_clusters.append(cid)
+            else:
+                fallback_indices.extend(
+                    idx for idx, lbl in zip(indices, cluster_labels) if lbl == cid
+                )
 
-            child_subtree = self.execute(
-                child_htree,
-                child_comb_dict,
-                depth - 1,
-                clustering_config,
-            )
+        if root and not valid_clusters and fallback_indices:
+            raise Exception("All clusters are too small at root.")
 
-            if not child_subtree.is_empty():
-                htree.set_children(int(cluster), child_subtree)
+        # 6) Recurse on each valid cluster
+        for cid in valid_clusters:
+            cluster_indices = [idx for idx, lbl in zip(indices, cluster_labels) if lbl == cid]
+            child_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}
+            child = Skeleton(depth=htree.depth + 1)
+            subtree = self.execute(child, child_dict, depth-1, clustering_config)
+            if not subtree.is_empty():
+                htree.set_children(int(cid), subtree)
 
-        # Fallback leaf
+        # 7) Handle fallback as one leaf (if any)
         if fallback_indices:
-            fallback_dict = {idx: comb_emb_idx[idx] for idx in fallback_indices}
-            fallback_htree = Skeleton(depth=htree.depth + 1)
-            fallback_subtree = self.execute(
-                fallback_htree,
-                fallback_dict,
-                depth - 1,
-                clustering_config,
-            )
-
-            if not fallback_subtree.is_empty():
-                fallback_cluster_id = max(valid_clusters) + 1 if valid_clusters else 0
-                htree.set_children(fallback_cluster_id, fallback_subtree)  # Use -1 for fallback child, trying 999999
+            fb_dict = {idx: comb_emb_idx[idx] for idx in fallback_indices}
+            fb_child = Skeleton(depth=htree.depth + 1)
+            fb_subtree = self.execute(fb_child, fb_dict, depth-1, clustering_config)
+            if not fb_subtree.is_empty():
+                fb_id = (max(valid_clusters) + 1) if valid_clusters else 0
+                htree.set_children(fb_id, fb_subtree)
 
         return htree
