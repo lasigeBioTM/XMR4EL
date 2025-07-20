@@ -339,6 +339,8 @@ class SkeletonBuilder():
         index_to_label = {idx: label for label, idx in label_to_index.items()}
         comb_emb_idx = {idx: label_emb_dict[label] for label, idx in label_to_index.items()}
 
+        print("Starting Clustering")
+
         # LOGGER.info(f"Executing Constructor -> {self.clustering_config}")
         htree = skl_form.execute(
             htree, 
@@ -350,11 +352,13 @@ class SkeletonBuilder():
         
         #exit()
 
+        print("Starting Training")
+
         # Step 5: Train classifiers throughout hierarchy  
         # LOGGER.info(f"Initializing SkeletonTraining")      
         skl_train = SkeletonTraining(self.classifier_config, 
                                      self.reranker_config,
-                                     num_negatives=10)
+                                     num_negatives=5)
 
         # LOGGER.info(f"Executing Trainer -> {self.classifier_config}")
         
