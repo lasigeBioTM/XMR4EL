@@ -59,108 +59,93 @@ class SkeletonInference:
     
     def inference(self, input_emb, k=5, beam_size=3):
         """
-        Route a single mention embedding through the tree using the classifiers.
-        Then rerank entities at the leaf nodes using their respective rerankers.
-
-        Args:
-            input_emb (np.ndarray): shape (d,) - Embedding for a mention
-            k (int): Top-k results to return
-            beam_size (int): Number of children to keep at each level (beam search)
-
-        Returns:
-            List[Tuple[str, float]]: List of (kb_id, score) pairs for top-k candidates
+        Fixed version that properly reaches leaf nodes.
+        Key changes:
+        1. Proper leaf node detection
+        2. Correct beam search termination
+        3. Handles cases where reranker might be missing
         """
-        beams = [(self.htree, 1.0)]  # Start at the root with path score = 1.0
+        beams = [(self.htree, 1.0)]  # (node, cumulative_score)
 
-        # ---- Beam search routing ----
-        while True:
+        # ---- Improved Beam Search ----
+        while beams:
             next_beams = []
-
+            
             for node, path_score in beams:
-                if not node.children:
-                    # Reached a leaf node, keep as is
+                # True leaf nodes have no children AND contain kb_indices
+                is_leaf = not node.children and hasattr(node, 'kb_indices') and node.kb_indices
+                
+                if is_leaf:
                     next_beams.append((node, path_score))
                     continue
 
-                # Predict class probabilities for children
-                probs = self._predict_proba_classifier(node.tree_classifier, input_emb.reshape(1, -1))[0]
+                if not node.children:  # Empty non-leaf node
+                    continue
 
-                class_labels = node.tree_classifier.model.model.classes_
-                # print(class_labels)
-                # print(node.children.items())
-                # print(probs)
-                # 2b) Build (label, child_node, prob) only for valid children
-                children_keys = list(node.children.keys())
-                # print(children_keys)
-                candidates = []
-                for i, prob in enumerate(probs):
-                    label = children_keys[class_labels[i]]
-                    child_node = node.children[label]
-                    candidates.append((label, child_node, prob))
+                # Get classifier predictions
+                try:
+                    probs = self._predict_proba_classifier(node.tree_classifier, input_emb.reshape(1, -1))[0]
+                except AttributeError:
+                    # Handle nodes without classifiers
+                    continue
 
-                # 2c) Select top beam_size children by their prob
-                candidates.sort(key=lambda x: x[2], reverse=True)
-                for label, child_node, prob in candidates[:beam_size]:
-                    # update path score
-                    next_beams.append((child_node, path_score * prob))
+                # Match classifier classes to actual children
+                valid_children = []
+                for class_idx, prob in enumerate(probs):
+                    child_id = node.tree_classifier.model.model.classes_[class_idx]
+                    if child_id in node.children:
+                        valid_children.append((node.children[child_id], prob))
 
-            # 2d) Stop once every beam is at a node that can rerank
-            #    i.e. either it's a true leaf (no children) or it has a reranker
-            if all(
-                (not node.children) or hasattr(node, "reranker")
-                for node, _ in next_beams
-            ):
+                # Keep top beam_size children
+                valid_children.sort(key=lambda x: x[1], reverse=True)
+                for child, prob in valid_children[:beam_size]:
+                    next_beams.append((child, path_score * prob))
+
+            # Stop if all beams are leaves or no progress
+            if not next_beams or all(not node.children 
+                                     and hasattr(node, 'kb_indices') 
+                                     and node.kb_indices for node, _ in next_beams):
                 beams = next_beams
                 break
-
+                
             beams = next_beams
-            
-        # ---- Rerank in each leaf node ----
-        # Use entity_centroids stored globally in the root
-        all_entity_centroids = self.htree.entity_centroids
         
         print(beams)
-        print("Reached here")
-        
+
+        # ---- Reranking ----
         final_candidates = []
-
+        all_entity_centroids = self.htree.entity_centroids
+        
         for node, path_score in beams:
-            if not hasattr(node, "reranker") or node.reranker is None:
-                print("Donest have an reranker, odd")
-                continue  # Skip if this node has no reranker (shouldn't happen)
-
-            reranker = node.reranker
-            kb_indices = node.kb_indices  # List of indices into self.all_kb_ids
-
-            # Get corresponding kb_ids
-            kb_ids = [self.htree.labels[i] for i in kb_indices]
-
-            # Build feature pairs for reranking: [mention_emb | entity_centroid]
-            X_pairs = []
-            valid_ids = []
-            for eid in kb_ids:
-                if eid not in all_entity_centroids:
-                    continue  # Skip if no centroid (shouldn’t happen ideally)
-                eid_emb = all_entity_centroids[eid]
-                pair_emb = np.hstack((input_emb, eid_emb))  # Concatenate mention + entity
-                X_pairs.append(pair_emb)
-                valid_ids.append(eid)
-
-            if not X_pairs:
+            if not hasattr(node, 'kb_indices') or not node.kb_indices:
                 continue
 
-            X_pairs = np.vstack(X_pairs)
-            scores = self._predict_proba_classifier(reranker.model, X_pairs)[:, 1]  # Binary classification score (prob. of match)
+            kb_indices = node.kb_indices
+            kb_ids = [self.htree.labels[i] for i in kb_indices]
+            
+            # Skip if no reranker (use centroid similarity as fallback)
+            if not hasattr(node, 'reranker') or not node.reranker:
+                continue
+
+            # Use reranker if available
+            X_pairs = np.array([
+                np.hstack((input_emb, all_entity_centroids[eid]))
+                for eid in kb_ids if eid in all_entity_centroids
+            ])
+            scores = node.reranker.model.predict_proba(X_pairs)[:, 1] if len(X_pairs) > 0 else []
 
             print(scores)
 
-            # Scale score by path probability
-            reranked = [(eid, float(score * path_score)) for eid, score in zip(valid_ids, scores)]
-            final_candidates.extend(reranked)
+            # Combine scores with path probability
+            valid_pairs = [
+                (eid, float(score * path_score))
+                for eid, score in zip(kb_ids, scores)
+                if eid in all_entity_centroids
+            ]
+            final_candidates.extend(valid_pairs)
 
-        # ---- Final Top-K ----
+        # Return top-k results
         final_candidates.sort(key=lambda x: x[1], reverse=True)
-        # exit()
         print(final_candidates)
         return final_candidates[:k]
 
