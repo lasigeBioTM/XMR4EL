@@ -46,24 +46,35 @@ class SkeletonConstruction():
     
     @staticmethod
     def _train_clustering(trn_corpus, config, dtype=np.float32):
-        """Trains the clustering model with the training data
+        """Trains the clustering model with the training data.
 
         Args:
-            trn_corpus (np.array): Trainign data as a Dense Array
+            trn_corpus (np.array): Training data as a Dense Array
             config (dict): Configurations of the clustering model
             dtype (np.float): Type of the data inside the array
 
-        Return:
-            ClusteringModel (ClusteringModel): Trained Clustering Model
+        Returns:
+            ClusteringModel: Trained Clustering Model
         """
-        # Delegate training to ClusteringModel class
         return ClusteringModel.train(trn_corpus, config, dtype)    
 
     def execute(self, htree, comb_emb_idx, depth, clustering_config, root=False):
-        gc.collect()
-
+        """Executes the hierarchical clustering process.
+        
+        Args:
+            htree: The hierarchical tree structure
+            comb_emb_idx: Dictionary of indices to embeddings
+            depth: Current depth of the tree
+            clustering_config: Configuration for clustering
+            root: Whether this is the root node (default: False)
+            
+        Returns:
+            The constructed hierarchical tree
+        """
         if depth < 0:
             return htree
+
+        gc.collect()
 
         n_clusters = clustering_config["kwargs"]["n_clusters"]
         indices = sorted(comb_emb_idx.keys())
@@ -81,29 +92,25 @@ class SkeletonConstruction():
         cluster_counts = Counter(cluster_labels)
 
         # Separate valid and small clusters
-        valid_clusters = [cluster_id for cluster_id in cluster_counts if cluster_counts[cluster_id] >= self.min_leaf_size]
-        # print(cluster_counts, valid_clusters)
-        # exit()
+        valid_clusters = []
         fallback_indices = []
         
-        for cluster_id in cluster_counts:
-            if cluster_counts[cluster_id] >= self.min_leaf_size:
+        for cluster_id, count in cluster_counts.items():
+            if count >= self.min_leaf_size:
                 valid_clusters.append(cluster_id)
             else:
-                fallback_indices.extend([
+                fallback_indices.extend(
                     idx for idx, lbl in zip(indices, cluster_labels) if lbl == cluster_id
-                ])
+                )
 
-        # If all clusters are invalid and this is the root, raise
+        # Validate root clusters
         if not valid_clusters and fallback_indices and root:
-            raise Exception("All clusters are too small at root. Try reducing n_clusters or min_leaf_size.")
+            raise ValueError(
+                "All clusters are too small at root. Try reducing n_clusters or min_leaf_size."
+            )
 
         htree.set_clustering_model(clustering_model)
         htree.set_text_embeddings(comb_emb_idx)
-
-        # print(Counter(cluster_labels), valid_clusters)
-
-        formed_clusters = []
 
         # Process valid clusters
         for cluster in valid_clusters:
@@ -118,12 +125,10 @@ class SkeletonConstruction():
                 clustering_config,
             )
             
-            # Do a check how many clusters were saved ? 
-
             if not child_subtree.is_empty():
                 htree.set_children(int(cluster), child_subtree)
 
-        # Fallback leaf
+        # Process fallback cluster
         if fallback_indices:
             fallback_dict = {idx: comb_emb_idx[idx] for idx in fallback_indices}
             fallback_htree = Skeleton(depth=htree.depth + 1)
@@ -136,6 +141,6 @@ class SkeletonConstruction():
 
             if not fallback_subtree.is_empty():
                 fallback_cluster_id = max(valid_clusters) + 1 if valid_clusters else 0
-                htree.set_children(fallback_cluster_id, fallback_subtree)  # Use -1 for fallback child, trying 999999
+                htree.set_children(fallback_cluster_id, fallback_subtree)
 
         return htree

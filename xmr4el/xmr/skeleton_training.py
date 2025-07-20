@@ -211,6 +211,7 @@ class SkeletonTraining():
         print("Starting classifier routing nodes")
         # First, train routing classifiers as before
         self._train_routing_nodes(htree, all_kb_ids, comb_emb_idx)
+        print(htree)
         # Then, train rerankers at leaf nodes
         print("Starting Reranker nodes")
         self._train_leaf_rerankers(htree, comb_emb_idx, all_embeddings)
