@@ -159,6 +159,7 @@ class SkeletonInference:
         # ---- Final Top-K ----
         final_candidates.sort(key=lambda x: x[1], reverse=True)
         # exit()
+        print(final_candidates)
         return final_candidates[:k]
 
     
