@@ -120,7 +120,7 @@ class SkeletonInference:
         all_entity_centroids = self.htree.entity_centroids
         
         print(beams)
-        print("Reached here", all_entity_centroids)
+        print("Reached here")
         
         final_candidates = []
 
