@@ -1,165 +1,319 @@
+import gc
+import torch
+
 import numpy as np
 
-from sklearn.model_selection import train_test_split
+from sklearn.decomposition import TruncatedSVD
+from sklearn.preprocessing import normalize
 
-from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
-from xmr4el.ranker.reranker import Reranker
+from collections import defaultdict
+
+from xmr4el.featurization.featurization import PIFAEmbeddingFactory
+from xmr4el.featurization.transformers import Transformer
+from xmr4el.featurization.vectorizers import Vectorizer
+
+from xmr4el.xmr.skeleton_construction import SkeletonConstruction
+from xmr4el.xmr.skeleton_training import SkeletonTraining
+from xmr4el.xmr.skeleton import Skeleton
 
 
-class SkeletonTraining():
-    """Hierarchical classifier trainer for XMR tree nodes.
+class SkeletonBuilder():
+    """
+    End-to-end pipeline for constructing an Extreme Multi-label Ranking (XMR) hierarchical model.
     
-    Handles training of classifiers at each node of the hierarchical tree,
-    using combined embeddings as features. Features include:
-    - Recursive training through tree structure
-    - Combined feature space creation
-    - Memory-efficient processing
-    - Leaf node reranker training
+    The builder combines multiple stages:
+    1. Text feature extraction (vectorization + transformer embeddings)
+    2. Label embedding creation (PIFA methodology)
+    3. Hierarchical skeleton construction
+    4. Classifier training at each tree level
+    
+    The pipeline produces a complete XMRTree ready for prediction.
     
     Attributes:
-        classifier_config (dict): Configuration for classifier models
-        reranker_config (dict): Configuration for reranker models
-        num_negatives (int): Number of negative samples for reranker
-        test_size (float): Proportion of data for testing (0.0-1.0)
-        random_state (int): Random seed for reproducibility
+        vectorizer_config (dict): Configuration for text vectorization
+        transformer_config (dict): Configuration for transformer embeddings
+        clustering_config (dict): Configuration for hierarchical clustering
+        classifier_config (dict): Configuration for node classifiers
+        n_features (int): Target dimensionality for reduced embeddings
+        max_n_clusters (int): Maximum clusters per tree node
+        min_n_clusters (int): Minimum clusters per tree node  
+        min_leaf_size (int): Minimum samples per leaf node
+        depth (int): Maximum tree depth (1000 if -1)
+        dtype (np.dtype): Data type for numerical operations
     """
-    
-    def __init__(self, classifier_config, reranker_config, num_negatives=5, test_size=0.2, random_state=42):
-        """Initializes the SkeletonTraining with training parameters.
+
+    def __init__(self,
+                 vectorizer_config,
+                 transformer_config,
+                 clustering_config,
+                 classifier_config, 
+                 reranker_config,
+                 n_features=1000,  # Number of Features
+                 min_leaf_size=10,
+                 depth=3,
+                 dtype=np.float32):
+        """
+        Initializes the SkeletonBuilder with complete pipeline configuration.
         
         Args:
-            classifier_config (dict): Classifier configuration parameters
-            reranker_config (dict): Reranker configuration parameters
-            num_negatives (int): Number of negative samples (default: 5)
-            test_size (float): Test data proportion (default: 0.2)
-            random_state (int): Random seed (default: 42)
+            vectorizer_config (dict): Text vectorizer parameters
+            transformer_config (dict): Transformer model parameters
+            clustering_config (dict): Clustering algorithm parameters
+            classifier_config (dict): Classifier training parameters
+            n_features (int): Target feature dimension after reduction. Defaults to 1000.
+            max_n_clusters (int): Maximum clusters per node. Defaults to 16.
+            min_n_clusters (int): Minimum clusters per node. Defaults to 6.
+            min_leaf_size (int): Minimum samples per leaf cluster. Defaults to 10.
+            depth (int): Maximum tree depth (-1 for unlimited). Defaults to 3.
+            dtype (np.dtype): Data type for embeddings. Defaults to np.float32.
         """
+        
+        # Configs
+        self.vectorizer_config = vectorizer_config
+        self.transformer_config = transformer_config
+        self.clustering_config = clustering_config
         self.classifier_config = classifier_config
         self.reranker_config = reranker_config
-        self.num_negatives = num_negatives
-        self.test_size = test_size
-        self.random_state = random_state
+        
+        # Params
+        self.n_features = n_features
+        self.min_leaf_size = min_leaf_size
+        if depth == -1:
+            self.depth = 1000
+        else:
+            self.depth = depth
+        
+        self.dtype = dtype
 
     @staticmethod
-    def _train_classifier(X_corpus, y_corpus, config, dtype=np.float32):
-        """Trains the classifier model with training data.
+    def _train_vectorizer(trn_corpus, config, dtype=np.float32):
+        """Trains the vectorizer model with the training data
 
         Args:
-            X_corpus (np.array): Training data features
-            y_corpus (np.array): Training data labels
-            config (dict): Model configurations
-            dtype (np.dtype): Data type (default: np.float32)
+            trn_corpus (np.array): Training Data, sparse or dense array
+            config (dict): Configurations of the vectorizer model
+            dtype (np.float): Type of the data inside the array
 
+        Return:
+            TextVectorizer (Vectorizer): Trained Vectorizer
+        """
+        # Delegate training to Vectorizer class with given configuration
+        return Vectorizer.train(trn_corpus, config, dtype)
+
+    @staticmethod
+    def _predict_vectorizer(text_vec, corpus):
+        """Predicts the training data with the Vectorizer model
+
+        Args:
+            text_vec (Vectorizer): The Vectorizer Model
+            corpus (np.array or sparse ?): The data array to be predicted
+
+        Return:
+            Transformed text embeddings (nd.array or scipy.sparse)
+        """
+        # Use trained vectorizer to transform input corpus
+        return text_vec.predict(corpus)
+
+    @staticmethod
+    def _predict_transformer(trn_corpus, config, dtype=np.float32):
+        """Predicts the training data with the transformer model
+
+        Args:
+            trn_corpus (np.array): Training Data, sparse or dense array
+            config (dict): Configurations of the vectorizer model
+            dtype (np.float): Type of the data inside the array
+
+        Return:
+            Transformed Embeddings (np.array): Predicted Embeddings
+        """
+        # Delegate training to Transformer class with given configuration
+        return Transformer.train(trn_corpus, config, dtype)
+
+    @staticmethod
+    def _reduce_dimensionality(emb, n_features, random_state=0):
+        """Reduces the dimensionality of embeddings
+
+        Args:
+            emb (np.array): Embeddings to reduce
+            n_features (int): Target number of features
+            random_state (int): Random seed for reproducibility
+            
         Returns:
-            ClassifierModel: Trained classification model
+            np.array: Reduced embeddings with shape (n_samples, n_features)
+                     or original if reduction not possible
         """
-        return ClassifierModel.train(X_corpus, y_corpus, config, dtype)
-    
-    def _build_targets(self, true_ids, children_kb_sets):
-        """Build routing targets for node's children.
+        # n_samples, n_features_emb = emb.shape
+        # effective_dim = min(n_features, emb.shape[0])
         
-        Args:
-            true_ids (List[Any]): Gold entity IDs for samples
-            children_kb_sets (List[Set]): Each child's set of leaf IDs
+        # Perform PCA with effective dimension
+        svd = TruncatedSVD(n_components=n_features, random_state=random_state)
+        dense_emb = svd.fit_transform(emb) # turns it into dense auto
         
-        Returns:
-            np.ndarray: Array where Y[i] = j if true_ids[i] in children_kb_sets[j]
-        """
-        Y = np.zeros(len(true_ids), dtype=np.int64)
-        for i, eid in enumerate(true_ids):
-            for j, kb_set in enumerate(children_kb_sets):
-                if eid in kb_set:
-                    Y[i] = j
-                    break  # First match wins
-        return Y
-    
-    def _train_node(self, X_node, true_ids, children, htree):
-        """Train a node-level classifier to route to its children.
+        return dense_emb, svd
 
-        Args:
-            X_node (np.ndarray): Sample embeddings (N,d)
-            true_ids (List[Any]): Corresponding gold entity IDs
-            children (List[XMRTree]): Node's immediate children
-            htree: Current tree node
+    @staticmethod
+    def _compute_pifa(X, n_features=2**17):
         """
-        children_kb_sets = [set(child.kb_indices) for child in children]
-        Y_node = self._build_targets(true_ids, children_kb_sets)
+        Compute PIFA (Positive Instance Feature Aggregation) embeddings for labels.
+        This creates label embeddings by averaging the feature of positive instances.
         
-        X_tr, X_te, Y_tr, Y_te = train_test_split(
-            X_node, Y_node,
-            test_size=self.test_size,
-            random_state=self.random_state,
-            shuffle=True
+        Args:
+            X_tfidf: (n_samples, tfidf_dim) Tfidf Matrix, (sparse or dense) Must be sparse, will be sparse
+            Y_train: (n_samples, n_labels) Binary label matrix, (sparse)
+            
+        Return:
+            pifa_embeddings: (n_labels, tfidf_dim) PIFA Embeddings # Will be dense ig
+        """
+        pifa_factory = PIFAEmbeddingFactory(n_features=n_features)
+        X_csr = pifa_factory.transform(X)
+        return X_csr
+
+    @staticmethod
+    def _fused_emb(X, Y, fusion_model, batch_size=1536):
+        """
+        Compute fused embeddings for X and Y in batches using a trained fusion_model.
+        Args:
+            X, Y: scipy.sparse matrices (e.g., csr_matrix)
+            fusion_model: trained AttentionFusion instance
+            batch_size: size of each batch
+        Returns:
+            numpy array of fused embeddings
+        """
+        fusion_model.eval()
+        fusion_model.to(fusion_model.device)
+
+        fused_all = []
+
+        # LOGGER.info(f"Fusing embeddings, total batches: {X.shape[0] / batch_size}")
+        counter = 0
+        with torch.no_grad():
+            
+            for i in range(0, X.shape[0], batch_size):
+                X_batch = X[i:i+batch_size]
+                Y_batch = Y[i:i+batch_size]
+
+                X_tensor = torch.tensor(X_batch, dtype=torch.float).to(fusion_model.device)
+                Y_tensor = torch.tensor(Y_batch, dtype=torch.float).to(fusion_model.device)
+
+                fused_batch = fusion_model(X_tensor, Y_tensor).detach().cpu()
+                fused_all.append(fused_batch)
+                counter += 1
+
+        fused_all_tensor = torch.cat(fused_all, dim=0)
+        return fused_all_tensor.numpy()
+            
+    def execute(self, labels, x_cross_train):
+        """Executes the complete XMR model building pipeline.
+        
+        Pipeline stages:
+        1. Text vectorization and embedding generation
+        2. PIFA label embedding creation
+        3. Hierarchical skeleton construction
+        4. Transformer embedding generation
+        5. Classifier training throughout hierarchy
+        
+        Args:
+            labels (iterable): Label identifiers
+            x_cross_train (iterable): Training text data (list of synonym lists)
+            device (str): Computation device (default: "cpu")
+            
+        Returns:
+            Skeleton: Fully trained hierarchical XMR model
+        """
+        # Clean up memory before starting
+        gc.collect()
+        
+        # Initialize tree structure
+        htree = Skeleton(depth=0)
+        
+        # Step 1: Flatten synonyms into corpus and build reverse mapping
+        trn_corpus = []
+        label_to_indices = defaultdict(list)  # label -> indices of its synonyms in trn_corpus
+
+        for label, synonyms in zip(labels, x_cross_train):
+            for synonym in synonyms:
+                idx = len(trn_corpus)
+                trn_corpus.append(synonym)
+                label_to_indices[label].append(idx)
+
+        htree.set_labels(labels)
+        htree.set_train_data(trn_corpus)
+        htree.set_dict_data(label_to_indices)
+        
+        # Step 2: TF-IDF Vectorization
+        vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
+        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
+        vec_emb = normalize(vec_emb, norm="l2", axis=1)        
+        htree.set_vectorizer(vec_model)
+        
+        # Dimensionality reduction
+        dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features)
+        htree.set_dimension_model(svd)
+        
+        # Current embeddings (can be modified to include transformer embeddings)
+        combined_vecs = dense_vec_emb
+        
+        # Step 3: Create label embeddings (PIFA)
+        label_emb_dict = {}
+        all_embeddings = []  # List of embeddings for each label
+        
+        for label in labels:
+            indices = label_to_indices[label]
+            synonyms = [trn_corpus[i] for i in indices]
+            embeddings = combined_vecs[indices]
+            embeddings = normalize(embeddings, norm="l2", axis=1)
+            
+            all_embeddings.append(embeddings)
+            
+            # Calculate weighted centroid
+            tfidf_vec = self._predict_vectorizer(vec_model, synonyms)
+            weights = tfidf_vec.sum(axis=1).A1  # sum TF-IDF per synonym
+            
+            mask = weights > 0
+            if not mask.any():
+                # Fallback: uniform weights when all weights are zero
+                weights = np.ones(len(weights)) / len(weights)
+                embeddings_masked = embeddings
+            else:
+                # Only keep embeddings with positive weight
+                weights = weights[mask]
+                embeddings_masked = embeddings[mask, :]
+
+            weights = weights / (weights.sum() + 1e-8)  # Safe normalization
+            
+            weighted_centroid = np.average(embeddings_masked, axis=0, weights=weights)
+            weighted_centroid = weighted_centroid / (np.linalg.norm(weighted_centroid) + 1e-8)
+            
+            label_emb_dict[label] = weighted_centroid
+
+        htree.set_entity_centroids(label_emb_dict)
+
+        # Step 4: Build hierarchical clustering structure
+        skl_form = SkeletonConstruction(
+            min_leaf_size=self.min_leaf_size,
+            dtype=self.dtype
         )
         
-        self.classifier_config["kwargs"]["onevsrest"] = False
-        model = self._train_classifier(X_tr, Y_tr, self.classifier_config)
-        htree.set_tree_classifier(model)
+        # label_to_index = {label: idx for idx, label in enumerate(label_emb_dict)}
+        comb_emb_idx = {idx: emb for idx, emb in enumerate(label_emb_dict.values())}
 
-    def _train_routing_nodes(self, htree, all_kb_ids, comb_emb_idx):
-        """Recursively train routing classifiers for each node.
+        print("Starting Clustering")
+        htree = skl_form.execute(
+            htree, 
+            comb_emb_idx,
+            depth=self.depth,
+            clustering_config=self.clustering_config,
+            root=True
+        )
         
-        Args:
-            htree: Current tree node
-            all_kb_ids: List of all KB indices
-            comb_emb_idx: Dict of index to mean embeddings
-        """
-        children = list(htree.children.values())
+        # Step 5: Train classifiers throughout hierarchy
+        print("Starting Training")
+        skl_train = SkeletonTraining(
+            self.classifier_config, 
+            self.reranker_config,
+            num_negatives=5
+        )
         
-        # Base cases
-        if len(children) < 2:
-            htree.children = None
-            return
-        if not children or not htree.kb_indices:
-            return
-            
-        # Prepare node data
-        node_indices = htree.kb_indices
-        X_node = np.array([comb_emb_idx[idx] for idx in node_indices])
+        skl_train.execute(htree, labels, comb_emb_idx, all_embeddings)
         
-        # Train current node and recurse
-        self._train_node(X_node, node_indices, children, htree)
-        for child in children:
-            self._train_routing_nodes(child, all_kb_ids, comb_emb_idx)
-
-    def _train_leaf_rerankers(self, htree, comb_emb_idx, all_embeddings):
-        """Train rerankers at leaf nodes.
-        
-        Args:
-            htree: Current tree node
-            comb_emb_idx: Dict of index to mean embeddings
-            all_embeddings: List of individual synonym embeddings
-        """
-        if not htree.children:  # Leaf node
-            mention_indices = htree.kb_indices
-            if not mention_indices:
-                return
-                
-            # Prepare reranker data
-            m_embs = [all_embeddings[idx] for idx in mention_indices]
-            centroid_emb = [comb_emb_idx[idx] for idx in mention_indices]
-            global_to_local = {g: l for l, g in enumerate(mention_indices)}
-            local_indices = [global_to_local[idx] for idx in mention_indices]
-
-            # Train and set reranker
-            reranker = Reranker(self.reranker_config, self.num_negatives)
-            reranker.train(m_embs, centroid_emb, local_indices)
-            htree.set_reranker(reranker)
-        else:  # Non-leaf node
-            for child in htree.children.values():
-                self._train_leaf_rerankers(child, comb_emb_idx, all_embeddings)
-
-    def execute(self, htree, all_kb_ids, comb_emb_idx, all_embeddings):
-        """Execute complete training pipeline.
-        
-        Args:
-            htree: Root tree node
-            all_kb_ids: List mapping embedding rows to KB indices
-            comb_emb_idx: Dict of index to mean embeddings
-            all_embeddings: List of individual synonym embeddings
-        """
-        print("Training classifier routing nodes")
-        self._train_routing_nodes(htree, all_kb_ids, comb_emb_idx)
-        
-        print("Training reranker nodes")
-        self._train_leaf_rerankers(htree, comb_emb_idx, all_embeddings)
+        return htree
