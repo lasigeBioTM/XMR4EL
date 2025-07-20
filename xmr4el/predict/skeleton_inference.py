@@ -114,18 +114,13 @@ class SkeletonInference:
                 break
 
             beams = next_beams
-
-        # print(beams)
-
-        # print(beams)
-
+            
         # ---- Rerank in each leaf node ----
         # Use entity_centroids stored globally in the root
         all_entity_centroids = self.htree.entity_centroids
         
-        # print(all_entity_centroids)
-        
-        # exit()
+        print(beams)
+        print("Reached here", all_entity_centroids)
         
         final_candidates = []
 
