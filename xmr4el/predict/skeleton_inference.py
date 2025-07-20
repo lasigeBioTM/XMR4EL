@@ -126,7 +126,7 @@ class SkeletonInference:
 
         for node, path_score in beams:
             if not hasattr(node, "reranker") or node.reranker is None:
-                # print("Donest have an reranker, odd")
+                print("Donest have an reranker, odd")
                 continue  # Skip if this node has no reranker (shouldn't happen)
 
             reranker = node.reranker
@@ -151,6 +151,8 @@ class SkeletonInference:
 
             X_pairs = np.vstack(X_pairs)
             scores = self._predict_proba_classifier(reranker.model, X_pairs)[:, 1]  # Binary classification score (prob. of match)
+
+            print(scores)
 
             # Scale score by path probability
             reranked = [(eid, float(score * path_score)) for eid, score in zip(valid_ids, scores)]
