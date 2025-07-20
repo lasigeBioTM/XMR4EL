@@ -107,7 +107,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=200
+        truncate_data=50
         )
     
     raw_labels = train_data["raw_labels"]

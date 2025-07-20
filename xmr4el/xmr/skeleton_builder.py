@@ -250,8 +250,14 @@ class SkeletonBuilder():
         dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features)
         htree.set_dimension_model(svd)
         
+        transformer_model = self._predict_transformer(trn_corpus, self.transformer_config)
+        transformer_emb = normalize(transformer_model.model.embeddings, norm="l2", axis=1)
+        htree.set_transformer_config(self.transformer_config)
+        
+        print(dense_vec_emb.shape, transformer_emb.shape)
+        
         # Current embeddings (can be modified to include transformer embeddings)
-        combined_vecs = dense_vec_emb
+        combined_vecs = np.hstack((dense_vec_emb, transformer_emb))
         
         # Step 3: Create label embeddings (PIFA)
         label_emb_dict = {}

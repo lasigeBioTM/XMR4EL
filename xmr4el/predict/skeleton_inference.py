@@ -205,12 +205,11 @@ class SkeletonInference:
     
     def generate_input_embeddigns(self, input_text):
         text_emb = self.vectorize_input_text(input_text)
-        # transformer_emb = self.transform_input_text(input_text)
+        transformer_emb = self.transform_input_text(input_text)
         
-        # concat_emb = np.hstack((
-        #     transformer_emb,
-        #     text_emb
-        # ))
+        concat_emb = np.hstack((
+             transformer_emb,
+             text_emb
+        ))
         
-        concat_emb = text_emb
         return concat_emb
