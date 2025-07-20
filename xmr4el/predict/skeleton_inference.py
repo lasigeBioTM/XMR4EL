@@ -110,7 +110,7 @@ class SkeletonInference:
                 
             beams = next_beams
         
-        print(beams)
+        # print(beams)
 
         # ---- Reranking ----
         final_candidates = []
