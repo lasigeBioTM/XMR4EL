@@ -134,7 +134,7 @@ class SkeletonInference:
             ])
             scores = node.reranker.model.predict_proba(X_pairs)[:, 1] if len(X_pairs) > 0 else []
 
-            print(scores)
+            # print(scores)
 
             # Combine scores with path probability
             valid_pairs = [
@@ -146,7 +146,7 @@ class SkeletonInference:
 
         # Return top-k results
         final_candidates.sort(key=lambda x: x[1], reverse=True)
-        print(final_candidates)
+        # print(final_candidates)
         return final_candidates[:k]
 
     
