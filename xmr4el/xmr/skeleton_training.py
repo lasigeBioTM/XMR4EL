@@ -178,6 +178,7 @@ class SkeletonTraining():
             all_embeddings (list list): [[individual synonyms embedddings]]
         """
         if not htree.children:
+            print(f"Preparing Reranker Child: {htree}")
             mention_indices = htree.kb_indices # All the indices of the cluster
             # print(mention_indices)
             # kb_ids = [all_kb_ids[idx] for idx in mention_indices] # each mention row maps to one KB index
@@ -191,6 +192,7 @@ class SkeletonTraining():
             local_mention_indices = [global_to_local[idx] for idx in mention_indices]
 
             reranker = Reranker(self.reranker_config, num_negatives=self.num_negatives)
+            print("Training Reranker")
             reranker.train(m_embs, centroid_emb, local_mention_indices)
             # print(reranker)
             htree.set_reranker(reranker)
