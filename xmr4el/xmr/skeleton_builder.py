@@ -9,6 +9,7 @@ from sklearn.preprocessing import normalize
 from collections import defaultdict
 
 from xmr4el.featurization.featurization import PIFAEmbeddingFactory
+from xmr4el.featurization.label_embedding_factory import LabelEmbeddingFactory
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
 
@@ -201,7 +202,16 @@ class SkeletonBuilder():
 
         fused_all_tensor = torch.cat(fused_all, dim=0)
         return fused_all_tensor.numpy()
-            
+    
+    def _gen_label_matrix(self, label_to_indices):
+        label_to_matrix = []
+        for key in list(label_to_indices.keys()):
+            labels_ids = label_to_indices[key]
+            for _ in labels_ids:
+                label_to_matrix.append([key])
+        
+        return label_to_matrix
+    
     def execute(self, labels, x_cross_train):
         """Executes the complete XMR model building pipeline.
         
@@ -240,86 +250,53 @@ class SkeletonBuilder():
         htree.set_train_data(trn_corpus)
         htree.set_dict_data(label_to_indices)
         
-        # Step 2: TF-IDF Vectorization
-        vec_model = self._train_vectorizer(trn_corpus, self.vectorizer_config, self.dtype)
-        vec_emb = self._predict_vectorizer(vec_model, trn_corpus)
-        vec_emb = normalize(vec_emb, norm="l2", axis=1)        
+        label_to_matrix = self._gen_label_matrix(label_to_indices)    
+        
+        label_fact = LabelEmbeddingFactory(trn_corpus, label_to_matrix, self.n_features, self.vectorizer_config)
+        fact_dict = label_fact.gen_pifa()
+        
+        X = fact_dict["mention_embeddings"] 
+        Y = fact_dict["label_to_mention_matrix"]
+        Z = fact_dict["label_matrix"]
+        true_label_classes = fact_dict["label_classes"]
+        vec_model = fact_dict["model"]
+        dim_model = fact_dict["dim_model"]
+        
+        print(X.shape, "X") # X
+        print(Y.shape, "Y") # Y
+        print(Z.shape, "Z") # Z
+        print(true_label_classes.shape, "Y classes") # Y.classes_
+        
+        # exit()
+        
         htree.set_vectorizer(vec_model)
-        
-        # Dimensionality reduction
-        dense_vec_emb, svd = self._reduce_dimensionality(vec_emb, self.n_features)
-        htree.set_dimension_model(svd)
-        
-        transformer_model = self._predict_transformer(trn_corpus, self.transformer_config)
-        transformer_emb = normalize(transformer_model.model.embeddings, norm="l2", axis=1)
-        htree.set_transformer_config(self.transformer_config)
-        
-        print(dense_vec_emb.shape, transformer_emb.shape)
-        
-        # Current embeddings (can be modified to include transformer embeddings)
-        combined_vecs = np.hstack((dense_vec_emb, transformer_emb))
-        
-        # Step 3: Create label embeddings (PIFA)
-        label_emb_dict = {}
-        all_embeddings = []  # List of embeddings for each label
-        
-        for label in labels:
-            indices = label_to_indices[label]
-            synonyms = [trn_corpus[i] for i in indices]
-            embeddings = combined_vecs[indices]
-            embeddings = normalize(embeddings, norm="l2", axis=1)
-            
-            all_embeddings.append(embeddings)
-            
-            # Calculate weighted centroid
-            tfidf_vec = self._predict_vectorizer(vec_model, synonyms)
-            weights = tfidf_vec.sum(axis=1).A1  # sum TF-IDF per synonym
-            
-            mask = weights > 0
-            if not mask.any():
-                # Fallback: uniform weights when all weights are zero
-                weights = np.ones(len(weights)) / len(weights)
-                embeddings_masked = embeddings
-            else:
-                # Only keep embeddings with positive weight
-                weights = weights[mask]
-                embeddings_masked = embeddings[mask, :]
-
-            weights = weights / (weights.sum() + 1e-8)  # Safe normalization
-            
-            weighted_centroid = np.average(embeddings_masked, axis=0, weights=weights)
-            weighted_centroid = weighted_centroid / (np.linalg.norm(weighted_centroid) + 1e-8)
-            
-            label_emb_dict[label] = weighted_centroid
-
-        htree.set_entity_centroids(label_emb_dict)
+        htree.set_dimension_model(dim_model)
 
         # Step 4: Build hierarchical clustering structure
         skl_form = SkeletonConstruction(
+            htree,
+            Z,
+            clustering_config=self.clustering_config,
             min_leaf_size=self.min_leaf_size,
+            depth=self.depth,
             dtype=self.dtype
         )
-        
-        # label_to_index = {label: idx for idx, label in enumerate(label_emb_dict)}
-        comb_emb_idx = {idx: emb for idx, emb in enumerate(label_emb_dict.values())}
 
         print("Starting Clustering")
-        htree = skl_form.execute(
-            htree, 
-            comb_emb_idx,
-            depth=self.depth,
-            clustering_config=self.clustering_config,
-            root=True
-        )
+        htree = skl_form.execute()
+        
+        # print(htree.children[4].kb_indices)
+        # exit()
         
         # Step 5: Train classifiers throughout hierarchy
         print("Starting Training")
         skl_train = SkeletonTraining(
+            true_label_classes,
             self.classifier_config, 
             self.reranker_config,
             num_negatives=5
         )
         
-        skl_train.execute(htree, labels, comb_emb_idx, all_embeddings)
+        skl_train.execute(htree)
         
         return htree

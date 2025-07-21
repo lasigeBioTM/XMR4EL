@@ -71,15 +71,16 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-21_10-29-11"
+        "test/test_data/saved_trees/Skeleton_2025-07-21_15-01-28"
     )
 
     # exit()
 
     # print(trained_xtree)
     
-    sp = SkeletonPredict(
-        trained_xtree
+    sp = SkeletonInference(
+        trained_xtree,
+        trained_xtree.labels
     )
     
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
@@ -113,7 +114,7 @@ def main():
     
     # exit()
     
-    predicted_labels, hits = sp.predict_batch(input_embs, filtered_labels, k=10)
+    predicted_labels, hits = sp.batch_inference(input_embs, filtered_labels, k=10)
 
     print(predicted_labels)
     

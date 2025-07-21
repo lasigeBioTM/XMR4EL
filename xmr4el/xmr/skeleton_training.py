@@ -38,7 +38,7 @@ class SkeletonTraining():
         dtype (np.dtype): Data type for numerical operations
     """
     
-    def __init__(self, classifier_config, reranker_config, num_negatives=5, test_size=0.2, random_state=42):
+    def __init__(self, label_classes, classifier_config, reranker_config, num_negatives=5, test_size=0.2, random_state=42):
         """
         Initializes the SkeletonTraining with training parameters.
         
@@ -49,6 +49,8 @@ class SkeletonTraining():
             random_state (int): Random seed for reproducibility (default: 42)
             dtype (np.dtype): Data type for computations (default: np.float32)
         """
+        
+        self.label_classes = label_classes
         
         self.classifier_config = classifier_config
         self.reranker_config = reranker_config
@@ -71,40 +73,14 @@ class SkeletonTraining():
         # Delegate training to ClassifierModel class
         return ClassifierModel.train(X_corpus, y_corpus, config, dtype)
     
-    def _build_targets(self, true_ids, children_kb_sets):
-        """
-        Build multi-hot routing targets for a node's children
-        
-        Args:
-            true_ids (List[Any]): Gold entity IDs for each sample
-            children_kb_sets (List[Set]): Each child's set of leaf IDs.
-        
-        Returns:
-            np.ndarray of shape [n_samples, n_children]
-                Y[i, j] = 1 if true_ids[i] in children_kb_sets[j], else 0.
-        """
-        """
-        n = len(true_ids)
-        k = len(children_kb_sets)
-        Y = np.zeros((n, k), dtype=np.int8) # Int 8 ?
-        for i, eid in enumerate(true_ids):
-            for j, kb_set in enumerate(children_kb_sets ):
-                if eid in kb_set:
-                    Y[i, j] = 1
-        return Y
-        """
-        
-        n = len(true_ids)
-        k = len(children_kb_sets)
-        Y = np.zeros((n,), dtype=np.int64)  # For multiclass
-        for i, eid in enumerate(true_ids):
-            for j, kb_set in enumerate(children_kb_sets):
-                if eid in kb_set:
-                    Y[i] = j
-                    break  # First match wins
-        return Y
+    def _gen_cluster_matrix(self, features, n_clusters, cluster_ids):
+        K = n_clusters
+        C = np.zeros((features, K), dtype=int)
+        for label_idx, cluster_idx in enumerate(cluster_ids):
+            C[label_idx, cluster_idx] = 1
+        return C
     
-    def _train_node(self, X_node, true_ids, children, htree, classifier_config):
+    def _train_node(self, htree):
         """
         Train a node-level classifier to route to its children.
 
@@ -114,59 +90,35 @@ class SkeletonTraining():
             children (List[XMRTree]): Node's immediate children.
             htree: Current tree node (for setters).
         """
-        # Build routing targets
-        children_kb_sets = [set(child.kb_indices) for child in children]
-        # Map indices to actual IDs for matching
-        # true_ids here are the indices into all_kb_ids
-        Y_node = self._build_targets(true_ids, children_kb_sets)
-        
-        # print(Y_node)
-        
-        # Split data (shuffle, no stratify for multi-label)
-        X_tr, X_te, Y_tr, Y_te = train_test_split(
-            X_node, Y_node,
-            test_size=self.test_size,
-            random_state=self.random_state,
-            shuffle=True
-        )
-        
-        classifier_config["kwargs"]["onevsrest"] = False
         model = self._train_classifier(X_tr, Y_tr, self.classifier_config)
-        
         # Store model and splits on the tree node
         htree.set_tree_classifier(model)
-        # htree.set_tree_test_split({
-        #     'X_train': X_tr, 'y_train': Y_tr,
-        #     'X_test': X_te, 'y_test': Y_te
-        # })
 
-    def _train_routing_nodes(self, htree, all_kb_ids, comb_emb_idx):
+    def _train_routing_nodes(self, htree):
         children = list(htree.children.values())
-        # print(children)
         
+        # Prune trees that cant generate classifiers
         if len(children) < 2:
             htree.children = None
             return 
-        
-        # print("INSIDE 1")
-        if not children:
-            return # Leaf Node
 
-        # print("INSIDE 2")
-        # 1. Filter sampels 
-        # Indentify indices whose true ID is under this node
-        node_indices = htree.kb_indices # Get all ids from the indices
-        if not node_indices:
-            return 
+        cluster_labels = htree.clustering_model.labels() # Get cluster labels to create C matrix
+        n_clusters = len(np.unique(cluster_labels)) # Calculate n of clusters
+        Y = htree.text_embeddings
         
-        # print(type(node_indices), node_indices)
-        # print(type(all_embeddings), all_embeddings)
-        X_node = [comb_emb_idx[idx] for idx in node_indices]
-        true_ids = node_indices
+        print(Y.shape)
+        exit()
         
-        # print("TRAIN NODE")
+        C = self._gen_cluster_matrix(Y.shape[1], n_clusters, cluster_labels) # Produce cluster_matrix
+        M_raw = Y @ C
+        M = (M_raw > 0).astype(int)
         
-        self._train_node(X_node, true_ids, children, htree, self.classifier_config)
+        # print(C)
+        # print(M_raw)
+        print(M)
+        exit()
+        
+        self._train_node(X, true_ids, children, htree, self.classifier_config)
         
         for child in children:
             self._train_routing_nodes(child, all_kb_ids, comb_emb_idx)
@@ -200,7 +152,7 @@ class SkeletonTraining():
             for child in htree.children.values():
                 self._train_leaf_rerankers(child, comb_emb_idx, all_embeddings)
 
-    def execute(self, htree, all_kb_ids, comb_emb_idx, all_embeddings):
+    def execute(self, htree):
         """
         Recursively train routing classifiers and leaf rerankers.
 
@@ -212,9 +164,9 @@ class SkeletonTraining():
         """
         print("Starting classifier routing nodes")
         # First, train routing classifiers as before
-        self._train_routing_nodes(htree, all_kb_ids, comb_emb_idx)
+        self._train_routing_nodes(htree)
         print(htree)
         # Then, train rerankers at leaf nodes
         print("Starting Reranker nodes")
-        self._train_leaf_rerankers(htree, comb_emb_idx, all_embeddings)
+        # self._train_leaf_rerankers(htree, comb_emb_idx, all_embeddings)
         

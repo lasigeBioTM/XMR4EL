@@ -27,7 +27,11 @@ class SkeletonConstruction():
     """
     
     def __init__(self, 
+                 htree, 
+                 Z,
+                 clustering_config,
                  min_leaf_size, 
+                 depth,
                  dtype=np.float32):
         """
         Initializes the SkeletonConstruction with clustering parameters.
@@ -38,10 +42,14 @@ class SkeletonConstruction():
             min_leaf_size (int): Minimum size for a cluster to be valid
             dtype (np.dtype): Data type for computations. Defaults to np.float32.
         """
-        # Configs
-        self.min_leaf_size = min_leaf_size
+        self.htree = htree
+        self.Z = Z
         
-        # Type
+        self.indices = [idx for idx in range(self.Z.shape[0])]
+        
+        self.clustering_config = clustering_config
+        self.min_leaf_size = min_leaf_size
+        self.depth = depth
         self.dtype = dtype
     
     @staticmethod
@@ -58,7 +66,10 @@ class SkeletonConstruction():
         """
         return ClusteringModel.train(trn_corpus, config, dtype)    
 
-    def execute(self, htree, comb_emb_idx, depth, clustering_config, root=False):
+    def execute(self):
+        return self._gen_cluster(self.htree, self.indices, self.Z, self.depth, root=True)
+
+    def _gen_cluster(self, htree, indices, Z, depth, root=False):
         """Executes the hierarchical clustering process.
         
         Args:
@@ -76,20 +87,19 @@ class SkeletonConstruction():
 
         gc.collect()
 
-        n_clusters = clustering_config["kwargs"]["n_clusters"]
-        indices = sorted(comb_emb_idx.keys())
-        text_emb_array = np.array([comb_emb_idx[idx] for idx in indices])
-
-        htree.set_kb_indices(indices)
+        n_labels = Z.shape[0]
+        n_clusters = self.clustering_config["kwargs"]["n_clusters"]
 
         min_clusterable_size = max(n_clusters, self.min_leaf_size)
-        if len(text_emb_array) <= min_clusterable_size:
+        if n_labels <= min_clusterable_size:
             return htree
 
         # Train clustering
-        clustering_model = self._train_clustering(text_emb_array, clustering_config, self.dtype)
-        cluster_labels = clustering_model.labels().flatten()
+        clustering_model = self._train_clustering(Z, self.clustering_config, self.dtype)
+        cluster_labels = clustering_model.labels()
         cluster_counts = Counter(cluster_labels)
+        
+        # print(cluster_labels, cluster_counts)
 
         # Separate valid and small clusters
         valid_clusters = []
@@ -100,7 +110,7 @@ class SkeletonConstruction():
                 valid_clusters.append(cluster_id)
             else:
                 fallback_indices.extend(
-                    idx for idx, lbl in zip(indices, cluster_labels) if lbl == cluster_id
+                    idx for idx, lbl in zip(self.indices, cluster_labels) if lbl == cluster_id
                 )
 
         # Validate root clusters
@@ -109,20 +119,22 @@ class SkeletonConstruction():
                 "All clusters are too small at root. Try reducing n_clusters or min_leaf_size."
             )
 
-        htree.set_clustering_model(clustering_model)
-        htree.set_text_embeddings(comb_emb_idx)
+        # htree.set_clustering_model(clustering_model)
+        htree.set_Z(Z)
+        htree.set_kb_indices(indices)
 
         # Process valid clusters
         for cluster in valid_clusters:
-            cluster_indices = [idx for idx, lbl in zip(indices, cluster_labels) if lbl == cluster]
-            child_comb_dict = {idx: comb_emb_idx[idx] for idx in cluster_indices}
+            cluster_indices = [idx for idx, lbl in zip(self.indices, cluster_labels) if lbl == cluster]
             child_htree = Skeleton(depth=htree.depth + 1)
 
-            child_subtree = self.execute(
+            child_Z = Z[cluster_indices]
+
+            child_subtree = self._gen_cluster(
                 child_htree,
-                child_comb_dict,
+                cluster_indices, 
+                child_Z,
                 depth - 1,
-                clustering_config,
             )
             
             if not child_subtree.is_empty():
@@ -130,17 +142,30 @@ class SkeletonConstruction():
 
         # Process fallback cluster
         if fallback_indices:
-            fallback_dict = {idx: comb_emb_idx[idx] for idx in fallback_indices}
             fallback_htree = Skeleton(depth=htree.depth + 1)
-            fallback_subtree = self.execute(
+            
+            child_Z = Z[fallback_indices]
+            
+            fallback_subtree = self._gen_cluster(
                 fallback_htree,
-                fallback_dict,
+                fallback_indices,
+                child_Z, # Z
                 depth - 1,
-                clustering_config,
             )
 
             if not fallback_subtree.is_empty():
                 fallback_cluster_id = max(valid_clusters) + 1 if valid_clusters else 0
-                htree.set_children(fallback_cluster_id, fallback_subtree)
+                htree.set_children(int(fallback_cluster_id), fallback_subtree)
+                
+                for idx in fallback_indices:
+                    cluster_labels[idx] = fallback_cluster_id
+                
+                
+        C = np.zeros((Z.shape[0], n_clusters), dtype=int)
+        for label_idx, cluster_id in enumerate(cluster_labels):
+            C[label_idx, cluster_id] = 1
+
+        htree.set_cluster_labels(cluster_labels)
+        htree.set_C(C)
 
         return htree

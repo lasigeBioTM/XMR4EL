@@ -212,6 +212,7 @@ class SkeletonInference:
              transformer_emb,
              text_emb
         ))
+        # concat_emb = text_emb
         
         concat_emb = normalize(concat_emb, norm="l2", axis=1)
         

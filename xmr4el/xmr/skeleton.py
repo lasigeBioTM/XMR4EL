@@ -35,7 +35,7 @@ class Skeleton:
         labels=None,
         train_data=None,
         dict_data=None,
-        text_embeddings=None,
+        Z=None,
         transformer_config=None,
         transformer_embeddings=None,
         concatenated_embeddings=None,
@@ -43,6 +43,8 @@ class Skeleton:
         vectorizer=None,
         dimension_model=None,
         clustering_model=None,
+        cluster_labels=None,
+        C=None,
         tree_classifier=None,
         tree_test_split=None,
         flat_classifier=None,
@@ -77,7 +79,7 @@ class Skeleton:
         self.kb_indices = kb_indices # Indices of data points in this node
 
         # Embeddings storage
-        self.text_embeddings = text_embeddings
+        self.Z = Z
 
         self.transformer_config = transformer_config
         self.transformer_embeddings = transformer_embeddings
@@ -86,7 +88,12 @@ class Skeleton:
         # Models
         self.vectorizer = vectorizer
         self.dimension_model = dimension_model
+        
+        
         self.clustering_model = clustering_model
+        
+        self.cluster_labels = cluster_labels
+        self.C = C
         
         self.tree_classifier = tree_classifier
         self.tree_test_split = tree_test_split # Evaluation Data
@@ -313,9 +320,16 @@ class Skeleton:
         """Set knowledge base indices for this node's data points."""
         self.kb_indices = kb_indices
 
-    def set_text_embeddings(self, text_embeddings):
-        """Set text embeddings (e.g., TF-IDF) for this node."""
-        self.text_embeddings = text_embeddings
+    def set_Z(self, Z):
+        """Set PIFA for this node."""
+        self.Z = Z
+        
+    def set_C(self, C):
+        """Set Label to cluster matrix for this node."""
+        self.C = C
+        
+    def set_cluster_labels(self, cluster_labels):
+        self.cluster_labels = cluster_labels
         
     def set_transformer_config(self, transformer_config):
         """Set tranformer config"""
@@ -412,7 +426,7 @@ class Skeleton:
 
         # Detailed cluster information
         cluster_info = ""
-        if self.clustering_model and hasattr(self.clustering_model.model, 'labels_'):
+        if self.clustering_labels:
             label_counts = Counter(self.clustering_model.model.labels_)
             stats.append(f"Clusters: {len(label_counts)}")
             
