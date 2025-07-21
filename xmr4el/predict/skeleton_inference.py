@@ -1,5 +1,7 @@
 import numpy as np
 
+from collections import defaultdict
+
 from scipy.sparse import csr_matrix
 
 from sklearn.preprocessing import normalize
@@ -148,7 +150,6 @@ class SkeletonInference:
         final_candidates.sort(key=lambda x: x[1], reverse=True)
         # print(final_candidates)
         return final_candidates[:100]
-
     
     def batch_inference(self, input_embs, labels, k=5, candidates=15):
         """

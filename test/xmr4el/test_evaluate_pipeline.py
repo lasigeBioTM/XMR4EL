@@ -4,8 +4,8 @@ import numpy as np
 from collections import Counter
 import time
 
-from xmr4el.predict.predict import Predict
 from xmr4el.predict.skeleton_inference import SkeletonInference
+from xmr4el.predict.skeleton_predict import SkeletonPredict
 from xmr4el.xmr.skeleton import Skeleton
 
 from sklearn.metrics.pairwise import cosine_similarity
@@ -73,14 +73,12 @@ def main():
     trained_xtree = Skeleton.load(
         "test/test_data/saved_trees/Skeleton_2025-07-21_10-29-11"
     )
-    
-    
 
     # exit()
 
     # print(trained_xtree)
     
-    si = SkeletonInference(
+    sp = SkeletonPredict(
         trained_xtree,
         trained_xtree.labels
     )
@@ -99,7 +97,7 @@ def main():
     
     print(filtered_labels)
     
-    input_embs = si.generate_input_embeddigns(filtered_texts)
+    input_embs = sp.generate_input_embeddigns(filtered_texts)
     
     
     
@@ -118,7 +116,7 @@ def main():
     
     # exit()
     
-    predicted_labels, hits = si.batch_inference(input_embs, filtered_labels, k=10)
+    predicted_labels, hits = sp.batch_predict(input_embs, filtered_labels, k=10)
 
     print(predicted_labels)
     
