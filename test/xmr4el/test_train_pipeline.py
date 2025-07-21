@@ -25,7 +25,7 @@ def main():
 
     min_leaf_size = 10
     depth = 1
-    n_features = 768
+    n_features = 1000
 
     vectorizer_config = {
         "type": "tfidf", 
