@@ -301,7 +301,7 @@ class SkeletonPredict():
                 
                 # Sort and keep top-k
                 batch_candidates[i].sort(key=lambda x: x[1], reverse=True)
-                all_results.append(batch_candidates[i][:k])
+                all_results.append(batch_candidates[i][:100])
         
         return all_results
 
