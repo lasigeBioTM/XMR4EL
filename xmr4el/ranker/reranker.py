@@ -58,18 +58,18 @@ class Reranker():
         - Reduce memory usage through better preallocation
         """
         num_neg = self.num_negatives
+        max_synonyms = 5
         D = centroid_embeddings[0].shape[0]
         
         # Precompute all centroid similarities in one batch
         centroid_matrix = np.vstack(centroid_embeddings)  # shape (E, d)
         
-        # Calculate total pairs more efficiently
-        total_synonyms = sum(len(syn_list) for syn_list in mention_embeddings)
-        total_pairs = total_synonyms * (1 + num_neg)
+        M = len(mention_embeddings)
+        max_rows = M * max_synonyms * (1 + num_neg)
         
         # Preallocate arrays more efficiently
-        X = np.empty((total_pairs, 2 * D), dtype=np.float32)
-        y = np.empty(total_pairs, dtype=np.int8)
+        X = np.empty((max_rows, 2 * D), dtype=np.float32)
+        y = np.empty(max_rows, dtype=np.int8)
         
         ptr = 0
         # Precompute all similarity scores upfront
@@ -78,16 +78,23 @@ class Reranker():
         
         for idx, (syn_list, true_idx) in enumerate(zip(mention_embeddings, mention_indices)):
             true_cent = centroid_embeddings[true_idx]
+            syn_array_full = np.array(syn_list)
             
             # Process positive pairs
-            syn_array = np.array(syn_list)  # Convert to array once
-            num_syn = len(syn_list)
+            if len(syn_array_full) > max_synonyms:
+                sims_true = cosine_similarity(syn_array_full, true_cent[None, :]).flatten()
+                best_true = np.argsort(-sims_true)[:max_synonyms]
+                pos_syns = syn_array_full[best_true]
+            else:
+                pos_syns = syn_array_full
+                
+            num_pos = len(pos_syns)
             
             # Fill positive pairs in one operation
-            X[ptr:ptr+num_syn, :D] = syn_array
-            X[ptr:ptr+num_syn, D:] = true_cent
-            y[ptr:ptr+num_syn] = 1
-            ptr += num_syn
+            X[ptr:ptr+num_pos, :D] = pos_syns
+            X[ptr:ptr+num_pos, D:] = true_cent
+            y[ptr:ptr+num_pos] = 1
+            ptr += num_pos
             
             # Find hard negatives using precomputed similarities
             sims = all_sims[idx]
@@ -97,23 +104,29 @@ class Reranker():
             # Get top candidates
             candidates = np.where(mask)[0]
             if len(candidates) >= num_neg:
-                hard_negs = candidates[np.argsort(-sims[candidates])[:num_neg]]
+                top_negs = candidates[np.argsort(-sims[candidates])[:num_neg]]
             else:
-                # Fallback to most similar negatives
-                backup = np.argsort(-sims)
-                backup = backup[(backup != true_idx) & ~mask[backup]]
-                hard_negs = np.concatenate([
-                    candidates,
-                    backup[:num_neg - len(candidates)]
-                ])
-            
+                order = np.argsort(-sims)
+                top_negs = order[order != true_idx][:num_neg]
+                
             # Process negative pairs in batches
-            for neg_idx in hard_negs:
+            for neg_idx in top_negs:
                 neg_cent = centroid_embeddings[neg_idx]
-                X[ptr:ptr+num_syn, :D] = syn_array
-                X[ptr:ptr+num_syn, D:] = neg_cent
-                y[ptr:ptr+num_syn] = 0
-                ptr += num_syn
+                if len(syn_array_full) > max_synonyms:
+                    sims_neg = cosine_similarity(syn_array_full, neg_cent[None, :]).ravel()
+                    best_neg = np.argsort(-sims_neg)[:max_synonyms]
+                    neg_syns = syn_array_full[best_neg]
+                else:
+                    neg_syns = syn_array_full
+                num_neg_syn = len(neg_syns)
+
+                X[ptr:ptr+num_neg_syn, :D] = neg_syns
+                X[ptr:ptr+num_neg_syn, D:] = neg_cent
+                y[ptr:ptr+num_neg_syn] = 0
+                ptr += num_neg_syn
+        
+        X = X[:ptr]
+        y = y[:ptr]
         
         # Fit model
         self.model = self._train_classifier(X, y, self.config)
