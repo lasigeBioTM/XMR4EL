@@ -79,8 +79,7 @@ def main():
     # print(trained_xtree)
     
     sp = SkeletonPredict(
-        trained_xtree,
-        trained_xtree.labels
+        trained_xtree
     )
     
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
@@ -99,8 +98,6 @@ def main():
     
     input_embs = sp.generate_input_embeddigns(filtered_texts)
     
-    
-    
     # print(filtered_labels)
     # print(filtered_labels[0][0]) # 
     
@@ -116,7 +113,7 @@ def main():
     
     # exit()
     
-    predicted_labels, hits = sp.batch_predict(input_embs, filtered_labels, k=10)
+    predicted_labels, hits = sp.predict_batch(input_embs, filtered_labels, k=10)
 
     print(predicted_labels)
     

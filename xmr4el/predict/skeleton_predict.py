@@ -1,6 +1,3 @@
-import gc
-
-
 import numpy as np
 
 from scipy.sparse import csr_matrix
@@ -9,12 +6,8 @@ from collections import Counter, defaultdict
 
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import TruncatedSVD
-from sklearn.metrics.pairwise import cosine_similarity
 
 from xmr4el.featurization.transformers import Transformer
-from xmr4el.featurization.vectorizers import Vectorizer
-from xmr4el.ranker.candidate_retrieval import CandidateRetrieval
-from xmr4el.ranker.cross_encoder import CrossEncoder
 
 
 class SkeletonPredict():
@@ -34,9 +27,9 @@ class SkeletonPredict():
     6. Sparse output generation
     """
        
-    def __init__(self, htree, all_kb_ids):
+    def __init__(self, htree):
         self.htree = htree
-        self.all_kb_ids = all_kb_ids
+        self.all_kb_ids = list(htree.entity_centroids.keys())
         
     @staticmethod
     def _reduce_dimensionality(emb, n_features, random_state=0):
@@ -107,45 +100,6 @@ class SkeletonPredict():
             np.array: Class probabilities
         """
         return classifier_model.predict_proba(data_points)
-
-    def _batch_predict_proba_classifier(self, classifiers, input_embs):
-            """
-            Batch predict probabilities from multiple classifiers.
-            
-            Args:
-                classifiers: List of classifiers (one per input)
-                input_embs: Batch of input embeddings
-                
-            Returns:
-                List of probability arrays
-            """
-            # Group by unique classifiers to avoid redundant predictions
-            unique_classifiers = {}
-            for i, clf in enumerate(classifiers):
-                clf_id = id(clf)
-                if clf_id not in unique_classifiers:
-                    unique_classifiers[clf_id] = {'clf': clf, 'indices': []}
-                unique_classifiers[clf_id]['indices'].append(i)
-            
-            # Initialize results
-            all_probs = [None] * len(classifiers)
-            
-            # Process each unique classifier
-            for clf_info in unique_classifiers.values():
-                if not clf_info['indices']:
-                    continue
-                    
-                batch_embs = input_embs[clf_info['indices']]
-                try:
-                    batch_probs = clf_info['clf'].predict_proba(batch_embs)
-                except AttributeError:
-                    # Handle case where classifier is not properly initialized
-                    batch_probs = np.ones((len(batch_embs), 1))  # Dummy probabilities
-                    
-                for idx, prob in zip(clf_info['indices'], batch_probs):
-                    all_probs[idx] = prob
-            
-            return all_probs
         
     def vectorize_input_text(self, input_text):
         # 1. Generate embeddings
@@ -174,168 +128,127 @@ class SkeletonPredict():
              text_emb
         ))
         
-        concat_emb = normalize(concat_emb, norm="l2", axis=1)
-        
         return concat_emb
 
-    def predict(self, input_embs, k=5, beam_size=3, batch_size=4000):
+    def predict(self, input_emb, k=5, beam_size=3):
         """
-        Optimized batch prediction with reduced checks and vectorized operations.
-        
-        Args:
-            input_embs: 2D numpy array of input embeddings
-            k: Number of top results to return
-            beam_size: Beam search width
-            batch_size: Processing batch size
-            
-        Returns:
-            List of top-k (entity_id, score) tuples for each input
+        Fixed version that properly reaches leaf nodes.
+        Key changes:
+        1. Proper leaf node detection
+        2. Correct beam search termination
+        3. Handles cases where reranker might be missing
         """
-        all_results = []
-        
-        # Process in batches
-        for batch_start in range(0, len(input_embs), batch_size):
-            batch_end = min(batch_start + batch_size, len(input_embs))
-            current_batch = input_embs[batch_start:batch_end]
-            batch_size = len(current_batch)
-            
-            # Initialize beams - (active, completed)
-            beams = [([(self.htree, 1.0)], []) for _ in range(batch_size)]
-            
-            # ---- Optimized Beam Search ----
-            while True:
-                # Find samples that still have active beams
-                active_mask = [bool(b[0]) for b in beams]
-                if not any(active_mask):
-                    break
-                
-                # Pre-allocate updates
-                beam_updates = [[] for _ in range(batch_size)]
-                
-                # Process active beams in parallel
-                for i in np.where(active_mask)[0]:
-                    active_beams, completed = beams[i]
-                    new_active = []
-                    new_completed = completed.copy()
-                    
-                    for node, path_score in active_beams:
-                        # Leaf node detection
-                        if not node.children:
-                            if hasattr(node, 'kb_indices') and node.kb_indices:
-                                new_completed.append((node, path_score))
-                            continue
-                        
-                        # Classifier prediction
-                        if hasattr(node, 'tree_classifier'):
-                            try:
-                                probs = node.tree_classifier.predict_proba(current_batch[i:i+1])[0]
-                                children = []
-                                for class_idx, prob in enumerate(probs):
-                                    child_id = node.tree_classifier.model.model.classes_[class_idx]
-                                    if child_id in node.children:
-                                        children.append((node.children[child_id], path_score * prob))
-                                
-                                # Keep top beam_size children
-                                children.sort(key=lambda x: x[1], reverse=True)
-                                new_active.extend(children[:beam_size])
-                            except:
-                                # Fallback if classifier fails
-                                children = [(child, path_score * (1.0/len(node.children))) 
-                                        for child in node.children.values()]
-                                new_active.extend(children[:beam_size])
-                        else:
-                            # Uniform distribution if no classifier
-                            children = [(child, path_score * (1.0/len(node.children))) 
-                                    for child in node.children.values()]
-                            new_active.extend(children[:beam_size])
-                    
-                    # Update beams
-                    new_active.sort(key=lambda x: x[1], reverse=True)
-                    beam_updates[i] = (new_active[:beam_size], new_completed)
-                
-                # Apply updates
-                for i in np.where(active_mask)[0]:
-                    beams[i] = beam_updates[i]
-            
-            # ---- Vectorized Reranking ----
-            batch_candidates = [[] for _ in range(batch_size)]
-            all_entity_centroids = self.htree.entity_centroids
-            
-            for i, (_, completed) in enumerate(beams):
-                if not completed:
-                    continue
-                    
-                # Collect all candidate entities from completed beams
-                candidates = {}
-                for node, path_score in completed:
-                    if not hasattr(node, 'kb_indices') or not node.kb_indices:
-                        continue
-                        
-                    for idx in node.kb_indices:
-                        eid = self.htree.labels[idx]
-                        if eid in all_entity_centroids:
-                            candidates[eid] = path_score  # Will be multiplied by reranker score
-                
-                if not candidates:
-                    continue
-                    
-                # Prepare reranker inputs
-                eids = list(candidates.keys())
-                centroids = np.array([all_entity_centroids[eid] for eid in eids])
-                input_emb = current_batch[i]
-                
-                # Vectorized similarity calculation
-                if hasattr(completed[0][0], 'reranker') and completed[0][0].reranker:
-                    X_pairs = np.hstack((
-                        np.tile(input_emb, (len(eids), 1)),
-                        centroids
-                    ))
-                    scores = completed[0][0].reranker.model.predict_proba(X_pairs)[:, 1]
-                else:
-                    # Fallback to cosine similarity
-                    scores = cosine_similarity(input_emb.reshape(1, -1), centroids)[0]
-                
-                # Combine scores
-                for eid, score in zip(eids, scores):
-                    batch_candidates[i].append((eid, float(score * candidates[eid])))
-                
-                # Sort and keep top-k
-                batch_candidates[i].sort(key=lambda x: x[1], reverse=True)
-                all_results.append(batch_candidates[i][:100])
-        
-        return all_results
+        beams = [(self.htree, 1.0)]  # (node, cumulative_score)
 
-    def batch_predict(self, input_embs, labels, k=5, candidates=100, batch_size=32000):
-        """
-        Optimized batch prediction with evaluation.
-        Returns CSR matrix of predictions and hit indicators.
-        """
-        n = len(input_embs)
-        preds = self.predict(input_embs, k=k, beam_size=max(1, round(candidates/k)), batch_size=batch_size)
-        
-        # Convert to CSR format
-        rows, cols, data = [], [], []
-        hits = np.zeros(n, dtype=int)
-        
-        for i, pred in enumerate(preds):
-            # Handle hits
-            gold = labels[i]
-            cand_ids = {eid for eid, _ in pred}
+        # ---- Improved Beam Search ----
+        while beams:
+            next_beams = []
             
-            if isinstance(gold, list):
-                hits[i] = int(any(g in cand_ids for g in gold))
-            else:
-                hits[i] = int(gold in cand_ids)
-            
-            # Add to sparse matrix
-            for eid, score in pred:
-                try:
-                    j = self.all_kb_ids.index(eid)
-                    rows.append(i)
-                    cols.append(j)
-                    data.append(score)
-                except ValueError:
+            for node, path_score in beams:
+                # True leaf nodes have no children AND contain kb_indices
+                is_leaf = not node.children and hasattr(node, 'kb_indices') and node.kb_indices
+                
+                if is_leaf:
+                    next_beams.append((node, path_score))
                     continue
+
+                if not node.children:  # Empty non-leaf node
+                    continue
+
+                # Get classifier predictions
+                try:
+                    probs = self._predict_proba_classifier(node.tree_classifier, input_emb.reshape(1, -1))[0]
+                except AttributeError:
+                    # Handle nodes without classifiers
+                    continue
+
+                # Match classifier classes to actual children
+                valid_children = []
+                for class_idx, prob in enumerate(probs):
+                    child_id = node.tree_classifier.model.model.classes_[class_idx]
+                    if child_id in node.children:
+                        valid_children.append((node.children[child_id], prob))
+
+                # Keep top beam_size children
+                valid_children.sort(key=lambda x: x[1], reverse=True)
+                for child, prob in valid_children[:beam_size]:
+                    next_beams.append((child, path_score * prob))
+
+            # Stop if all beams are leaves or no progress
+            if not next_beams or all(not node.children 
+                                     and hasattr(node, 'kb_indices') 
+                                     and node.kb_indices for node, _ in next_beams):
+                beams = next_beams
+                break
+                
+            beams = next_beams
         
+        # print(beams)
+
+        # ---- Reranking ----
+        final_candidates = []
+        all_entity_centroids = self.htree.entity_centroids
+        
+        for node, path_score in beams:
+            if not hasattr(node, 'kb_indices') or not node.kb_indices:
+                continue
+
+            kb_indices = node.kb_indices
+            kb_ids = [self.htree.labels[i] for i in kb_indices]
+            
+            # Skip if no reranker (use centroid similarity as fallback)
+            if not hasattr(node, 'reranker') or not node.reranker:
+                continue
+
+            # Use reranker if available
+            X_pairs = np.array([
+                np.hstack((input_emb, all_entity_centroids[eid]))
+                for eid in kb_ids if eid in all_entity_centroids
+            ])
+            scores = node.reranker.model.predict_proba(X_pairs)[:, 1] if len(X_pairs) > 0 else []
+
+            # print(scores)
+
+            # Combine scores with path probability
+            valid_pairs = [
+                (eid, float(score * path_score))
+                for eid, score in zip(kb_ids, scores)
+                if eid in all_entity_centroids
+            ]
+            final_candidates.extend(valid_pairs)
+
+        # Return top-k results
+        final_candidates.sort(key=lambda x: x[1], reverse=True)
+        # print(final_candidates)
+        return final_candidates[:100]
+    
+    def predict_batch(self, input_embs, labels, k=5, candidates=15):
+        """
+        End-to-End batch prediction with hit-rate evaluation.
+        Returns sparse prediction and hit indicators
+        """
+        
+        n = input_embs.shape[0]
+        results = [None] * n
+        hits = [0] * n
+        # for each sample 
+        pred = self.predict(input_embs, k=k, beam_size=round(candidates/k))
+        
+        results[i] = ([self.all_kb_ids.index(eid) for eid, _ in pred], [score for _, score in pred])
+        
+        gold = labels[i]
+        
+        cand_ids = [eid for eid, _ in pred]
+        if isinstance(gold, list):
+            hits[i] = int(any(g in cand_ids for g in gold))
+        else:
+            hits[i] = int(gold in cand_ids)
+        # convert to CSR
+        rows, cols, data = [], [], []
+        for i, (idxs, scores) in enumerate(results):
+            for j, score in zip(idxs, scores):
+                rows.append(i)
+                cols.append(j)
+                data.append(score)
         csr = csr_matrix((data, (rows, cols)), shape=(n, len(self.all_kb_ids)))
-        return csr, hits.tolist()
+        return csr, hits

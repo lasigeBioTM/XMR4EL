@@ -149,7 +149,7 @@ class SkeletonInference:
         # Return top-k results
         final_candidates.sort(key=lambda x: x[1], reverse=True)
         # print(final_candidates)
-        return final_candidates[:100]
+        return final_candidates[:200]
     
     def batch_inference(self, input_embs, labels, k=5, candidates=15):
         """
