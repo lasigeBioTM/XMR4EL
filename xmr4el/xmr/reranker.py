@@ -1,4 +1,7 @@
 import numpy as np
+
+from collections import defaultdict
+
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 
@@ -36,73 +39,96 @@ class SkeletonReranker():
         """One VS Rest Classifier"""
         return ClassifierModel.predict(model, X)
     
-    def _build_dataset(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None, shuffle_negatives=True):
+    def _train_labelwise_classifiers(self, datasets):
+        """
+        Train a separate binary classifier for each label.
+
+        Args:
+            datasets: dict[label_idx] = (X_label, y_label)
+
+        Returns:
+            dict[label_idx] = trained_model
+        """
+        classifiers = {}
+
+        for label_idx, (X_label, Y_label) in datasets.items():
+            # Initialize your classifier, e.g., logistic regression, linear SVM
+            model = self._train_classifier(X_label, Y_label)
+            classifiers[label_idx] = model
+
+        return classifiers
+    
+    def _build_dataset(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None):
         """
         Build reranker dataset using hard negatives from relevant clusters only.
+
+        Optimizations:
+        - Vectorized operations instead of loops.
+        - Batch negative sampling.
+        - Precompute cluster assignments.
+        - Avoid repeated list appends.
 
         Args:
             X: np.ndarray, (N, d) mention embeddings
             Y: np.ndarray, (N, L) multi-label binarized labels for current node
             label_embs: np.ndarray, (L, d) embeddings for labels in this node
             C: np.ndarray, (L, K) label-to-cluster assignment for this node
-            M: np.ndarray, (N, K) input-to-cluster indicator matrix for this node
+            M_TFN: np.ndarray, (N, K) TFN cluster indicator matrix
+            M_MAN: np.ndarray, (N, K) MAN cluster indicator matrix
+            max_neg_per_pos: int, max negatives per positive (None for no capping)
 
         Returns:
-            X_rerank: np.ndarray, concatenated mention-label embeddings (num_samples, 2*d)
-            y_rerank: np.ndarray, binary labels (num_samples,)
+            datasets: dict {label_idx: (X_rerank, y_rerank)}
         """
-        
-        X_rerank = []
-        Y_rerank = []
-        
-        num_mentions, num_labels = Y.shape
-        num_clusters = C.shape[1]
-
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
+        num_mentions, num_labels = Y.shape
+        datasets = defaultdict(lambda: ([], []))
 
-        # print(num_mentions)
+        # Precompute which mentions are in each label's clusters
+        label_cluster_mask = C.T  # (K, L) -> cluster-to-label
+        mention_in_label_cluster = M_bar @ label_cluster_mask  # (N, L)
 
-        cluster_to_labels = {k: set(np.where(C[:, k] == 1)[0]) for k in range(num_clusters)}
-        
-        for i in range(num_mentions):
-            mention_emb = X[i]
-            relevant_clusters = np.where(M_bar[i] == 1)[0]
-            
-            candidate_labels = set()
-            for cluster_id in relevant_clusters:
-                candidate_labels |= cluster_to_labels[cluster_id]
-            candidate_labels = list(candidate_labels)
-            
-            # Positives and negatives in candidate labels
-            pos_labels = [l for l in candidate_labels if Y[i, l] == 1]
-            neg_labels = [l for l in candidate_labels if Y[i, l] == 0]
-            
-            
-            if shuffle_negatives:
-                np.random.shuffle(neg_labels)
+        for label_idx in range(num_labels):
+            # Get mentions in this label's clusters
+            valid_mention_mask = mention_in_label_cluster[:, label_idx].astype(bool)
+            valid_indices = np.where(valid_mention_mask)[0]
 
-            # Cap negatives if needed
-            if max_neg_per_pos is not None and len(pos_labels) > 0:
-                neg_cap = max_neg_per_pos * len(pos_labels)
-                neg_labels = neg_labels[:neg_cap]
+            if len(valid_indices) == 0:
+                continue  # Skip labels with no valid mentions
+
+            # Get embeddings for valid mentions
+            X_valid = X[valid_indices]
+            Y_valid = Y[valid_indices, label_idx]
+
+            # Combine mention and label embeddings
+            label_emb = label_embs[label_idx]
+            label_tile = np.tile(label_emb, (len(X_valid), 1))
+            X_combined = np.concatenate([X_valid, label_tile], axis=1)
             
-            # Positive samples
-            for pos in pos_labels:
-                pos_emb = label_embs[pos]
-                combined_emb = np.concatenate([mention_emb, pos_emb])
-                X_rerank.append(combined_emb)
-                Y_rerank.append(1)
-            
-            # Negative samples
-            for neg in neg_labels:
-                neg_emb = label_embs[neg]
-                combined_emb = np.concatenate([mention_emb, neg_emb])
-                X_rerank.append(combined_emb)
-                Y_rerank.append(0)
-            
-        X_rerank = np.array(X_rerank)
-        Y_rerank = np.array(Y_rerank)
-        return X_rerank, Y_rerank
+            # Apply negative capping if specified
+            if max_neg_per_pos is not None:
+                pos_mask = Y_valid == 1
+                num_pos = pos_mask.sum()
+                if num_pos == 0:
+                    continue  # No positives for this label
+
+                neg_mask = ~pos_mask
+                neg_indices = np.where(neg_mask)[0]
+                num_neg = len(neg_indices)
+                max_neg = max_neg_per_pos * num_pos
+
+                if num_neg > max_neg:
+                    # Randomly sample negatives
+                    np.random.shuffle(neg_indices, random_state=42)
+                    neg_keep = neg_indices[:max_neg]
+                    keep_mask = pos_mask | np.isin(np.arange(len(Y_valid)), neg_keep)
+                    X_combined = X_combined[keep_mask]
+                    Y_valid = Y_valid[keep_mask]
+
+            if len(X_combined) > 0:
+                datasets[label_idx] = (X_combined, Y_valid)
+
+        return dict(datasets)
     
     def execute(self, htree):
         X_node = htree.X #  mention/input embeddings
@@ -118,13 +144,10 @@ class SkeletonReranker():
         # Matcher Aware Negatives (MAN),  matcher-aware hard negatives for each training instance.
         M_MAN = self._predict_classifier(htree.classifier, X_node) 
         
-        X_rerank, Y_rerank = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=10)
+        datasets = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=10)
+        classifiers = self._train_labelwise_classifiers(datasets)
         
-        print(X_rerank.shape, Y_rerank.shape)
-        
-        model = self._train_classifier(X_rerank, Y_rerank)
-        
-        htree.set_reranker(model)
+        htree.set_reranker(classifiers)
         
         for child in htree.children.values():
             self.execute(child)
