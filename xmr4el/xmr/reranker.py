@@ -24,7 +24,7 @@ class SkeletonReranker():
             htree: Current tree node (for setters).
         """
         """One VS Rest Classifier"""
-        return ClassifierModel.train(X, Y, self.classifier_config)
+        return ClassifierModel.train(X, Y, self.classifier_config, onevsrest=True)
     
     def _predict_classifier(self, model, X):
         """
@@ -119,7 +119,7 @@ class SkeletonReranker():
 
                 if num_neg > max_neg:
                     # Randomly sample negatives
-                    np.random.shuffle(neg_indices, random_state=42)
+                    np.random.shuffle(neg_indices) # Put a seed
                     neg_keep = neg_indices[:max_neg]
                     keep_mask = pos_mask | np.isin(np.arange(len(Y_valid)), neg_keep)
                     X_combined = X_combined[keep_mask]

@@ -4,7 +4,7 @@ import numpy as np
 from collections import Counter
 import time
 
-from xmr4el.predict.skeleton_inference import SkeletonInference
+from xmr4el.predict.inference import SkeletonInference
 from xmr4el.predict.skeleton_predict import SkeletonPredict
 from xmr4el.xmr.skeleton import Skeleton
 
@@ -71,11 +71,9 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-21_15-01-28"
+        "test/test_data/saved_trees/Skeleton_2025-07-22_16-13-03"
     )
-
-    # exit()
-
+    
     # print(trained_xtree)
     
     sp = SkeletonInference(
@@ -87,14 +85,6 @@ def main():
     
     filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.labels)
     
-    # print(filtered_labels[0], filtered_texts[0])
-    # print(filtered_labels[0], filtered_texts[0])
-    # print(trained_xtree.dict_data[filtered_labels[0][0]])
-    # for idx, _ in enumerate(filtered_labels):
-    #     train_data_filtered_label_texts = [trained_xtree.train_data[idx] for idx in trained_xtree.dict_data[filtered_labels[idx][0]]]
-    #     print(train_data_filtered_label_texts)
-    # print(train_data_filtered_label_texts)
-    
     print(filtered_labels)
     
     input_embs = sp.generate_input_embeddigns(filtered_texts)
@@ -105,16 +95,8 @@ def main():
     # print(input_embs[0])
     # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
     
-    for idx, _ in enumerate(filtered_labels):
-        sim = cosine_similarity(input_embs[idx].reshape(1, -1), trained_xtree.entity_centroids[filtered_labels[idx][0]].reshape(1, -1))[0][0]
-        print(sim)
-    # exit()
     
-    # print(sim)
-    
-    # exit()
-    
-    predicted_labels, hits = sp.batch_inference(input_embs, filtered_labels, k=10)
+    predicted_labels, hits = sp.batch_inference(input_embs, filtered_labels, topk=10)
 
     print(predicted_labels)
     
