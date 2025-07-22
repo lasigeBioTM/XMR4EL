@@ -1,5 +1,7 @@
 import numpy as np
 
+from scipy.sparse import csr_matrix
+
 from collections import defaultdict
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
@@ -53,6 +55,8 @@ class SkeletonReranker():
 
         for label_idx, (X_label, Y_label) in datasets.items():
             # Initialize your classifier, e.g., logistic regression, linear SVM
+            X_label = csr_matrix(X_label)
+            Y_label = csr_matrix(Y_label)
             model = self._train_classifier(X_label, Y_label)
             classifiers[label_idx] = model
 
@@ -98,7 +102,11 @@ class SkeletonReranker():
 
             # Get embeddings for valid mentions
             X_valid = X[valid_indices]
-            Y_valid = Y[valid_indices, label_idx].A1  # `.A1` flattens to 1D 
+            
+            # Extract labels without converting to dense
+            Y_valid = np.zeros(len(valid_indices), dtype=np.int8)
+            rows = Y[valid_indices, label_idx]
+            Y_valid[rows.nonzero()[0]] = 1  # Only set positions where label is positive
 
             # Combine mention and label embeddings
             label_emb = label_embs[label_idx]

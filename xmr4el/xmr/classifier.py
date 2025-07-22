@@ -1,5 +1,7 @@
 import numpy as np
 
+from scipy.sparse import csr_matrix
+
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 
@@ -103,6 +105,8 @@ class SkeletonTraining():
         htree.set_M(M)
         
         print(X_node.shape, Y_node.shape, M.shape)
+        
+        X_node = csr_matrix(X_node)
         
         model = self._train_node(X_node, M)
         htree.set_classifier(model)
