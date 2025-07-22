@@ -35,7 +35,7 @@ class LabelEmbeddingFactory():
     
     def _gen_label_matrix(self):
         """Need to generate label matrix, with same labels, so that each correspond to an entity"""
-        mlb = MultiLabelBinarizer()
+        mlb = MultiLabelBinarizer(sparse_output=True)
         Y = mlb.fit_transform(self.labels)
         return Y, mlb.classes_
     
