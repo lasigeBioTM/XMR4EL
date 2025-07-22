@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 from xmr4el.featurization.preprocessor import Preprocessor
-from xmr4el.xmr.skeleton_builder import SkeletonBuilder
+from xmr4el.xmr.builder import SkeletonBuilder
 
 
 """
@@ -23,7 +23,7 @@ def main():
     
     start = time.time()
 
-    min_leaf_size = 10
+    min_leaf_size = 5
     depth = 1
     n_features = 1000
 
@@ -40,7 +40,7 @@ def main():
     clustering_config = {
         "type": "sklearnminibatchkmeans",
         "kwargs": {
-            "n_clusters": 4,  # This should be determined by your tuning process
+            "n_clusters": 2,  # This should be determined by your tuning process
             "init": "k-means++",
             "max_iter": 500,  # Increased from 300
             "batch_size": 0,  # Larger batch size for more stable updates
@@ -49,7 +49,7 @@ def main():
             "random_state": 42,  # Fixed for reproducibility
             "tol": 1e-4,  # Added small tolerance for early stopping
             "max_no_improvement": 20,  # More patience for improvement
-            "init_size": 24,  # 3 * n_clusters (3*8=24)
+            "init_size": 2*3,  # 3 * n_clusters (3*8=24)
             "n_init": 5,  # Run multiple initializations, pick best
             "reassignment_ratio": 0.01,
         }

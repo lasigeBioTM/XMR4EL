@@ -13,8 +13,9 @@ from xmr4el.featurization.label_embedding_factory import LabelEmbeddingFactory
 from xmr4el.featurization.transformers import Transformer
 from xmr4el.featurization.vectorizers import Vectorizer
 
-from xmr4el.xmr.skeleton_construction import SkeletonConstruction
-from xmr4el.xmr.skeleton_training import SkeletonTraining
+from xmr4el.xmr.clustering import SkeletonConstruction
+from xmr4el.xmr.classifier import SkeletonTraining
+from xmr4el.xmr.reranker import SkeletonReranker
 from xmr4el.xmr.skeleton import Skeleton
 
 
@@ -285,18 +286,28 @@ class SkeletonBuilder():
         print("Starting Clustering")
         htree = skl_form.execute()
         
-        # print(htree.children[4].kb_indices)
-        # exit()
+        print(htree)
         
         # Step 5: Train classifiers throughout hierarchy
         print("Starting Training")
         skl_train = SkeletonTraining(
+            X, 
+            Y,
             true_label_classes,
+            htree, 
             self.classifier_config, 
             self.reranker_config,
             num_negatives=5
         )
         
-        skl_train.execute(htree)
+        skl_train.execute()
+        
+        skl_reranker = SkeletonReranker(
+            labels,
+            label_to_indices, 
+            self.reranker_config
+        )
+        
+        skl_reranker.execute(htree)
         
         return htree

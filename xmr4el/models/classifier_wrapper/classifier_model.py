@@ -102,7 +102,7 @@ class ClassifierModel(metaclass=ClassifierMeta):
         return cls(config, model)
 
     @classmethod
-    def train(cls, X_train, y_train=None, config=None, dtype=np.float32):
+    def train(cls, X_train, y_train=None, config=None, dtype=np.float32, onevsrest=False):
         """Train on a corpus.
 
         Args:
@@ -121,16 +121,13 @@ class ClassifierModel(metaclass=ClassifierMeta):
             if config is not None
             else {"type": "sklearnlogisticregression", "kwargs": {}}
         )
-        # LOGGER.debug(
-        #     f"Training classifier with config: {json.dumps(config, indent=True)}"
-        # )
         classifier_type = config.get("type", None)
         assert (
             classifier_type is not None
         ), f"config {config} should contain a key 'type' for the classifier type"
 
         model = classifier_dict[classifier_type].train(
-            X_train, y_train, config=config["kwargs"], dtype=dtype
+            X_train, y_train, config=config["kwargs"], dtype=dtype, onevsrest=onevsrest
         )
 
         config["kwargs"] = model.config
@@ -213,7 +210,7 @@ class SklearnLogisticRegression(ClassifierModel):
         return model
 
     @classmethod
-    def train(cls, X_train, y_train, config={}, dtype=np.float32):
+    def train(cls, X_train, y_train, config={}, dtype=np.float32, onevsrest=False):
         """Train on a corpus.
 
         Args:
@@ -242,19 +239,13 @@ class SklearnLogisticRegression(ClassifierModel):
             "warm_start": False,
             "n_jobs": None,
             "l1_ratio": None,
-            "onevsrest": False,
         }
 
         try:
             config = {**defaults, **config}
-            
-            if config["onevsrest"]:
-                config.pop("onevsrest")
-                model = LogisticRegression(**config)
+            model = LogisticRegression(**config)
+            if onevsrest:
                 model = OneVsRestClassifier(model)
-            else:
-                config.pop("onevsrest")
-                model = LogisticRegression(**config)
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"

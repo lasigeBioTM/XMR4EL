@@ -35,22 +35,17 @@ class Skeleton:
         labels=None,
         train_data=None,
         dict_data=None,
-        Z=None,
-        transformer_config=None,
-        transformer_embeddings=None,
-        concatenated_embeddings=None,
         kb_indices=None,
+        X=None,
+        Y=None,
+        Z=None, 
+        C=None,
+        M=None,
         vectorizer=None,
         dimension_model=None,
-        clustering_model=None,
         cluster_labels=None,
-        C=None,
-        tree_classifier=None,
-        tree_test_split=None,
-        flat_classifier=None,
-        flat_test_split=None,
+        classifier=None,
         reranker=None,
-        entity_centroids=None,
         children=None,  # Dictionary of XMRTree nodes
         depth=0,
     ):
@@ -79,31 +74,22 @@ class Skeleton:
         self.kb_indices = kb_indices # Indices of data points in this node
 
         # Embeddings storage
+        self.X = X
+        self.Y = Y
         self.Z = Z
-
-        self.transformer_config = transformer_config
-        self.transformer_embeddings = transformer_embeddings
-        self.concatenated_embeddings = concatenated_embeddings
+        self.C = C
+        self.M = M
         
         # Models
         self.vectorizer = vectorizer
         self.dimension_model = dimension_model
         
         
-        self.clustering_model = clustering_model
-        
         self.cluster_labels = cluster_labels
-        self.C = C
         
-        self.tree_classifier = tree_classifier
-        self.tree_test_split = tree_test_split # Evaluation Data
-        
-        self.flat_classifier = flat_classifier
-        self.flat_test_split = flat_test_split # Evaluation Data
+        self.classifier = classifier
         
         self.reranker = reranker
-        
-        self.entity_centroids = entity_centroids
 
         # Tree Structure
         self.children = children if children is not None else {} # Child Nodes
@@ -132,7 +118,7 @@ class Skeleton:
         state = self.__dict__.copy()
 
         # Save models individually (vectorizer, clustering, classifier)
-        models = ["vectorizer", "dimension_model", "clustering_model", "tree_classifier", "flat_classifier", "reranker"] # reranker
+        models = ["vectorizer", "dimension_model", "clustering_model", "classifier", "reranker"] # reranker
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
@@ -244,7 +230,7 @@ class Skeleton:
             "vectorizer": Vectorizer if hasattr(Vectorizer, 'load') else None,
             "dimension_model": None,  # Will handle generically
             "clustering_model": ClusteringModel if hasattr(ClusteringModel, 'load') else None,
-            "tree_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
+            "classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
             "flat_classifier": ClassifierModel if hasattr(ClassifierModel, 'load') else None,
             "reranker": Reranker if hasattr(Reranker, 'load') else None,
         }
@@ -319,6 +305,14 @@ class Skeleton:
     def set_kb_indices(self, kb_indices):
         """Set knowledge base indices for this node's data points."""
         self.kb_indices = kb_indices
+        
+    def set_X(self, X):
+        """mention/input embeddings"""
+        self.X = X
+        
+    def set_Y(self, Y):
+        """Multi label binary matrix"""
+        self.Y = Y
 
     def set_Z(self, Z):
         """Set PIFA for this node."""
@@ -328,20 +322,16 @@ class Skeleton:
         """Set Label to cluster matrix for this node."""
         self.C = C
         
+    def set_M(self, M):
+        """Mention to cluster labels"""
+        self.M = M
+        
     def set_cluster_labels(self, cluster_labels):
         self.cluster_labels = cluster_labels
         
     def set_transformer_config(self, transformer_config):
         """Set tranformer config"""
         self.transformer_config = transformer_config
-
-    def set_transformer_embeddings(self, transformer_embeddings):
-        """Set transformer model embeddings for this node."""
-        self.transformer_embeddings = transformer_embeddings
-
-    def set_concatenated_embeddings(self, concatenated_embeddings):
-        """Set concatenated feature embeddings for this node."""
-        self.concatenated_embeddings = concatenated_embeddings
 
     def set_vectorizer(self, vectorizer):
         """Set the text vectorizer model (typically only at root)."""
@@ -350,26 +340,10 @@ class Skeleton:
     def set_dimension_model(self, dimension_model):
         """Set the Reduce Dimension model (typically only at the root)"""
         self.dimension_model = dimension_model
-        
-    def set_clustering_model(self, clustering_model):
-        """Set the clustering model for this node."""
-        self.clustering_model = clustering_model
 
-    def set_tree_classifier(self, tree_classifier):
+    def set_classifier(self, classifier):
         """Set the classifier model for this node."""
-        self.tree_classifier = tree_classifier
-
-    def set_tree_test_split(self, tree_test_split):
-        """Set train/test split data for evaluation."""
-        self.tree_test_split = tree_test_split
-        
-    def set_flat_classifier(self, flat_classifier):
-        """Set the classifier model for this node."""
-        self.flat_classifier = flat_classifier
-
-    def set_flat_test_split(self, flat_test_split):
-        """Set train/test split data for evaluation."""
-        self.flat_test_split = flat_test_split
+        self.classifier = classifier
         
     def set_reranker(self, reranker):
         """Set Reranker for evaluation"""
@@ -389,7 +363,7 @@ class Skeleton:
 
     def is_empty(self):
         """Check if this node is empty (no clustering model)."""
-        return self.clustering_model is None
+        return self.cluster_labels is None
 
     def is_leaf(self):
         """Check if this node is a leaf (no children)."""
@@ -426,8 +400,8 @@ class Skeleton:
 
         # Detailed cluster information
         cluster_info = ""
-        if self.clustering_labels:
-            label_counts = Counter(self.clustering_model.model.labels_)
+        if self.cluster_labels.any():
+            label_counts = Counter(self.cluster_labels)
             stats.append(f"Clusters: {len(label_counts)}")
             
             # Add detailed cluster distribution (sorted by size)
