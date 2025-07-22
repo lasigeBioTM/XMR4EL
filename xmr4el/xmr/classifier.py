@@ -90,7 +90,7 @@ class SkeletonTraining():
         
         Y_sub = self.Y[:, label_indices]
         
-        keep_mask = Y_sub.sum(axis=1) > 0
+        keep_mask = np.array(Y_sub.sum(axis=1)).ravel() > 0
         X_node = self.X[keep_mask]
         Y_node = Y_sub[keep_mask]
         

@@ -70,7 +70,7 @@ class SkeletonReranker():
 
         Args:
             X: np.ndarray, (N, d) mention embeddings
-            Y: np.ndarray, (N, L) multi-label binarized labels for current node
+            Y: sparse, (N, L) multi-label binarized labels for current node
             label_embs: np.ndarray, (L, d) embeddings for labels in this node
             C: np.ndarray, (L, K) label-to-cluster assignment for this node
             M_TFN: np.ndarray, (N, K) TFN cluster indicator matrix
@@ -98,7 +98,7 @@ class SkeletonReranker():
 
             # Get embeddings for valid mentions
             X_valid = X[valid_indices]
-            Y_valid = Y[valid_indices, label_idx]
+            Y_valid = Y[valid_indices, label_idx].A1  # `.A1` flattens to 1D 
 
             # Combine mention and label embeddings
             label_emb = label_embs[label_idx]
