@@ -246,6 +246,7 @@ class SklearnLogisticRegression(ClassifierModel):
             model = LogisticRegression(**config)
             if onevsrest:
                 model = OneVsRestClassifier(model, n_jobs=-1)
+                
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
