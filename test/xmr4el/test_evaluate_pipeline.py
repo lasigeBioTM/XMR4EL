@@ -71,14 +71,13 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-22_16-13-03"
+        "test/test_data/saved_trees/Skeleton_2025-07-22_17-10-07"
     )
     
     # print(trained_xtree)
     
     sp = SkeletonInference(
         trained_xtree,
-        trained_xtree.labels
     )
     
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
@@ -100,7 +99,16 @@ def main():
 
     print(predicted_labels)
     
-    print(Counter(hits))
+    print(hits)
+    
+    found_ratio = []
+    for found, _, _ in hits:
+        if found == 1:
+            found_ratio.append(1)
+        else:
+            found_ratio.append(0)
+            
+    print(Counter(found_ratio))
 
     end = time.time()
 

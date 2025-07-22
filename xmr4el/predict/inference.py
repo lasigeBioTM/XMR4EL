@@ -77,41 +77,47 @@ class SkeletonInference:
             List[List[int]]: For each mention, a list of candidate label indices.
         """
         N = input_embs.shape[0]
-        beams = [[(htree, 0.0)] for _ in range(N)]
-        final_labels = [[] for _ in range(N)]
+        beams = [[(htree, 0.0, 1.0)] for _ in range(N)]
+        final_candidates = [[] for _ in range(N)]
         
         while True:
             next_beams = [[] for _ in range(N)]
             
+            all_finished = True
             for i, input_emb in enumerate(input_embs):
                 current_beam = beams[i]
                 
                 candidates = []
-                for node, score in current_beam:
+                for node, log_score, cum_prob in current_beam:
                     if not node.children:
-                        # Leaf node - gather candidates
-                        label_indices = np.arrange(len(node.labels)) # kb_indices ? 
-                        global_indices = node.kb_indices[label_indices]
-                        final_labels[i].extend(global_indices) # inst this just kb_indices ?
+                        # Leaf node - gather candidates, all labels get cum_prob as matcher prob
+                        for local_label_idx, global_label_idx in enumerate(node.kb_indices):
+                            final_candidates[i].append((global_label_idx, cum_prob))
                         continue
-                    
+                        
                     probs = self._predict_proba_classifier(node.classifier, input_emb.reshape(1, -1))[0]
                     topk = np.argsort(probs)[-beam_size:][::-1]
                     
                     for cluster_id in topk:
                         if cluster_id in node.children:
                             child = node.children[cluster_id]
-                            candidates.append((child, score + probs[cluster_id]))
+                            p = probs[cluster_id]
+                            new_log_score = log_score + np.log(max(p, 1e-10))
+                            new_cum_prob = cum_prob * p
+                            candidates.append((child, new_log_score, new_cum_prob))
                     
                 # keep top beam size candidates
-                next_beams[i] = sorted(candidates, key=lambda x: -x[1])[-beam_size]
+                next_beams[i] = sorted(candidates, key=lambda x: -x[1], reverse=True)[:beam_size]
                 
-            # All beams finished
-            if all(len(b) == 0 for b in next_beams):
+                if next_beams[i]:
+                    all_finished = False
+                    
+            if all_finished:
                 break
+            
             beams = next_beams
             
-        return final_labels
+        return final_candidates
         
     def batch_inference(self, input_embs, gold_labels=None, beam_size=5, topk=10):
         """
@@ -131,6 +137,7 @@ class SkeletonInference:
         rows, cols, data = [], [], []
         hits = []
         
+        labels = self.htree.labels
         Z = self.htree.Z
         reranker_dict = self.htree.reranker
         
@@ -141,9 +148,9 @@ class SkeletonInference:
             candidates = candidate_list[i]
             
             label_scores = []
-            for label_idx in candidates:
+            for label_idx, matcher_prob in candidates:
                 # matcher score g(x, c)
-                g_score = 1.0 # Assume, for now, all equally
+                g_score = matcher_prob
                 
                 # Reranker: h(x, i)
                 # Didnt implement reranker doesnt exist
@@ -152,12 +159,16 @@ class SkeletonInference:
                 x_concat = np.concatenate([x, label_emb]).reshape(1, -1)
                 h_score = self._predict_proba_classifier(reranker, x_concat)[0][1]
                 
+                # print(g_score, type(g_score), h_score, type(h_score))
+                
                 fused_score = self.lp_hinge_fusion(g_score, h_score)
                 
                 label_scores.append([label_idx, fused_score])
                 
-            label_scores.append((label_idx, fused_score))
+            label_scores.sort(key=lambda x: -x[1])
             top_labels = label_scores[:topk]
+            
+            all_labels_id = [labels[int(idx)] for idx, _ in label_scores]
             
             found = False
             gold_set = set(gold_labels[i])
@@ -165,10 +176,14 @@ class SkeletonInference:
                 rows.append(i)
                 cols.append(idx)
                 data.append(score)
-                if str(label_idx) in gold_set:
+            
+            label_idx_found = -1
+            for idx, label in enumerate(all_labels_id):
+                if label in gold_set:
                     found = True
+                    label_idx_found = idx
                     
-            hits.append(1 if found else 0)
+            hits.append((1, label_idx_found, gold_set) if found else (0, -1, gold_set))
             
         csr = csr_matrix((data, (rows, cols)), shape=(N, len(self.htree.labels)))
         return csr, hits
@@ -201,7 +216,7 @@ class SkeletonInference:
         #      transformer_emb,
         #      text_emb
         # ))
-        # concat_emb = text_emb
+        concat_emb = text_emb
         
         concat_emb = normalize(concat_emb, norm="l2", axis=1)
         
