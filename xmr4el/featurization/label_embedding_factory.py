@@ -60,10 +60,11 @@ class LabelEmbeddingFactory():
         Z = []  # will hold z_ell for each label x
         
         for label_idx in range(Y.shape[1]):
-            positive_x = X[Y[:, label_idx] == 1]  # instances with label x
-            if len(positive_x) == 0:
+            row_indices = Y[:, label_idx].nonzero()[0]
+            if len(row_indices) == 0:
                 Z.append(np.zeros(X.shape[1]))  # fallback
             else:
+                positive_x = X[row_indices]
                 v_ell = np.sum(positive_x, axis=0)
                 z_ell = v_ell / (np.linalg.norm(v_ell) + 1e-10)
                 Z.append(z_ell)
