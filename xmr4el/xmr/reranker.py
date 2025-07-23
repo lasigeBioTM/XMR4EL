@@ -54,20 +54,17 @@ class SkeletonReranker():
 
     def _train_labelwise_classifiers(self, dataset_stream, buffer_size=8):
         rerankers = {}
+        self.reranker_config["kwargs"]["n_jobs"] = os.cpu_count()  # use all cores
+
         while True:
             batch = list(islice(dataset_stream, buffer_size))
             if not batch:
                 break
 
-            # Train in parallel using static method (NOT self.)
-            results = Parallel(n_jobs=buffer_size, prefer="processes")(
-                delayed(SkeletonReranker.train_one_label)(label_idx, X_label, Y_label, self.reranker_config)
-                for label_idx, (X_label, Y_label) in batch
-            )
-
-            for label_idx, model in results:
+            for label_idx, (X_label, Y_label) in batch:
+                label_idx, model = SkeletonReranker.train_one_label(label_idx, X_label, Y_label, self.reranker_config)
                 rerankers[label_idx] = model
-                
+
         return rerankers
     
     def _build_dataset_parallel_streamed(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None):
