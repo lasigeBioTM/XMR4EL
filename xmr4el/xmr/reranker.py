@@ -107,7 +107,7 @@ class SkeletonReranker():
 
         # Submit jobs in parallel and consume results lazily
         label_indices = list(range(num_labels))
-        with Parallel(n_jobs=n_jobs, prefer="threads") as parallel:
+        with Parallel(n_jobs=n_jobs, prefer="processes") as parallel:
             results = parallel(delayed(process_label)(idx) for idx in label_indices)
 
             for result in tqdm(results, total=num_labels, desc="Building reranker dataset"):
