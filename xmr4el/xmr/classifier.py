@@ -36,7 +36,7 @@ class SkeletonTraining():
             dtype (np.dtype): Data type for computations (default: np.float32)
         """
         
-        self.X = X
+        self.X = csr_matrix(X)
         self.Y = Y
         self.label_classes = label_classes
         self.htree = htree

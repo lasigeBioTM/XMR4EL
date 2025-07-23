@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, hstack
 
 from collections import defaultdict
 from joblib import Parallel, delayed
@@ -84,9 +84,8 @@ class SkeletonReranker():
         # Precompute which mentions are in each label's clusters
         label_cluster_mask = C.T # (K, L) -> cluster-to-label
         mention_in_label_cluster = M_bar @ label_cluster_mask  # (N, L)
-        
+    
         def process_label(label_idx):
-
             # Get mentions in this label's clusters
             valid_mention_mask = mention_in_label_cluster[:, label_idx].astype(bool)
             valid_indices = np.where(valid_mention_mask)[0]
@@ -113,8 +112,10 @@ class SkeletonReranker():
 
             # Combine mention and label embeddings
             label_emb = label_embs[label_idx]
-            label_tile = np.tile(label_emb, (len(X_valid), 1))
-            X_combined = np.concatenate([X_valid, label_tile], axis=1)
+            label_tile = np.tile(label_emb, (X_valid.shape[0], 1))
+            
+            label_tile_sparse = csr_matrix(label_tile)
+            X_combined = hstack([X_valid, label_tile_sparse])
             
             # Apply negative capping if specified
             if max_neg_per_pos is not None:
@@ -139,13 +140,13 @@ class SkeletonReranker():
 
             return (label_idx, (X_combined, Y_valid))
 
+        print("Reached results")
         results = Parallel(n_jobs=n_jobs, prefer="processes")(
             delayed(process_label)(label_idx) for label_idx in range(num_labels)
         )
         
         # Filter out None entries
         return dict(filter(None, results))
-        
         
     def execute(self, htree):
         X_node = htree.X #  mention/input embeddings
@@ -161,7 +162,7 @@ class SkeletonReranker():
         # Matcher Aware Negatives (MAN),  matcher-aware hard negatives for each training instance.
         M_MAN = self._predict_classifier(htree.classifier, X_node) 
         
-        datasets = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=50, n_jobs=-1)
+        datasets = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=10, n_jobs=-1)
         classifiers = self._train_labelwise_classifiers(datasets)
         
         htree.set_reranker(classifiers)

@@ -79,7 +79,8 @@ def main():
             "penalty":"l2",           
             "C": 1.0,               
             "solver":"lbfgs",    
-            "max_iter":1000
+            "max_iter":1000,
+            "verbose": 1
             },
     }
 
