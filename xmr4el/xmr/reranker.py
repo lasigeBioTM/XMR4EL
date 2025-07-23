@@ -3,7 +3,6 @@ import numpy as np
 
 from itertools import islice
 from scipy.sparse import csr_matrix, hstack
-from joblib import Parallel, delayed, parallel_backend
 
 from tqdm import tqdm
 
@@ -45,25 +44,21 @@ class SkeletonReranker():
         """One VS Rest Classifier"""
         return ClassifierModel.predict(model, X)
     
-    @staticmethod
-    def train_one_label(label_idx, X_label, Y_label, config):
+    def train_one_label(self, label_idx, X_label, Y_label):
         print(f"[PID {os.getpid()}] Ranker number {label_idx}")
-        model = SkeletonReranker._train_classifier(X_label, Y_label, config)
+        model = self._train_classifier(X_label, Y_label, self.reranker_config)
         return label_idx, model
 
-    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=8):
+    def _train_labelwise_classifiers(self, dataset_stream):
         rerankers = {}
-        while True:
-            batch = list(islice(dataset_stream, buffer_size))
-            if not batch:
-                break
 
-            for label_idx, (X_label, Y_label) in batch:
-                label_idx, model = SkeletonReranker.train_one_label(label_idx, X_label, Y_label, self.reranker_config)
-                rerankers[label_idx] = model
+        for label_idx, (X_label, Y_label) in dataset_stream:
+            print(f"[PID {os.getpid()}] Training reranker for label {label_idx}")
+            model = self._train_classifier(X_label, Y_label, self.reranker_config)
+            rerankers[label_idx] = model
 
         return rerankers
-    
+        
     def _build_dataset_parallel_streamed(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None):
         
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
