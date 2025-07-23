@@ -55,14 +55,12 @@ class SkeletonReranker():
 
         for label_idx, (X_label, Y_label) in datasets.items():
             # Initialize your classifier, e.g., logistic regression, linear SVM
-            X_label = csr_matrix(X_label)
-            Y_label = csr_matrix(Y_label)
             model = self._train_classifier(X_label, Y_label)
             classifiers[label_idx] = model
 
         return classifiers
     
-    def _build_dataset(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None):
+    def _build_dataset(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None, n_jobs=-1):
         """
         Build reranker dataset using hard negatives from relevant clusters only.
 
@@ -74,9 +72,9 @@ class SkeletonReranker():
 
         Args:
             X: np.ndarray, (N, d) mention embeddings
-            Y: sparse, (N, L) multi-label binarized labels for current node
+            Y: csr_matrix, (N, L) multi-label binarized labels for current node
             label_embs: np.ndarray, (L, d) embeddings for labels in this node
-            C: np.ndarray, (L, K) label-to-cluster assignment for this node
+            C: csr_matrix, (L, K) label-to-cluster assignment for this node
             M_TFN: np.ndarray, (N, K) TFN cluster indicator matrix
             M_MAN: np.ndarray, (N, K) MAN cluster indicator matrix
             max_neg_per_pos: int, max negatives per positive (None for no capping)
@@ -89,7 +87,7 @@ class SkeletonReranker():
         datasets = defaultdict(lambda: ([], []))
 
         # Precompute which mentions are in each label's clusters
-        label_cluster_mask = C.T  # (K, L) -> cluster-to-label
+        label_cluster_mask = C.transpose(copy=True)  # (K, L) -> cluster-to-label
         mention_in_label_cluster = M_bar @ label_cluster_mask  # (N, L)
 
         for label_idx in range(num_labels):
@@ -104,9 +102,11 @@ class SkeletonReranker():
             X_valid = X[valid_indices]
             
             # Extract labels without converting to dense
+            Y_col = Y[:, label_idx]  # (N, 1) sparse column
+            Y_valid_col = Y_col[valid_indices]  # (len(valid_indices), 1)
             Y_valid = np.zeros(len(valid_indices), dtype=np.int8)
-            rows = Y[valid_indices, label_idx]
-            Y_valid[rows.nonzero()[0]] = 1  # Only set positions where label is positive
+            if Y_valid_col.nnz > 0:
+                Y_valid[Y_valid_col.nonzero()[0]] = 1
 
             # Combine mention and label embeddings
             label_emb = label_embs[label_idx]
@@ -122,14 +122,16 @@ class SkeletonReranker():
 
                 neg_mask = ~pos_mask
                 neg_indices = np.where(neg_mask)[0]
-                num_neg = len(neg_indices)
                 max_neg = max_neg_per_pos * num_pos
 
-                if num_neg > max_neg:
+                if len(neg_indices) > max_neg:
                     # Randomly sample negatives
                     np.random.shuffle(neg_indices) # Put a seed
                     neg_keep = neg_indices[:max_neg]
-                    keep_mask = pos_mask | np.isin(np.arange(len(Y_valid)), neg_keep)
+                    
+                    keep_mask = pos_mask.copy()
+                    keep_mask[neg_keep] = True
+                    
                     X_combined = X_combined[keep_mask]
                     Y_valid = Y_valid[keep_mask]
 
@@ -141,7 +143,7 @@ class SkeletonReranker():
     def execute(self, htree):
         X_node = htree.X #  mention/input embeddings
         Y_node = htree.Y #  Multi label binary matrix
-        C = htree.C # Set Label to cluster matrix for this node.
+        C = csr_matrix(htree.C) # Set Label to cluster matrix for this node.
         M = htree.M # Mention to cluster labels
         Z = htree.Z # Embedding matrix of all labels under the current node.
         
@@ -152,7 +154,7 @@ class SkeletonReranker():
         # Matcher Aware Negatives (MAN),  matcher-aware hard negatives for each training instance.
         M_MAN = self._predict_classifier(htree.classifier, X_node) 
         
-        datasets = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None)
+        datasets = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=50)
         classifiers = self._train_labelwise_classifiers(datasets)
         
         htree.set_reranker(classifiers)
