@@ -4,6 +4,8 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.preprocessing import normalize
 from sklearn.preprocessing import MultiLabelBinarizer
 
+from scipy.sparse import csr_matrix
+
 from xmr4el.featurization.vectorizers import Vectorizer
 
 class LabelEmbeddingFactory():
@@ -36,7 +38,7 @@ class LabelEmbeddingFactory():
     def _gen_label_matrix(self):
         """Need to generate label matrix, with same labels, so that each correspond to an entity"""
         mlb = MultiLabelBinarizer(sparse_output=True)
-        Y = mlb.fit_transform(self.labels)
+        Y = mlb.fit_transform(self.labels) # Sparse
         return Y, mlb.classes_
     
     def _gen(self):
@@ -44,8 +46,9 @@ class LabelEmbeddingFactory():
         vec_model = Vectorizer.train(corpus, self.config)
         sparse_emb = vec_model.predict(corpus)
         dense_emb, dim_model = self._reduce_dimensionality(sparse_emb, self.n_features)
+        sparse_emb = csr_matrix(dense_emb)
         emb = normalize(dense_emb, norm="l2", axis=1)
-        
+    
         return {
             "mention_embeddings": emb, 
             "model": vec_model, 
@@ -55,7 +58,7 @@ class LabelEmbeddingFactory():
     def gen_pifa(self):
         # Step 1: Compute label embeddings via PIFA        
         fact_dict = self._gen()
-        X = fact_dict["mention_embeddings"]
+        X = fact_dict["mention_embeddings"] # sparse
         Y, Y_classes = self._gen_label_matrix()
         Z = []  # will hold z_ell for each label x
         
@@ -71,7 +74,7 @@ class LabelEmbeddingFactory():
 
         Z = np.vstack(Z)  # shape: [num_labels, feature_dim]
         
-        fact_dict["label_to_mention_matrix"] = Y
-        fact_dict["label_matrix"] = Z
-        fact_dict["label_classes"] = Y_classes
+        fact_dict["label_to_mention_matrix"] = Y # sparse
+        fact_dict["label_matrix"] = Z # dense
+        fact_dict["label_classes"] = Y_classes # list
         return fact_dict

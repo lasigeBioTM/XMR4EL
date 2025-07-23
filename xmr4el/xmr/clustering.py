@@ -4,6 +4,8 @@ import numpy as np
 
 from collections import Counter
 
+from scipy.sparse import csr_matrix
+
 from typing import Dict
 
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
@@ -144,6 +146,6 @@ class SkeletonConstruction:
         C[np.arange(Z.shape[0]), cluster_labels] = 1
 
         htree.set_cluster_labels(cluster_labels)
-        htree.set_C(C)
+        htree.set_C(csr_matrix(C))
         
         return htree

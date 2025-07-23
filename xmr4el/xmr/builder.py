@@ -256,19 +256,17 @@ class SkeletonBuilder():
         label_fact = LabelEmbeddingFactory(trn_corpus, label_to_matrix, self.n_features, self.vectorizer_config)
         fact_dict = label_fact.gen_pifa()
         
-        X = fact_dict["mention_embeddings"] 
-        Y = fact_dict["label_to_mention_matrix"]
-        Z = fact_dict["label_matrix"]
-        true_label_classes = fact_dict["label_classes"]
-        vec_model = fact_dict["model"]
-        dim_model = fact_dict["dim_model"]
+        X = fact_dict["mention_embeddings"]  # sparse
+        Y = fact_dict["label_to_mention_matrix"] # sparse
+        Z = fact_dict["label_matrix"] # dense 
+        true_label_classes = fact_dict["label_classes"] # list
+        vec_model = fact_dict["model"] # model
+        dim_model = fact_dict["dim_model"] # model
         
-        print(X.shape, "X") # X
-        print(Y.shape, "Y") # Y
-        print(Z.shape, "Z") # Z
+        print(X.shape, "X") # X # mention, features
+        print(Y.shape, "Y") # Y # mentions, labels
+        print(Z.shape, "Z") # Z # labels, features
         print(true_label_classes.shape, "Y classes") # Y.classes_
-        
-        # exit()
         
         htree.set_vectorizer(vec_model)
         htree.set_dimension_model(dim_model)

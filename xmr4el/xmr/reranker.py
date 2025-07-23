@@ -49,7 +49,7 @@ class SkeletonReranker():
         model = self._train_classifier(X_label, Y_label)
         return label_idx, model
 
-    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=1):
+    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=8):
         rerankers = {}
         while True:
             batch = list(islice(dataset_stream, buffer_size))
@@ -64,16 +64,18 @@ class SkeletonReranker():
 
             for label_idx, model in results:
                 rerankers[label_idx] = model
+                
         return rerankers
     
-    def _build_dataset_parallel_streamed(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None, n_jobs=-1):
+    def _build_dataset_parallel_streamed(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None):
+        
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
         label_cluster_mask = C.T
         mention_in_label_cluster = M_bar @ label_cluster_mask
         num_labels = Y.shape[1]
 
         def process_label(label_idx):
-            valid_mention_mask = mention_in_label_cluster[:, label_idx].astype(bool)
+            valid_mention_mask = mention_in_label_cluster[:, label_idx].toarray().ravel().astype(bool)
             valid_indices = np.where(valid_mention_mask)[0]
             if len(valid_indices) == 0:
                 return None
@@ -83,6 +85,7 @@ class SkeletonReranker():
             Y_valid_sparse = Y_col[valid_indices]
 
             Y_valid = np.zeros(len(valid_indices), dtype=np.int8)
+            # print(Y_valid, type(Y_valid), Y_valid.shape)
             Y_valid[Y_valid_sparse.nonzero()[0]] = 1
 
             if Y_valid.sum() == 0:
@@ -114,22 +117,18 @@ class SkeletonReranker():
 
         # Submit jobs in parallel and consume results lazily
         label_indices = list(range(num_labels))
-        with parallel_backend("loky", n_jobs=n_jobs):
-            for result in tqdm(
-                Parallel()(delayed(process_label)(idx) for idx in label_indices),
-                total=num_labels,
-                desc="Building reranker dataset"
-            ):
-                if result is not None:
-                    yield result
+        for label_idx in label_indices:
+            result = process_label(label_idx)
+            if result is not None:
+                yield result
         
     def execute(self, htree):
-        X_node = htree.X #  mention/input embeddings
-        Y_node = htree.Y #  Multi label binary matrix
-        C = csr_matrix(htree.C) # Set Label to cluster matrix for this node.
-        M = htree.M # Mention to cluster labels
-        Z = htree.Z # Embedding matrix of all labels under the current node.
-        
+        X_node = htree.X #  mention/input embeddings / sparse
+        Y_node = htree.Y #  Multi label binary matrix / sparse
+        C = htree.C # Set Label to cluster matrix for this node. / sparse
+        M = htree.M # Mention to cluster labels / sparse
+        Z = htree.Z # Embedding matrix of all labels under the current node. / dense
+
         label_embs = Z
         
         # Teacher Forcing Negatives (TFN), ground-truth input-to-cluster assignment for the input 
@@ -140,7 +139,6 @@ class SkeletonReranker():
         dataset_stream = self._build_dataset_parallel_streamed(
             X_node, Y_node, label_embs, C, M_TFN, M_MAN,
             max_neg_per_pos=None,
-            n_jobs=-1
         )
         reranker_models = self._train_labelwise_classifiers(dataset_stream)
         

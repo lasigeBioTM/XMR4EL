@@ -87,8 +87,6 @@ class SkeletonTraining():
     def _train_routing_nodes(self, htree):
         C = htree.C
         label_indices = htree.kb_indices
-        if not C.any():
-            return 
         
         Y_sub = self.Y[:, label_indices]
         
@@ -104,7 +102,7 @@ class SkeletonTraining():
         
         htree.set_M(M)
         
-        print(X_node.shape, Y_node.shape, M.shape)
+        # print(X_node.shape, Y_node.shape, M.shape)
         
         X_node = csr_matrix(X_node)
         
