@@ -1,10 +1,9 @@
 import os
 import numpy as np
 
+from itertools import islice
 from scipy.sparse import csr_matrix, hstack
-
-from collections import defaultdict
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, parallel_backend
 
 from tqdm import tqdm
 
@@ -50,12 +49,21 @@ class SkeletonReranker():
         model = self._train_classifier(X_label, Y_label)
         return label_idx, model
 
-    def _train_labelwise_classifiers(self, dataset_stream):
+    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=12):
         rerankers = {}
-        for label_idx, (X_label, Y_label) in dataset_stream:
-            label_idx, model = self.train_one_label(label_idx, X_label, Y_label)
-            rerankers[label_idx] = model
-            del X_label, Y_label  # Free memory
+        while True:
+            batch = list(islice(dataset_stream, buffer_size))
+            if not batch:
+                break
+
+            # Train in parallel
+            results = Parallel(n_jobs=buffer_size, prefer="processes")(
+                delayed(self.train_one_label)(label_idx, X_label, Y_label)
+                for label_idx, (X_label, Y_label) in batch
+            )
+
+            for label_idx, model in results:
+                rerankers[label_idx] = model
         return rerankers
     
     def _build_dataset_parallel_streamed(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None, n_jobs=-1):
@@ -107,10 +115,12 @@ class SkeletonReranker():
 
         # Submit jobs in parallel and consume results lazily
         label_indices = list(range(num_labels))
-        with Parallel(n_jobs=n_jobs, prefer="processes") as parallel:
-            results = parallel(delayed(process_label)(idx) for idx in label_indices)
-
-            for result in tqdm(results, total=num_labels, desc="Building reranker dataset"):
+        with parallel_backend("loky", n_jobs=n_jobs):
+            for result in tqdm(
+                Parallel()(delayed(process_label)(idx) for idx in label_indices),
+                total=num_labels,
+                desc="Building reranker dataset"
+            ):
                 if result is not None:
                     yield result
         
@@ -130,7 +140,7 @@ class SkeletonReranker():
         
         dataset_stream = self._build_dataset_parallel_streamed(
             X_node, Y_node, label_embs, C, M_TFN, M_MAN,
-            max_neg_per_pos=10,
+            max_neg_per_pos=None,
             n_jobs=12
         )
         reranker_models = self._train_labelwise_classifiers(dataset_stream)
