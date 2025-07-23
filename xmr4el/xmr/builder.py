@@ -302,6 +302,7 @@ class SkeletonBuilder():
         
         skl_train.execute()
         
+        print("Started Reranker")
         skl_reranker = SkeletonReranker(
             labels,
             label_to_indices, 

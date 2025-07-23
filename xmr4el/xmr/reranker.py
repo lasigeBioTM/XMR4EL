@@ -44,11 +44,12 @@ class SkeletonReranker():
         return ClassifierModel.predict(model, X)
     
     def train_one_label(self, label_idx, X_label, Y_label):
+        print(f"Ranker number {label_idx}")
         model = self._train_classifier(X_label, Y_label)
         return label_idx, model
 
     def _train_labelwise_classifiers(self, datasets):
-        results = Parallel(n_jobs=4)(
+        results = Parallel(n_jobs=4, prefer="processes")(
             delayed(self.train_one_label)(label_idx, *datasets[label_idx])
             for label_idx in datasets
         )
