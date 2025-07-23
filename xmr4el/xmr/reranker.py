@@ -49,7 +49,7 @@ class SkeletonReranker():
         model = self._train_classifier(X_label, Y_label)
         return label_idx, model
 
-    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=12):
+    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=4):
         rerankers = {}
         while True:
             batch = list(islice(dataset_stream, buffer_size))
@@ -141,7 +141,7 @@ class SkeletonReranker():
         dataset_stream = self._build_dataset_parallel_streamed(
             X_node, Y_node, label_embs, C, M_TFN, M_MAN,
             max_neg_per_pos=None,
-            n_jobs=12
+            n_jobs=4
         )
         reranker_models = self._train_labelwise_classifiers(dataset_stream)
         
