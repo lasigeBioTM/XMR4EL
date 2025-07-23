@@ -18,7 +18,8 @@ class SkeletonReranker():
         
         self.reranker_config = reranker_config
     
-    def _train_classifier(self, X, Y, config):
+    @staticmethod
+    def _train_classifier(X, Y, config):
         """
         Train a node-level classifier to route to its children.
 
@@ -44,11 +45,12 @@ class SkeletonReranker():
         """One VS Rest Classifier"""
         return ClassifierModel.predict(model, X)
     
-    def train_one_label(self, label_idx, X_label, Y_label):
-        print(f"Ranker number {label_idx}") # 32 cores
-        config = self.reranker_config
-        self.reranker_config["kwargs"]["n_jobs"] = 3
-        model = self._train_classifier(X_label, Y_label, config)
+    @staticmethod
+    def train_one_label(label_idx, X_label, Y_label, config):
+        import os
+        print(f"[PID {os.getpid()}] Ranker number {label_idx}")
+        config["kwargs"]["n_jobs"] = 3
+        model = SkeletonReranker._train_classifier(X_label, Y_label, config)
         return label_idx, model
 
     def _train_labelwise_classifiers(self, dataset_stream, buffer_size=8):
@@ -58,9 +60,9 @@ class SkeletonReranker():
             if not batch:
                 break
 
-            # Train in parallel
+            # Train in parallel using static method (NOT self.)
             results = Parallel(n_jobs=buffer_size, prefer="processes")(
-                delayed(self.train_one_label)(label_idx, X_label, Y_label)
+                delayed(SkeletonReranker.train_one_label)(label_idx, X_label, Y_label, self.reranker_config)
                 for label_idx, (X_label, Y_label) in batch
             )
 
