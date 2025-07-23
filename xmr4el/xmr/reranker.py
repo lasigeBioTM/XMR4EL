@@ -65,8 +65,11 @@ class SkeletonReranker():
         label_cluster_mask = C.T
         mention_in_label_cluster = M_bar @ label_cluster_mask
         num_labels = Y.shape[1]
+        
+        rerankers = {}
 
-        def process_label(label_idx):
+        for idx, label_idx in enumerate(range(num_labels)):
+            print(f"Label number {idx} from {num_labels}")
             valid_mention_mask = mention_in_label_cluster[:, label_idx].toarray().ravel().astype(bool)
             valid_indices = np.where(valid_mention_mask)[0]
             if len(valid_indices) == 0:
@@ -104,16 +107,13 @@ class SkeletonReranker():
             label_tile = np.tile(label_emb, (rows, 1))
             X_combined = hstack([X_valid, label_tile])
 
-            return (label_idx, (X_combined, Y_valid))
-
-        # Submit jobs in parallel and consume results lazily
-        label_indices = list(range(num_labels))
-        for idx, label_idx in enumerate(label_indices):
-            print(f"Label number {idx} from {len(label_indices)}")
-            result = process_label(label_idx)
-            if result is not None:
-                yield result
-        
+            # Train reranker immediately here:
+            print(f"[PID {os.getpid()}] Training reranker for label {label_idx}")
+            model = self._train_classifier(X_combined, Y_valid, self.reranker_config)
+            rerankers[label_idx] = model
+            
+        return rerankers
+            
     def execute(self, htree):
         X_node = htree.X #  mention/input embeddings / sparse
         Y_node = htree.Y #  Multi label binary matrix / sparse
@@ -128,15 +128,13 @@ class SkeletonReranker():
         # Matcher Aware Negatives (MAN),  matcher-aware hard negatives for each training instance.
         M_MAN = self._predict_classifier(htree.classifier, X_node) 
         
-        dataset_stream = self._build_dataset_parallel_streamed(
-            X_node, Y_node, label_embs, C, M_TFN, M_MAN,
-            max_neg_per_pos=None,
-        )
-        reranker_models = self._train_labelwise_classifiers(dataset_stream)
-        
+        reranker_models = self._build_dataset_and_train(
+                X_node, Y_node, Z, C, M_TFN, M_MAN, max_neg_per_pos=None
+            )
+
         htree.set_reranker(reranker_models)
-        
+
         for child in htree.children.values():
             self.execute(child)
-        
-        
+                
+                
