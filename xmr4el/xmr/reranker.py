@@ -53,8 +53,6 @@ class SkeletonReranker():
 
     def _train_labelwise_classifiers(self, dataset_stream, buffer_size=8):
         rerankers = {}
-        self.reranker_config["kwargs"]["n_jobs"] = os.cpu_count()  # use all cores
-
         while True:
             batch = list(islice(dataset_stream, buffer_size))
             if not batch:
