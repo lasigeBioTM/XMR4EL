@@ -85,7 +85,6 @@ class SkeletonReranker():
             Y_valid_sparse = Y_col[valid_indices]
 
             Y_valid = np.zeros(len(valid_indices), dtype=np.int8)
-            # print(Y_valid, type(Y_valid), Y_valid.shape)
             Y_valid[Y_valid_sparse.nonzero()[0]] = 1
 
             if Y_valid.sum() == 0:
@@ -118,7 +117,7 @@ class SkeletonReranker():
         # Submit jobs in parallel and consume results lazily
         label_indices = list(range(num_labels))
         for idx, label_idx in enumerate(label_indices):
-            print(f"Label number {idx} from {label_indices}")
+            print(f"Label number {idx} from {len(label_indices)}")
             result = process_label(label_idx)
             if result is not None:
                 yield result
