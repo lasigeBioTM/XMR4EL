@@ -162,7 +162,7 @@ class SkeletonReranker():
         # Matcher Aware Negatives (MAN),  matcher-aware hard negatives for each training instance.
         M_MAN = self._predict_classifier(htree.classifier, X_node) 
         
-        datasets = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=10, n_jobs=-1)
+        datasets = self._build_dataset(X_node, Y_node, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None, n_jobs=-1)
         classifiers = self._train_labelwise_classifiers(datasets)
         
         htree.set_reranker(classifiers)
