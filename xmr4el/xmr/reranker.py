@@ -59,7 +59,7 @@ class SkeletonReranker():
 
         return rerankers
         
-    def _build_dataset_parallel_streamed(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None):
+    def _build_dataset_and_train(self, X, Y, label_embs, C, M_TFN, M_MAN, max_neg_per_pos=None):
         
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
         label_cluster_mask = C.T
