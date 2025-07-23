@@ -237,7 +237,7 @@ class SklearnLogisticRegression(ClassifierModel):
             "max_iter": 100,
             "verbose": 0,
             "warm_start": False,
-            "n_jobs": None,
+            "n_jobs": -1,
             "l1_ratio": None,
         }
 
@@ -245,7 +245,7 @@ class SklearnLogisticRegression(ClassifierModel):
             config = {**defaults, **config}
             model = LogisticRegression(**config)
             if onevsrest:
-                model = OneVsRestClassifier(model, n_jobs=-1)
+                model = OneVsRestClassifier(model, n_jobs=config["n_jobs"])
                 
         except TypeError:
             raise Exception(
