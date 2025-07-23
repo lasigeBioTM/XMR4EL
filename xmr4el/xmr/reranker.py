@@ -117,7 +117,8 @@ class SkeletonReranker():
 
         # Submit jobs in parallel and consume results lazily
         label_indices = list(range(num_labels))
-        for label_idx in label_indices:
+        for idx, label_idx in enumerate(label_indices):
+            print(f"Label number {idx} from {label_indices}")
             result = process_label(label_idx)
             if result is not None:
                 yield result
