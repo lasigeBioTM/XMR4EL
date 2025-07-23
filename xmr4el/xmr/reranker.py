@@ -49,7 +49,7 @@ class SkeletonReranker():
         model = self._train_classifier(X_label, Y_label)
         return label_idx, model
 
-    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=2):
+    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=1):
         rerankers = {}
         while True:
             batch = list(islice(dataset_stream, buffer_size))
