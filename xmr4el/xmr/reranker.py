@@ -47,7 +47,6 @@ class SkeletonReranker():
     
     @staticmethod
     def train_one_label(label_idx, X_label, Y_label, config):
-        import os
         print(f"[PID {os.getpid()}] Ranker number {label_idx}")
         config["kwargs"]["n_jobs"] = 3
         model = SkeletonReranker._train_classifier(X_label, Y_label, config)

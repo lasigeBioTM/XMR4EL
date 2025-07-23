@@ -245,6 +245,7 @@ class SklearnLogisticRegression(ClassifierModel):
             config = {**defaults, **config}
             model = LogisticRegression(**config)
             if onevsrest:
+                print(config["n_jobs"])
                 model = OneVsRestClassifier(model, n_jobs=config["n_jobs"])
                 
         except TypeError:
