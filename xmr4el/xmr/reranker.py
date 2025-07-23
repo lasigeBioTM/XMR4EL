@@ -18,7 +18,7 @@ class SkeletonReranker():
         
         self.reranker_config = reranker_config
     
-    def _train_classifier(self, X, Y):
+    def _train_classifier(self, X, Y, config):
         """
         Train a node-level classifier to route to its children.
 
@@ -29,7 +29,7 @@ class SkeletonReranker():
             htree: Current tree node (for setters).
         """
         """One VS Rest Classifier"""
-        return ClassifierModel.train(X, Y, self.reranker_config, onevsrest=True)
+        return ClassifierModel.train(X, Y, config, onevsrest=True)
     
     def _predict_classifier(self, model, X):
         """
@@ -45,8 +45,10 @@ class SkeletonReranker():
         return ClassifierModel.predict(model, X)
     
     def train_one_label(self, label_idx, X_label, Y_label):
-        print(f"Ranker number {label_idx}")
-        model = self._train_classifier(X_label, Y_label)
+        print(f"Ranker number {label_idx}") # 32 cores
+        config = self.reranker_config
+        self.reranker_config["kwargs"]["n_jobs"] = 3
+        model = self._train_classifier(X_label, Y_label, config)
         return label_idx, model
 
     def _train_labelwise_classifiers(self, dataset_stream, buffer_size=8):
