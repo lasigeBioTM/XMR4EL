@@ -49,7 +49,7 @@ class SkeletonReranker():
         model = self._train_classifier(X_label, Y_label)
         return label_idx, model
 
-    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=4):
+    def _train_labelwise_classifiers(self, dataset_stream, buffer_size=2):
         rerankers = {}
         while True:
             batch = list(islice(dataset_stream, buffer_size))
@@ -83,10 +83,7 @@ class SkeletonReranker():
             Y_valid_sparse = Y_col[valid_indices]
 
             Y_valid = np.zeros(len(valid_indices), dtype=np.int8)
-            if isinstance(Y_valid_sparse, csr_matrix):
-                Y_valid[Y_valid_sparse.nonzero()[0]] = 1
-            else:
-                Y_valid[Y_valid_sparse.nonzero()[0]] = 1
+            Y_valid[Y_valid_sparse.nonzero()[0]] = 1
 
             if Y_valid.sum() == 0:
                 return None
@@ -96,8 +93,10 @@ class SkeletonReranker():
                 num_pos = pos_mask.sum()
                 if num_pos == 0:
                     return None
+                
                 neg_indices = np.where(~pos_mask)[0]
                 max_neg = max_neg_per_pos * num_pos
+                
                 if len(neg_indices) > max_neg:
                     np.random.shuffle(neg_indices)
                     neg_keep = neg_indices[:max_neg]
@@ -108,8 +107,8 @@ class SkeletonReranker():
 
             label_emb = label_embs[label_idx]
             rows = X_valid.shape[0]
-            label_tile_sparse = csr_matrix(np.broadcast_to(label_emb, (rows, label_emb.shape[0])))
-            X_combined = hstack([X_valid, label_tile_sparse])
+            label_tile = np.tile(label_emb, (rows, 1))
+            X_combined = hstack([X_valid, label_tile])
 
             return (label_idx, (X_combined, Y_valid))
 
@@ -141,7 +140,7 @@ class SkeletonReranker():
         dataset_stream = self._build_dataset_parallel_streamed(
             X_node, Y_node, label_embs, C, M_TFN, M_MAN,
             max_neg_per_pos=None,
-            n_jobs=4
+            n_jobs=-1
         )
         reranker_models = self._train_labelwise_classifiers(dataset_stream)
         
