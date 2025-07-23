@@ -6,6 +6,8 @@ from scipy.sparse import csr_matrix, hstack
 from collections import defaultdict
 from joblib import Parallel, delayed
 
+from tqdm import tqdm
+
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 
@@ -141,8 +143,8 @@ class SkeletonReranker():
             return (label_idx, (X_combined, Y_valid))
 
         print("Reached results")
-        results = Parallel(n_jobs=n_jobs, prefer="processes")(
-            delayed(process_label)(label_idx) for label_idx in range(num_labels)
+        results = Parallel(n_jobs=n_jobs, prefer="threads")(
+            delayed(process_label)(label_idx) for label_idx in tqdm(range(num_labels), desc="Building reranker dataset")
         )
         
         # Filter out None entries
