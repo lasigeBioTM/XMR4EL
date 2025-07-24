@@ -53,7 +53,7 @@ class SkeletonReranker():
 
         print(f"[PID {os.getpid()}] Training label {label_idx}")
         print(label_idx, X_combined.shape, Y_valid.shape, Counter(Y_valid))
-        print(Y_valid.sum())
+        # print(Y_valid.sum())
         model = self._train_classifier(X_combined, Y_valid, self.reranker_config)
         return (label_idx, model)
 
