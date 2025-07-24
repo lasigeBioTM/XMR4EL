@@ -1,8 +1,7 @@
 import os
 import numpy as np
 
-from itertools import islice
-from scipy.sparse import csr_matrix, hstack
+from scipy.sparse import hstack
 
 from tqdm import tqdm
 
