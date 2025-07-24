@@ -195,7 +195,6 @@ class SkeletonInference:
         return csr, hits
                 
 
-    
     def vectorize_input_text(self, input_text):
         # 1. Generate embeddings
         vec = self.htree.vectorizer

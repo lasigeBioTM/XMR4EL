@@ -5,10 +5,8 @@ from collections import Counter
 import time
 
 from xmr4el.predict.inference import SkeletonInference
-from xmr4el.predict.skeleton_predict import SkeletonPredict
 from xmr4el.xmr.skeleton import Skeleton
 
-from sklearn.metrics.pairwise import cosine_similarity
 
 """
     Depending on the train file, different number of labels, 
@@ -71,10 +69,10 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-24_11-26-46" # 5 excluded
+        "test/test_data/saved_trees/Skeleton_2025-07-24_13-11-45" # 5 excluded
     )
     
-    # print(len(trained_xtree.reranker.items()))
+    print(len(trained_xtree.reranker.items()))
     # exit()
     
     sp = SkeletonInference(
@@ -94,7 +92,6 @@ def main():
     
     # print(input_embs[0])
     # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
-    
     
     predicted_labels, hits = sp.batch_inference(input_embs, filtered_labels, topk=10)
 

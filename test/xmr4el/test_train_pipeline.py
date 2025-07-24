@@ -60,7 +60,7 @@ def main():
     clustering_config = {
     "type": "faisskmeans",  # Matches the registered name in your ClusterMeta system
     "kwargs": {
-        "n_clusters": 2,           # Default cluster count (will be overridden by tuner)
+        "n_clusters": 4,           # Default cluster count (will be overridden by tuner)
         "max_iter": 300,           # Max iterations per run
         "nredo": 1,               # Number of initializations (FAISS calls this nredo)
         "gpu": False,               # Enable GPU acceleration
@@ -143,7 +143,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=200
+        truncate_data=600
         )
     
     raw_labels = train_data["raw_labels"]

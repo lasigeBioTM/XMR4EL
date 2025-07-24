@@ -60,8 +60,14 @@ class LabelEmbeddingFactory():
         fact_dict = self._gen()
         X = fact_dict["mention_embeddings"] # sparse
         Y, Y_classes = self._gen_label_matrix()
+        
+        # print(Y_classes)
+        # print(Y_classes[1])
+    
         Z = []  # will hold z_ell for each label x
         
+        # print(X, X.shape)
+        # exit()    
         for label_idx in range(Y.shape[1]):
             row_indices = Y[:, label_idx].nonzero()[0]
             if len(row_indices) == 0:
