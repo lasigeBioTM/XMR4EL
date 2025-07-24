@@ -18,6 +18,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC as SVC
 from sklearn.multiclass import OneVsRestClassifier
 
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
 classifier_dict = {}
 
 if torch.cuda.is_available():
@@ -242,7 +246,7 @@ class SklearnLogisticRegression(ClassifierModel):
             model = LogisticRegression(**config)
             if onevsrest:
                 print(f"Using {multiprocessing.cpu_count()} CPUs")
-                model = OneVsRestClassifier(model, n_jobs=-1)
+                model = OneVsRestClassifier(model, n_jobs=multiprocessing.cpu_count())
                 
         except TypeError:
             raise Exception(
