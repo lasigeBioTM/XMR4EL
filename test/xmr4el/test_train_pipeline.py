@@ -73,7 +73,7 @@ def main():
     classifier_config = {
         "type": "sklearnlogisticregression",
         "kwargs": {
-            "solver": "saga",
+            "solver": "liblinear",
             "n_jobs": -1, 
             "random_state": 0,
             "penalty":"l2",           
