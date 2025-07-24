@@ -112,7 +112,7 @@ def main():
         "class_weight": None,          # Balanced classes assumed
         "n_jobs": -1,                  # Parallelize OvR (if multi-class)
         "random_state": 0,             # Reproducibility
-        "verbose": 1,
+        "verbose": 0,
         "early_stopping": True,        # Stop if validation score plateaus
         "learning_rate": "optimal",    # Auto-adjusts step size
         "eta0": 0.0,                   # Initial learning rate (ignored if 'optimal')
@@ -130,7 +130,7 @@ def main():
             "class_weight": "balanced",    # Critical for imbalanced ranking data
             "n_jobs": -1,                  # Parallelize OvR if multi-label
             "random_state": 0,
-            "verbose": 1,
+            "verbose": 0,
             "early_stopping": True,
             "learning_rate": "adaptive",   # Handles noisy gradients better
             "eta0": 0.01,                  # Higher initial learning rate for ranking
