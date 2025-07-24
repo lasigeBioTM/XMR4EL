@@ -13,7 +13,7 @@ import numpy as np
 from abc import ABCMeta
 
 import lightgbm as lgb
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC as SVC
 from sklearn.multiclass import OneVsRestClassifier
@@ -260,6 +260,108 @@ class SklearnLogisticRegression(ClassifierModel):
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)
+
+
+class SklearnSGDClassifier(ClassifierModel):
+    
+    def __init__(self, config=None, model=None):
+        self.config = config
+        self.model = model
+
+    def save(self, save_dir):
+        """Save trained sklearn SGDClassifier model to disk.
+
+        Args:
+            save_dir (str): Folder to store serialized object in.
+        """
+
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
+            pickle.dump(self.model, fout)
+
+    @classmethod
+    def load(cls, load_dir, config):
+        """Load a saved sklearn SGDClassifier model from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            SklearnLogisticRegression: The loaded object.
+        """
+
+        # LOGGER.info(
+        #     f"Loading Sklearn Logistic Regression Classifier Model from {load_dir}"
+        # )
+        classifier_path = os.path.join(load_dir, "classifier_model.pkl")
+        assert os.path.exists(
+            classifier_path
+        ), f"Classifier path {classifier_path} does not exist"
+
+        with open(classifier_path, "rb") as fin:
+            model_data = pickle.load(fin)
+        model = cls(config, model_data)
+        return model
+
+    @classmethod
+    def train(cls, X_train, y_train, config={}, dtype=np.float32, onevsrest=False):
+        """Train on a corpus.
+
+        Args:
+            trn_corpus (list): Training corpus in the form of a list of strings.
+            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
+
+        Returns:
+            LogisticRegression: Trained classifier Model.
+
+        Raises:
+            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
+        """
+
+        defaults = {
+            "loss": 'hinge',
+            "penalty": 'l2',
+            "alpha": 0.0001, 
+            "l1_ratio": 0.15, 
+            "fit_intercept": True,
+            "max_iter": 1000, 
+            "tol": 0.001, 
+            "shuffle": True, 
+            "verbose":0, 
+            "epsilon": 0.1, 
+            "n_jobs": None, 
+            "random_state": None, 
+            "learning_rate": 'optimal', 
+            "eta0": 0.0, 
+            "power_t": 0.5, 
+            "early_stopping": False, 
+            "validation_fraction": 0.1, 
+            "n_iter_no_change": 5, 
+            "class_weight": None, 
+            "warm_start": False, 
+            "average": False
+        }
+
+        try:
+            config = {**defaults, **config}
+            model = SGDClassifier(**config)
+            if onevsrest:
+                print(f"Using {multiprocessing.cpu_count()} CPUs")
+                model = OneVsRestClassifier(model, n_jobs=multiprocessing.cpu_count())
+                
+        except TypeError:
+            raise Exception(
+                f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
+            )
+        model.fit(X_train, y_train)
+        return cls(config, model)
+
+    def predict(self, X):
+        return self.model.predict(X)
+
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
+    
 
 class SklearnRandomForestClassifier(ClassifierModel):
     """SKlearn Random Forest"""
