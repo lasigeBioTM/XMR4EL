@@ -346,8 +346,7 @@ class SklearnSGDClassifier(ClassifierModel):
             config = {**defaults, **config}
             model = SGDClassifier(**config)
             if onevsrest:
-                print(f"Using {multiprocessing.cpu_count()} CPUs")
-                model = OneVsRestClassifier(model, n_jobs=multiprocessing.cpu_count())
+                model = OneVsRestClassifier(model, n_jobs=config["n_jobs"])
                 
         except TypeError:
             raise Exception(
