@@ -6,23 +6,19 @@ import pickle
 import pkgutil
 import sys
 import torch
-import lightgbm as lgb
+import multiprocessing
 
 import numpy as np
 
 from abc import ABCMeta
 
+import lightgbm as lgb
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC as SVC
 from sklearn.multiclass import OneVsRestClassifier
 
 classifier_dict = {}
-
-# LOGGER = logging.getLogger(__name__)
-# logging.basicConfig(
-#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-# )
 
 if torch.cuda.is_available():
     from cuml.linear_model import LogisticRegression as CUMLLogisticRegression
@@ -245,7 +241,7 @@ class SklearnLogisticRegression(ClassifierModel):
             config = {**defaults, **config}
             model = LogisticRegression(**config)
             if onevsrest:
-                print(config)
+                print(f"Using {multiprocessing.cpu_count()} CPUs")
                 model = OneVsRestClassifier(model, n_jobs=-1)
                 
         except TypeError:
