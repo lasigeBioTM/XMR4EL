@@ -37,6 +37,7 @@ def main():
         "kwargs": {"batch_size": 3000}
     }
     
+    """
     clustering_config = {
         "type": "sklearnminibatchkmeans",
         "kwargs": {
@@ -69,7 +70,6 @@ def main():
         "tol": 1e-4,               # Early stopping tolerance
         }
     }
-    """
     """
     classifier_config = {
         "type": "sklearnlogisticregression",
@@ -149,8 +149,9 @@ def main():
     raw_labels = train_data["raw_labels"]
     X_cross_train = train_data["cross_corpus"] # list of lists
     
-    # print(raw_labels)
-    # print(X_cross_train)
+    
+    # print(raw_labels[:20])
+    # print(X_cross_train[13])
     # exit()
 
     pipe = SkeletonBuilder(

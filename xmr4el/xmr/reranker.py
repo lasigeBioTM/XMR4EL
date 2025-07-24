@@ -1,3 +1,4 @@
+from collections import Counter
 import os
 import numpy as np
 
@@ -7,7 +8,7 @@ from scipy.sparse import hstack
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 class SkeletonReranker():
-    def __init__(self, labels, label_to_indices, reranker_config, n_label_workers=16):
+    def __init__(self, labels, label_to_indices, reranker_config, n_label_workers=1):
         self.labels = labels
         self.label_to_indices = label_to_indices
         self.reranker_config = reranker_config.copy()
@@ -37,18 +38,22 @@ class SkeletonReranker():
 
         X_valid = X[valid_indices]
         Y_col = Y[:, label_idx]
-        Y_valid = Y_col[valid_indices].toarray().ravel().astype(np.int8)
-
-        if Y_valid.sum() == 0:
+        Y_valid_sparse = Y_col[valid_indices] # .toarray().ravel().astype(np.int8)
+        
+        Y_valid = np.zeros(len(valid_indices), dtype=np.int8)
+        Y_valid[Y_valid_sparse.nonzero()[0]] = 1
+        
+        if Y_valid.sum() <= 1:
             return (label_idx, None)
 
         # Prepare features
         label_emb = label_embs[label_idx]
-        rows = X_valid.shape[0]
-        label_tile = np.tile(label_emb, (rows, 1))
+        label_tile = np.tile(label_emb, (X_valid.shape[0], 1))
         X_combined = hstack([X_valid, label_tile])
 
         print(f"[PID {os.getpid()}] Training label {label_idx}")
+        print(label_idx, X_combined.shape, Y_valid.shape, Counter(Y_valid))
+        print(Y_valid.sum())
         model = self._train_classifier(X_combined, Y_valid, self.reranker_config)
         return (label_idx, model)
 
@@ -57,26 +62,21 @@ class SkeletonReranker():
         num_labels = Y.shape[1]
         reranker_models = {}
 
-        # Process in batches to limit memory usage
-        for batch_start in range(0, num_labels, self.n_label_workers):
-            batch_end = min(batch_start + self.n_label_workers, num_labels)
-            print(f"Processing labels {batch_start}-{batch_end-1}")
-
-            # Prepare arguments for this batch
-            args = [
-                (label_idx, X, Y, label_embs, C, M_bar)
-                for label_idx in range(batch_start, batch_end)
-            ]
-
-            # Process batch in parallel
-            with Pool(processes=self.n_label_workers) as pool:
-                batch_results = pool.map(self._process_label, args)
-
-            # Store results
-            for label_idx, model in batch_results:
+        # Create all tasks first (memory efficient)
+        tasks = []
+        for label_idx in range(num_labels):
+            tasks.append((label_idx, X, Y, label_embs, C, M_bar))
+        
+        # Process in parallel with dynamic batching
+        with Pool(processes=self.n_label_workers) as pool:
+            # Use imap_unordered with chunksize=1 for optimal load balancing
+            for result in pool.imap_unordered(self._process_label, tasks, chunksize=1):
+                label_idx, model = result
                 if model is not None:
                     reranker_models[label_idx] = model
-
+                    # Immediately release memory after processing
+                    del model
+        
         return reranker_models
 
     def execute(self, htree):

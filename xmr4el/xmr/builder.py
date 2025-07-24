@@ -268,6 +268,10 @@ class SkeletonBuilder():
         print(Z.shape, "Z") # Z # labels, features
         print(true_label_classes.shape, "Y classes") # Y.classes_
         
+            
+        # print(list(label_to_indices.items())[:15])
+        # exit()
+            
         htree.set_vectorizer(vec_model)
         htree.set_dimension_model(dim_model)
 

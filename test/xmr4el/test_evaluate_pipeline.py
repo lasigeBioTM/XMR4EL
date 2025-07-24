@@ -71,10 +71,11 @@ def main():
 
     # train_disease_100
     trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-23_17-34-58"
+        "test/test_data/saved_trees/Skeleton_2025-07-24_11-26-46" # 5 excluded
     )
     
-    # print(trained_xtree)
+    # print(len(trained_xtree.reranker.items()))
+    # exit()
     
     sp = SkeletonInference(
         trained_xtree,

@@ -155,9 +155,15 @@ class SkeletonInference:
                 # Reranker: h(x, i)
                 # Didnt implement reranker doesnt exist
                 reranker = reranker_dict.get(label_idx)
+                
+                if reranker is None:
+                    continue
+                
                 label_emb = Z[label_idx]
                 x_concat = np.concatenate([x, label_emb]).reshape(1, -1)
-                h_score = self._predict_proba_classifier(reranker, x_concat)[0][1]
+                h_score = self._predict_proba_classifier(reranker, x_concat)[0] # [1]
+                
+                print(h_score)
                 
                 # print(g_score, type(g_score), h_score, type(h_score))
                 
