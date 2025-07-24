@@ -163,7 +163,7 @@ class SkeletonInference:
                 x_concat = np.concatenate([x, label_emb]).reshape(1, -1)
                 h_score = self._predict_proba_classifier(reranker, x_concat)[0] # [1]
                 
-                print(h_score)
+                # print(h_score)
                 
                 # print(g_score, type(g_score), h_score, type(h_score))
                 
