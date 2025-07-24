@@ -8,7 +8,7 @@ from scipy.sparse import hstack
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 class SkeletonReranker():
-    def __init__(self, labels, label_to_indices, reranker_config, n_label_workers=1):
+    def __init__(self, labels, label_to_indices, reranker_config, n_label_workers=16):
         self.labels = labels
         self.label_to_indices = label_to_indices
         self.reranker_config = reranker_config.copy()
