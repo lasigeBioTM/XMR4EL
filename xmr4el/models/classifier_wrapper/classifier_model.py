@@ -135,9 +135,15 @@ class ClassifierModel(metaclass=ClassifierMeta):
 
     def predict(self, predict_input):
         return self.model.predict(predict_input)
+    
+    def decision_function(self, predict_input):
+        return self.model.decision_function(predict_input)
 
     def predict_proba(self, predict_input):
         return self.model.predict_proba(predict_input)
+    
+    def classes(self):
+        return self.model.classes()
 
     @staticmethod
     def load_config_from_args(args):
@@ -260,6 +266,9 @@ class SklearnLogisticRegression(ClassifierModel):
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)
+    
+    def classes(self):
+        return self.model.classes_
 
 
 class SklearnSGDClassifier(ClassifierModel):
@@ -358,8 +367,14 @@ class SklearnSGDClassifier(ClassifierModel):
     def predict(self, X):
         return self.model.predict(X)
 
+    def decision_function(self, X):
+        return self.model.decision_function(X)
+
     def predict_proba(self, X):
-        return self.model.decision_function(X) 
+        return self.model.predict_proba(X) 
+    
+    def classes(self):
+        return self.model.classes_
     
 
 class SklearnRandomForestClassifier(ClassifierModel):

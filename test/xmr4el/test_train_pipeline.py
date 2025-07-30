@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 from xmr4el.featurization.preprocessor import Preprocessor
-from xmr4el.xmr.builder import SkeletonBuilder
+from xmr4el.xmr.model import XModel
 
 
 """
@@ -24,7 +24,7 @@ def main():
     start = time.time()
 
     min_leaf_size = 5
-    depth = 1
+    depth = 3
     n_features = 1000
 
     vectorizer_config = {
@@ -60,8 +60,8 @@ def main():
     clustering_config = {
     "type": "faisskmeans",  # Matches the registered name in your ClusterMeta system
     "kwargs": {
-        "n_clusters": 4,           # Default cluster count (will be overridden by tuner)
-        "max_iter": 300,           # Max iterations per run
+        "n_clusters": 2,           # Default cluster count (will be overridden by tuner)
+        "max_iter": 500,           # Max iterations per run
         "nredo": 1,               # Number of initializations (FAISS calls this nredo)
         "gpu": False,               # Enable GPU acceleration
         "verbose": False,          # Disable progress prints
@@ -101,7 +101,7 @@ def main():
     }
     """
     
-    classifier_config = {
+    matcher_config = {
     "type": "sklearnsgdclassifier",
     "kwargs": {
         "loss": "log_loss",            # Equivalent to LogisticRegression (probabilistic)
@@ -109,7 +109,7 @@ def main():
         "alpha": 0.0001,               # Inverse of regularization strength (C=1/alpha)
         "max_iter": 1000,              # Ensure convergence
         "tol": 1e-4,                   # Early stopping tolerance
-        "class_weight": None,          # Balanced classes assumed
+        "class_weight": "balanced",          # Balanced classes assumed
         "n_jobs": -1,                  # Parallelize OvR (if multi-class)
         "random_state": 0,             # Reproducibility
         "verbose": 0,
@@ -143,39 +143,30 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=600
+        truncate_data=200
         )
     
-    raw_labels = train_data["raw_labels"]
-    X_cross_train = train_data["cross_corpus"] # list of lists
+    raw_labels = train_data["labels"]
+    X_cross_train = train_data["corpus"] # list of lists
     
+
+    xmodel = XModel(vectorizer_config=vectorizer_config,
+                    transformer_config=transformer_config,
+                    dimension_config=None,
+                    clustering_config=clustering_config,
+                    matcher_config=matcher_config,
+                    reranker_config=reranker_config,
+                    depth=2
+                    )
     
-    # print(raw_labels[:20])
-    # print(X_cross_train[13])
-    # exit()
-
-    pipe = SkeletonBuilder(
-        vectorizer_config,
-        transformer_config, 
-        clustering_config, 
-        classifier_config, 
-        reranker_config, # Same as the classifier, but is the reranker
-        n_features, 
-        min_leaf_size, 
-        depth, 
-        dtype=np.float32)
-
-    htree = pipe.execute(
-        raw_labels,
-        X_cross_train
-    )
+    xmodel.train(X_cross_train, raw_labels)
 
     # Print the tree structure
     # print(htree)
 
     # Save the tree
     save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable
-    htree.save(save_dir)
+    xmodel.save(save_dir)
 
     end = time.time()
     print(f"{end - start} secs of running")

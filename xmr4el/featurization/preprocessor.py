@@ -1,12 +1,7 @@
+from collections import defaultdict
 import os
 import pandas as pd
 
-from sklearn.preprocessing import MultiLabelBinarizer
-
-# LOGGER = logging.getLogger(__name__)
-# logging.basicConfig(
-#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-# )
 
 class Preprocessor:
     """Preprocess text to numerical values"""
@@ -22,7 +17,6 @@ class Preprocessor:
             corpus (list): List containing all the training data as
             concatenated strings.
         """
-
         assert os.path.exists(train_filepath), f"{train_filepath} does not exist"
 
         train_df = pd.read_csv(
@@ -44,13 +38,7 @@ class Preprocessor:
         return grouped_train_df["corpus_name"].tolist()  # Returns a list of concatenated strings
     
     @staticmethod
-    def enconde_labels(labels_data):
-        labels_list = [[label] for label in labels_data]
-        mlb = MultiLabelBinarizer(sparse_output=True)
-        labels_matrix = mlb.fit_transform(labels_list)
-        return labels_matrix, mlb
-    
-    def load_data_labels_from_file(self, train_filepath, labels_filepath, truncate_data=0):
+    def load_data_labels_from_file(train_filepath, labels_filepath, truncate_data=0):
         # Step 1: Load TSV (mentions file)
         train_df = pd.read_csv(
             train_filepath, 
@@ -88,9 +76,33 @@ class Preprocessor:
         grouped_texts["original_texts"] = grouped_texts["text"]
 
         return {
-            "cross_corpus": grouped_texts["original_texts"].tolist(),  # List[List[str]]
-            "raw_labels": grouped_texts["concept_id"].tolist()         # List[str]
+            "corpus": grouped_texts["original_texts"].tolist(),  # List[List[str]]
+            "labels": grouped_texts["concept_id"].tolist()         # List[str]
         }
 
+    @staticmethod
+    def prepare_data(X_train, Y_train): # corpus, labels
+        # Step 1: Flatten synonyms into corpus and build reverse mapping
+        trn_corpus = []
+        label_to_indices = defaultdict(list)  # label -> indices of its synonyms in trn_corpus
+
+        for label, synonyms in zip(Y_train, X_train):
+            for synonym in synonyms:
+                idx = len(trn_corpus)
+                trn_corpus.append(synonym)
+                label_to_indices[label].append(idx)
+
+        return trn_corpus, label_to_indices
+    
+    @staticmethod
+    def prepare_label_matrix(label_to_indices):
+        label_to_matrix = []
+        
+        for key in list(label_to_indices.keys()):
+            labels_ids = label_to_indices[key]
             
+            for _ in labels_ids:
+                label_to_matrix.append([key])
+        
+        return label_to_matrix
             

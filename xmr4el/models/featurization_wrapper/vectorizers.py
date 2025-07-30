@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import pickle
 
@@ -10,11 +9,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 vectorizer_dict = {}
-
-# LOGGER = logging.getLogger(__name__)
-# logging.basicConfig(
-#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-# )
 
 
 class VectorizerMeta(ABCMeta):
@@ -89,7 +83,7 @@ class Vectorizer(metaclass=VectorizerMeta):
         return cls(config, model)
 
     @classmethod
-    def train(cls, trn_corpus, config=None, dtype=np.float32):
+    def fit(cls, trn_corpus, config=None, dtype=np.float32):
         """Train on a corpus.
 
         Args:
@@ -103,18 +97,17 @@ class Vectorizer(metaclass=VectorizerMeta):
         """
 
         config = config if config is not None else {"type": "tfidf", "kwargs": {}}
-        # LOGGER.debug(f"Train Vectorizer with config: {json.dumps(config, indent=True)}")
         vectorizer_type = config.get("type", None)
         assert (
             vectorizer_type is not None
         ), f"config {config} should contain a key 'type' for the vectorizer type"
-        model = vectorizer_dict[vectorizer_type].train(
+        model = vectorizer_dict[vectorizer_type].fit(
             trn_corpus, config=config["kwargs"], dtype=dtype
         )
         config["kwargs"] = model.config
         return cls(config, model)
 
-    def predict(self, corpus, **kwargs):
+    def transform(self, corpus, **kwargs):
         """Vectorize a corpus.
 
         Args:
@@ -129,7 +122,7 @@ class Vectorizer(metaclass=VectorizerMeta):
             raise ValueError(
                 "Iterable over raw text expected for vectorizer other than tfidf."
             )
-        return self.model.predict(corpus, **kwargs)
+        return self.model.transform(corpus, **kwargs)
 
     @staticmethod
     def load_config_from_args(args):
@@ -217,7 +210,7 @@ class Tfidf(Vectorizer):
         return model
 
     @classmethod
-    def train(cls, trn_corpus, config={}, dtype=np.float32):
+    def fit(cls, trn_corpus, config={}, dtype=np.float32):
         """Train on a corpus.
 
         Args:
@@ -233,16 +226,16 @@ class Tfidf(Vectorizer):
         """
         defaults = {
             "ngram_range": (1, 2),  # n-grams from 1 to 2
-            "max_features": 50000,  # No max feature limit
+            "max_features": None,  # No max feature limit
             "min_df": 0.0,  # Minimum document frequency ratio
             "max_df": 0.98,  # Maximum document frequency ratio
             "binary": False,  # Term frequency is not binary
             "use_idf": True,  # Use inverse document frequency
             "smooth_idf": True,  # Apply smoothing to idf
-            "sublinear_tf": True,  # Use raw term frequency
+            "sublinear_tf": False,  # Use raw term frequency
             "norm": "l2",  # Apply L2 normalization
             "analyzer": "word",  # Tokenizes by word
-            "stop_words": "english",  # No stop words used
+            "stop_words": None,  # No stop words used
         }
 
         try:
@@ -255,7 +248,7 @@ class Tfidf(Vectorizer):
         model.fit(trn_corpus)
         return cls(config, model)
 
-    def predict(self, corpus):
+    def transform(self, corpus):
         """Vectorize a corpus.
 
         Args:

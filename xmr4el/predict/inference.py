@@ -6,7 +6,7 @@ from scipy.sparse import csr_matrix
 
 from sklearn.preprocessing import normalize
 
-from xmr4el.featurization.transformers import Transformer
+from xmr4el.models.featurization_wrapper.transformers import Transformer
 
 
 
@@ -64,6 +64,22 @@ class SkeletonInference:
         h_term = np.exp(-max(1 - h_score, 0) ** self.p)
         return g_term * h_term
     
+    def build_label_to_leaf_map(self, htree):
+        """
+        Build a dictionary mapping label_idx → leaf node that contains it.
+        """
+        label_to_leaf = {}
+        def dfs(node):
+            if not node.children:
+                # Leaf node
+                for label_idx in node.kb_indices:
+                    label_to_leaf[label_idx] = node
+            else:
+                for child in node.children.values():
+                    dfs(child)
+        dfs(htree)
+        return label_to_leaf
+    
     def beam_search(self, htree, input_embs, beam_size=5):
         """
         Run hierarchical beam search on batch of mention embeddings.
@@ -74,7 +90,7 @@ class SkeletonInference:
             beam_size (int): Number of top clusters to keep at each level.
 
         Returns:
-            List[List[int]]: For each mention, a list of candidate label indices.
+            List[List[(label_idx, cum_prob)]]: For each mention, a list of candidate label indices and their matcher probs.
         """
         N = input_embs.shape[0]
         beams = [[(htree, 0.0, 1.0)] for _ in range(N)]
@@ -90,11 +106,12 @@ class SkeletonInference:
                 candidates = []
                 for node, log_score, cum_prob in current_beam:
                     if not node.children:
-                        # Leaf node - gather candidates, all labels get cum_prob as matcher prob
+                        # Leaf node - add all leaf labels with cumulative prob
                         for local_label_idx, global_label_idx in enumerate(node.kb_indices):
                             final_candidates[i].append((global_label_idx, cum_prob))
                         continue
-                        
+                    
+                    # Predict cluster probs with classifier at this node
                     probs = self._predict_proba_classifier(node.classifier, input_emb.reshape(1, -1))[0]
                     topk = np.argsort(probs)[-beam_size:][::-1]
                     
@@ -105,7 +122,7 @@ class SkeletonInference:
                             new_log_score = log_score + np.log(max(p, 1e-10))
                             new_cum_prob = cum_prob * p
                             candidates.append((child, new_log_score, new_cum_prob))
-                    
+                
                 # keep top beam size candidates
                 next_beams[i] = sorted(candidates, key=lambda x: -x[1], reverse=True)[:beam_size]
                 
@@ -118,33 +135,34 @@ class SkeletonInference:
             beams = next_beams
             
         return final_candidates
-        
-    def batch_inference(self, input_embs, gold_labels=None, beam_size=5, topk=10):
+    
+    def batch_inference(self, input_embs, gold_labels=None, beam_size=10, topk=10):
         """
         Perform batch inference using hierarchical matcher, reranker, and Lp-Hinge fusion.
 
         Args:
             input_embs: np.ndarray (N, d), mention embeddings.
             gold_labels: List[List[str]], gold label strings per mention.
-            p: int, power for Lp-Hinge.
             beam_size: int, number of clusters kept at each level.
             topk: int, top predicted labels to keep per input.
 
         Returns:
             csr_matrix of shape (N, total_labels) with fused scores.
         """
-        N = len(input_embs)
+        N = input_embs.shape[0]
         rows, cols, data = [], [], []
         hits = []
         
         labels = self.htree.labels
-        Z = self.htree.Z
-        reranker_dict = self.htree.reranker
+        Z = self.htree.Z  # label embeddings (dense)
+        
+        # Build label_idx -> leaf node map once per inference
+        label_to_leaf = self.build_label_to_leaf_map(self.htree)
         
         candidate_list = self.beam_search(self.htree, input_embs, beam_size=beam_size)
         
         for i in range(N):
-            x = input_embs[i]
+            x = input_embs[i].toarray()  # convert sparse to dense if needed
             candidates = candidate_list[i]
             
             label_scores = []
@@ -152,32 +170,36 @@ class SkeletonInference:
                 # matcher score g(x, c)
                 g_score = matcher_prob
                 
-                # Reranker: h(x, i)
-                # Didnt implement reranker doesnt exist
-                reranker = reranker_dict.get(label_idx)
-                
-                if reranker is None:
+                leaf_node = label_to_leaf.get(label_idx)
+                if leaf_node is None:
+                    # label not found in leaves? skip
                     continue
                 
-                label_emb = Z[label_idx]
-                x_concat = np.concatenate([x, label_emb]).reshape(1, -1)
-                h_score = self._predict_proba_classifier(reranker, x_concat)[0] # [1]
+                reranker = leaf_node.reranker.get(label_idx) if leaf_node.reranker else None
                 
-                # print(h_score)
+                if reranker is None:
+                    # no reranker for this label, optionally skip or rely on matcher score only
+                    continue
                 
-                # print(g_score, type(g_score), h_score, type(h_score))
+                label_emb = np.asarray(Z[label_idx]).reshape(1, -1)
+                # print(type(x), x.shape, type(label_emb), label_emb.shape)
+                x_concat = np.concatenate([x, label_emb], axis=1)
+                
+                h_score = self._predict_proba_classifier(reranker, x_concat)[0]  # get reranker score
                 
                 fused_score = self.lp_hinge_fusion(g_score, h_score)
                 
                 label_scores.append([label_idx, fused_score])
-                
+            
+            # Sort descending by fused score
             label_scores.sort(key=lambda x: -x[1])
             top_labels = label_scores[:topk]
             
             all_labels_id = [labels[int(idx)] for idx, _ in label_scores]
             
             found = False
-            gold_set = set(gold_labels[i])
+            gold_set = set(gold_labels[i]) if gold_labels else set()
+            
             for idx, score in top_labels:
                 rows.append(i)
                 cols.append(idx)
@@ -193,7 +215,7 @@ class SkeletonInference:
             
         csr = csr_matrix((data, (rows, cols)), shape=(N, len(self.htree.labels)))
         return csr, hits
-                
+                    
 
     def vectorize_input_text(self, input_text):
         # 1. Generate embeddings
@@ -215,14 +237,18 @@ class SkeletonInference:
     
     def generate_input_embeddigns(self, input_text):
         text_emb = self.vectorize_input_text(input_text)
-        # transformer_emb = self.transform_input_text(input_text)
         
-        # concat_emb = np.hstack((
-        #      transformer_emb,
-        #      text_emb
-        # ))
-        concat_emb = text_emb
+        if self.htree.transformer_config is not None:
+            
+            transformer_emb = self.transform_input_text(input_text)
+            
+            concat_emb = np.hstack((
+                transformer_emb,
+                text_emb
+            ))
+        else:
+            concat_emb = text_emb
         
         concat_emb = normalize(concat_emb, norm="l2", axis=1)
-        
+        concat_emb = csr_matrix(concat_emb)
         return concat_emb

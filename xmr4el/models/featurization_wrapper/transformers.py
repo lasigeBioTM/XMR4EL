@@ -1,9 +1,11 @@
 import os
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+# os.environ["TRANSFORMERS_OFFLINE"] = "1" # Making impossible to download the model
+# os.environ["TOKENIZERS_PARALLELISM"] = "true" ? 
+# os.environ['TRANSFORMERS_CACHE'] = 
 
 import gc
-import logging
 import json
 import glob
 import pickle
@@ -20,14 +22,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 transformer_dict = {}
 
-# LOGGER = logging.getLogger(__name__)
-# logging.basicConfig(
-#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-# )
-
-# Disable parallelism
-os.environ["TOKENIZERS_PARALLELISM"] = "true"
-# os.environ['TRANSFORMERS_CACHE'] = 
 
 class TransformersMeta(ABCMeta):
     """Metaclass for keeping track of all 'Transformer' subclasses"""
@@ -84,13 +78,9 @@ class Transformer(metaclass=TransformersMeta):
             Berttransformer: The loaded object.
         """
 
-        # LOGGER.info(f"Loading transformer from {transformer_folder}")
         config_path = os.path.join(transformer_folder, "bert_vec_config.json")
 
         if not os.path.exists(config_path):
-            # LOGGER.warning(
-            #     f"Config file not found in {transformer_folder}, using default config"
-            # )
             config = {"type": "biobert", "kwargs": {}}
         else:
             with open(config_path, "r", encoding="utf-8") as fin:
@@ -107,7 +97,7 @@ class Transformer(metaclass=TransformersMeta):
         return cls(config, model)
 
     @classmethod
-    def train(cls, trn_corpus, config=None, dtype=np.float32):
+    def transform(cls, trn_corpus, config=None, dtype=np.float32):
         """Train on a corpus.
 
         Args:
@@ -121,7 +111,7 @@ class Transformer(metaclass=TransformersMeta):
         """
 
         # LOGGER.info("Starting training for a Transformer")
-        config = config if config is not None else {"type": "biobert", "kwargs": {}}
+        config = config if config is not None else {"type": "sentencetbiobert", "kwargs": {}}
 
         transformer_type = config.get("type", None)
         assert (
@@ -149,7 +139,7 @@ class Transformer(metaclass=TransformersMeta):
         model.embeddings = embeddings
         
         # model are the embeddings
-        return cls(config, model)
+        return config, embeddings
 
     @classmethod
     def _predict(

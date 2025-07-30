@@ -4,8 +4,7 @@ import numpy as np
 from collections import Counter
 import time
 
-from xmr4el.predict.inference import SkeletonInference
-from xmr4el.xmr.skeleton import Skeleton
+from xmr4el.xmr.model import XModel
 
 
 """
@@ -68,16 +67,13 @@ def main():
         input_texts = file.read().splitlines()
 
     # train_disease_100
-    trained_xtree = Skeleton.load(
-        "test/test_data/saved_trees/Skeleton_2025-07-24_13-11-45" # 5 excluded
+    trained_xtree = XModel.load(
+        "test/test_data/saved_trees/xmodel_2025-07-30_17-49-31" # 5 excluded
     )
     
-    print(len(trained_xtree.reranker.items()))
-    # exit()
+    print(trained_xtree.hierarchical_model.hmodel[0])
     
-    sp = SkeletonInference(
-        trained_xtree,
-    )
+    exit()
     
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
     
@@ -93,9 +89,9 @@ def main():
     # print(input_embs[0])
     # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
     
-    predicted_labels, hits = sp.batch_inference(input_embs, filtered_labels, topk=10)
+    # predicted_labels, hits = sp.batch_inference(input_embs, filtered_labels, topk=10)
 
-    print(predicted_labels)
+    # print(predicted_labels)
     
     print(hits)
     
