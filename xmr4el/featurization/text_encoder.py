@@ -107,6 +107,12 @@ class TextEncoder():
         reduced_emb = model.transform(X_emb)
         return reduced_emb, model
     
+    @staticmethod 
+    def _predict_dimension(X_emb, dim_model):
+        if dim_model is None:
+            raise AttributeError("No model found in dim_model")
+        return dim_model.transform(X_emb)
+    
     @staticmethod
     def _encode_text_using_text_vectorizer(X_test, vec_config):
         if vec_config is None:
@@ -117,6 +123,12 @@ class TextEncoder():
         return sparse_emb, model
     
     @staticmethod
+    def _predict_text_using_text_vectorizer(X_test, vec_model):
+        if vec_model is None:
+            raise AttributeError("No model found in vec_model")
+        return vec_model.predict(X_test)
+    
+    @staticmethod
     def _encode_text_using_transformer(X_test, transformer_config):
         if transformer_config is None:
             print("Running on default config of BioBert")
@@ -124,6 +136,12 @@ class TextEncoder():
         model = Transformer.transform(X_test, transformer_config)
         dense_emb = model.embeddings
         return dense_emb, model
+    
+    @staticmethod
+    def _predict_text_using_transformer(X_test, transformer_config):
+        if transformer_config is None:
+            raise AttributeError("No config found in transformer_config")
+        return Transformer.transform(X_test, transformer_config).embeddings
         
     def encode(self, X_test):
         """Encode the training data"""
@@ -150,6 +168,28 @@ class TextEncoder():
         self.dimension_model = dim_model
 
         return concat_emb
+    
+    def predict(self, X_text_query):
+        
+        X_tfidf_query = self._predict_text_using_text_vectorizer(X_test=X_text_query, vec_model=self.vectorizer_model)
+        
+        if self.dimension_model is None:
+            reduced_x_tfidf = X_tfidf_query
+        else:
+            reduced_x_tfidf = csr_matrix(self._predict_dimension(X_text_query, self.dimension_model))
+            
+        if self.flag == 2:
+            X_transformer = self._predict_text_using_transformer(X_test=X_text_query, transformer_config=self.transformer_config)
+            sparse_X_transformer = csr_matrix(X_transformer)
+            concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
+        
+        else:
+            concat_emb = reduced_x_tfidf
+            
+        concat_emb = normalize(concat_emb, norm="l2", axis=1)
+        
+        return concat_emb
+            
     
             
 

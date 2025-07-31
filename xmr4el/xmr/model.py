@@ -44,11 +44,11 @@ class XModel():
         self._text_encoder = value
 
     @property
-    def hierarchical_model(self):
+    def model(self):
         return self._hml
     
-    @hierarchical_model.setter
-    def hierarchical_model(self, value):
+    @model.setter
+    def model(self, value):
         self._hml = value
         
     def save(self, save_dir):
@@ -58,7 +58,7 @@ class XModel():
     
         state = self.__dict__.copy()
         
-        model = self.hierarchical_model
+        model = self.model
         model_path = os.path.join(save_dir, f"hml")
         
         if model is not None:
@@ -153,12 +153,24 @@ class XModel():
                   local_label_indices=label_indices,
                   global_to_local_indices=global_to_local_indices)
         
-        self.hierarchical_model = hml
+        self.model = hml
         del hml
-        print(self.hierarchical_model)
+        print(self.model)
         
-    def predict(self, X_input):
-        pass
+        
+    def predict(self, X_text_query, gold_labels=None, topk=10, alpha=0.5, beam_size=10):
+        """
+        PECOS-EL style inference: beam search + matcher + reranker fusion + hit tracking
+        """
+        
+        X_query = 
+        
+        rows, cols, data = [], [], []
+        hits = []
+        N = X_query.shape[0]
+        num_labels = self.model.hmodel[0].matcher_model.y_node.shape[1]
+        
+        exit()
         
         
         
