@@ -93,11 +93,11 @@ class Matcher():
         return model
     
     
-    def train(self, X, Y, local_label_indices, global_to_local_indices, C):
+    def train(self, X, Y, local_to_global_idx, global_to_local_idx, C):
         X_node, Y_node, M, model = MatcherTrainer.train(X=X, 
                                                         Y=Y, 
-                                                        local_label_indices=local_label_indices, 
-                                                        global_to_local_indices=global_to_local_indices,
+                                                        local_to_global_idx=local_to_global_idx, 
+                                                        global_to_local_idx=global_to_local_idx,
                                                         C=C, 
                                                         config=self.matcher_config, 
                                                         dtype=self.dtype)
@@ -107,3 +107,8 @@ class Matcher():
         self.m_node = M
         self.model = model
         
+    def predict(self, X):
+        return self.model.predict(X)
+    
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)

@@ -27,19 +27,34 @@ class MLModel():
         self.matcher_config = matcher_config
         self.reranker_config = reranker_config
         
-        self._global_label_ids = None
+        self._local_to_global_idx = None
+        self._global_to_local_idx = None
+        
         self._cluster_model = None
         self._matcher_model = None
         self._reranker_model = None
         self._fused_scores = None
     
     @property
-    def global_labels_idx(self):
-        return self._global_label_ids
+    def local_to_global_idx(self):
+        return self._local_to_global_idx
     
-    @global_labels_idx.setter
-    def global_labels_idx(self, value):
-        self._global_label_ids = value
+    @local_to_global_idx.setter
+    def local_to_global_idx(self, arr: np.ndarray):
+        """
+        arr[i] should be the global KB label ID for local label index i.
+        """
+        self._local_to_global_idx = arr
+        # build inverse map
+        self._global_to_local_idx = {g: i for i, g in enumerate(arr)}
+    
+    @property
+    def global_to_local_idx(self):
+        return self._global_to_local_idx
+    
+    @global_to_local_idx.setter
+    def global_to_local_idx(self, value):
+        self._global_to_local_idx = value
     
     @property
     def cluster_model(self):
@@ -154,52 +169,54 @@ class MLModel():
         matcher_scores = self.matcher_model.model.predict_proba(X)
         matcher_scores = csr_matrix(matcher_scores)
         # print(matcher_scores)
-        N, L = matcher_scores.shape
-        # print(N, L)
-        fused_scores = lil_matrix((N, L))
+        N, L_local = matcher_scores.shape
+
+        G = len(self.local_to_global_idx)
+        fused_scores = lil_matrix((N, G))
         
         for i in range(N):
             row = matcher_scores.getrow(i)
-            top_label_indices = row.indices
-            top_label_scores = row.data
-            
+            local_idxs = row.indices
+            match_scores = row.data            
             mention_emb = X[i].toarray().ravel()
            
-            for j, label_idx in enumerate(top_label_indices):
-                matcher_score = top_label_scores[j]
-               
-                if label_idx in self.reranker_model.model_dict:
+            for local_idx, matcher_score in zip(local_idxs, match_scores):
+                global_idx = int(self.local_to_global_idx[local_idx])
+
+                reranker_score = 0
+                if global_idx in self.reranker_model.model_dict:
                     # Create reranker input: concat(mention_emb, label_emb)
-                    label_emb = Z[label_idx]
+                    label_emb = Z[global_idx]
                     input_vec = np.hstack([mention_emb, label_emb]).reshape(1, -1)
                    
-                    model = self.reranker_model.model_dict[label_idx]
-                    score = model.decision_function(input_vec)
-                    prob = expit(score)[0]
-                    reranker_score = np.clip(prob, 1e-6, 1.0)
+                    model = self.reranker_model.model_dict[global_idx]
+                    raw = model.decision_function(input_vec)
+                    reranker_score = np.clip(expit(raw), 1e-6, 1.0)
                 else:
                     reranker_score = 0
                 
                 # Lp-Hinge
                 fused = (matcher_score ** (1 - alpha)) * (reranker_score ** alpha)
-                fused_scores[i, label_idx] = fused
+                fused_scores[i, global_idx] = fused
                 
         return fused_scores.tocsr()
         
-    def train(self, X_train, Y_train, Z_train, local_label_indices, global_to_local_indices):
+    def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
             X_train: X_processed
             Y_train, Y_binazier
             Z, Pifa embeddings
         """
         
-        self.global_labels_idx = global_to_local_indices
+        self.global_to_local_idx = global_to_local
+        self.local_to_global_idx = np.array(local_to_global, dtype=int)
         # label_indices = np.array(x for x in range(label_indices.shape[0]))
         
         print("Clustering")
         # Make the Clustering
         cluster_model = Clustering(self.clustering_config)
-        cluster_model.train(Z_train, 
+        cluster_model.train(Z=Z_train, 
+                            local_to_global_idx=self.local_to_global_idx,
                             min_leaf_size=20
                             ) # Hardcoded
         
@@ -216,8 +233,8 @@ class MLModel():
         matcher_model = Matcher(self.matcher_config)  
         matcher_model.train(X_train, 
                             Y_train, 
-                            local_label_indices=local_label_indices, 
-                            global_to_local_indices=global_to_local_indices, 
+                            local_to_global_idx=self.local_to_global_idx, 
+                            global_to_local_idx=self.global_to_local_idx, 
                             C=C
                             )     
          
@@ -234,7 +251,9 @@ class MLModel():
                              Z_train, 
                              M_TFN, 
                              M_MAN, 
-                             cluster_labels
+                             cluster_labels,
+                             local_to_global_idx=self.local_to_global_idx,
+                             n_label_workers=4
                              )
         
         self.reranker_model = reranker_model
@@ -359,7 +378,7 @@ class HierarchicaMLModel():
 
         return model
             
-    def prepare_layer(self, X, Y, Z, C, fused_scores):
+    def prepare_layer(self, X, Y, Z, C, fused_scores, local_to_global_idx):
         """
         Given current-layer data, split into per-cluster inputs for next layer:
           - X_node: mention embeddings under this cluster
@@ -372,16 +391,22 @@ class HierarchicaMLModel():
         
         for c in range(K_next):
             # 1. which labels are in cluster c
-            label_idx = np.where(C[:, c] > 0)[0]
+            local_idxs = np.where(C[:, c] > 0)[0]
+            
+            # 2. map them to *global* label IDs
+            local_to_global_next = local_to_global_idx[local_idxs]
         
+            # 3. build the inverse map for the child
+            global_to_local_next = {g: i for i, g in enumerate(local_to_global_next)}
+            
             # 2. restrict Y to those labels, then find which mentions have any of them
-            Y_sub = Y[:, label_idx]
+            Y_sub = Y[:, local_idxs]
             mention_mask = (Y_sub.sum(axis=1).A1 > 0)            
             
             # 3. slice X and Y
             X_node = X[mention_mask]
             Y_node = Y_sub[mention_mask, :]
-            Z_node = Z[label_idx, :]
+            Z_node = Z[local_idxs, :]
             
             # 4. Compute fused scores features
             fused_c = fused_scores[mention_mask, :].toarray()
@@ -396,36 +421,39 @@ class HierarchicaMLModel():
             
             X_aug = hstack([X_node, sparse_feats], format="csr") # Combine the two 
             
-            global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(label_idx)}
-            inputs.append((c, X_aug, Y_node, Z_node, label_idx, global_to_local))
+            inputs.append((X_aug, Y_node, Z_node, local_to_global_next, global_to_local_next))
             
         return inputs
         
-    def train(self, X_train, Y_train, Z_train, local_label_indices, global_to_local_indices):
+    def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
         Train multiple layers of MLModel; after each layer, prepare data for the next.
         """
         
-        inputs = [(X_train, Y_train, Z_train, local_label_indices, global_to_local_indices)]
+        inputs = [(X_train, Y_train, Z_train, local_to_global, global_to_local)]
         
         for _ in range(self.layers):
             
             next_inputs = []
             ml_list = []
             
-            for X_node, Y_node, Z_node, local_label_indices, global_to_local_indices in inputs:
+            for X_node, Y_node, Z_node, local_to_label_node, global_to_local_node in inputs:
                 
                 ml = MLModel(clustering_config=self.clustering_config, 
                              matcher_config=self.matcher_config,
                              reranker_config=self.reranker_config
                             )
+                
+                ml._local_to_global_idx = local_to_global
             
                 ml.train(X_train=X_node, 
                          Y_train=Y_node, 
                          Z_train=Z_node, 
-                         local_label_indices=local_label_indices,
-                         global_to_local_indices=global_to_local_indices
+                         local_to_global=local_to_label_node,
+                         global_to_local=global_to_local_node
                          )
+                
+                
                 
                 ml_list.append(ml)
                 
@@ -436,13 +464,14 @@ class HierarchicaMLModel():
                                                   Y=Y_node, 
                                                   Z=Z_node, 
                                                   C=C, 
-                                                  fused_scores=fused_scores
+                                                  fused_scores=fused_scores,
+                                                  local_to_global_idx=local_to_label_node
                                                  )
                 
                 next_inputs.extend(child_inputs)
             
             self.hmodel.append(ml_list)
             # reformat inputs for next iteration: drop cluster id and label_idx
-            inputs = [(X_node, Y_node, Z_node, local_label_indices, global_to_local_indices) for _, X_node, Y_node, Z_node, local_label_indices, global_to_local_indices in next_inputs] 
-        
+            inputs = next_inputs
+            
         return self.hmodel

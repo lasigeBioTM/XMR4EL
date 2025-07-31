@@ -126,7 +126,7 @@ class TextEncoder():
     def _predict_text_using_text_vectorizer(X_test, vec_model):
         if vec_model is None:
             raise AttributeError("No model found in vec_model")
-        return vec_model.predict(X_test)
+        return vec_model.transform(X_test)
     
     @staticmethod
     def _encode_text_using_transformer(X_test, transformer_config):
@@ -156,6 +156,8 @@ class TextEncoder():
         
         if self.flag == 2:
             X_transformer, transformer_model = self._encode_text_using_transformer(X_test, self.transformer_config) # dense
+            self.transformer_config = transformer_model
+            
             sparse_X_transformer = csr_matrix(X_transformer) # sparse
             concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
             
@@ -170,13 +172,12 @@ class TextEncoder():
         return concat_emb
     
     def predict(self, X_text_query):
-        
         X_tfidf_query = self._predict_text_using_text_vectorizer(X_test=X_text_query, vec_model=self.vectorizer_model)
-        
+    
         if self.dimension_model is None:
             reduced_x_tfidf = X_tfidf_query
         else:
-            reduced_x_tfidf = csr_matrix(self._predict_dimension(X_text_query, self.dimension_model))
+            reduced_x_tfidf = csr_matrix(self._predict_dimension(X_tfidf_query, self.dimension_model))
             
         if self.flag == 2:
             X_transformer = self._predict_text_using_transformer(X_test=X_text_query, transformer_config=self.transformer_config)
@@ -189,13 +190,3 @@ class TextEncoder():
         concat_emb = normalize(concat_emb, norm="l2", axis=1)
         
         return concat_emb
-            
-    
-            
-
-        
-
-            
-        
-        
-    

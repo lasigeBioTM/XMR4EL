@@ -1,3 +1,4 @@
+from collections import defaultdict
 import os
 import pickle
 import joblib
@@ -21,6 +22,7 @@ class Clustering():
         self._Z_node = None
         self._C_node = None
         self._model = None
+        self._cluster_to_labels = None
 
     @property
     def z_node(self):
@@ -45,6 +47,14 @@ class Clustering():
     @model.setter
     def model(self, value):
         self._model = value
+        
+    @property
+    def cluster_to_labels(self):
+        return self._cluster_to_labels
+    
+    @cluster_to_labels.setter
+    def cluster_to_labels(self, value):
+        self._cluster_to_labels = value
         
     def save(self, save_dir):
         os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
@@ -85,7 +95,7 @@ class Clustering():
         
         return model
     
-    def train(self, Z, min_leaf_size):
+    def train(self, Z, local_to_global_idx, min_leaf_size):
         Z, C, model = ClusteringTrainer.train(Z=Z, 
                                               config=self.clustering_config, 
                                               min_leaf_size=min_leaf_size, 
@@ -94,4 +104,10 @@ class Clustering():
         self.z_node = Z
         self.c_node = C
         self.model = model
+        
+        self.cluster_to_labels = defaultdict(list)
+        for local_idx, cluster_vector in enumerate(self.c_node):
+            cid = np.argmax(cluster_vector)
+            gidx = local_to_global_idx[local_idx]
+            self.cluster_to_labels[cid].append(int(gidx))
         

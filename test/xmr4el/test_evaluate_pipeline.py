@@ -68,20 +68,22 @@ def main():
 
     # train_disease_100
     trained_xtree = XModel.load(
-        "test/test_data/saved_trees/xmodel_2025-07-30_17-49-31" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-07-31_17-30-48" # 5 excluded
     )
     
-    print(trained_xtree.hierarchical_model.hmodel[0])
-    
-    exit()
+    # print(trained_xtree.hierarchical_model.hmodel[0])
     
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
     
-    filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.labels)
     
-    print(filtered_labels)
+    # print(trained_xtree.initial_labels)
+    # exit()
     
-    input_embs = sp.generate_input_embeddigns(filtered_texts)
+    filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.initial_labels)
+    
+    # print(filtered_labels)
+    
+    # input_embs = sp.generate_input_embeddigns(filtered_texts)
     
     # print(filtered_labels)
     # print(filtered_labels[0][0]) # 
@@ -89,9 +91,9 @@ def main():
     # print(input_embs[0])
     # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
     
-    # predicted_labels, hits = sp.batch_inference(input_embs, filtered_labels, topk=10)
+    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=10)
 
-    # print(predicted_labels)
+    print(predicted_labels)
     
     print(hits)
     

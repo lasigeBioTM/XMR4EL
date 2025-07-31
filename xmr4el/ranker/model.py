@@ -1,6 +1,5 @@
 import os
 import pickle
-import joblib
 
 import numpy as np
 
@@ -70,13 +69,13 @@ class ReRanker():
         for folder in os.listdir(load_dir):
             folder_path = os.path.join(load_dir, folder)
             if folder.isdigit():  # model indices are numeric (str)
-                model = ClassifierModel.load(folder_path)
-                model_dict[int(folder)] = model
+                reranker_model = ClassifierModel.load(folder_path)
+                model_dict[int(folder)] = reranker_model
 
         setattr(model, "_reranker_models", model_dict)
         return model
         
-    def train(self, X, Y, Z, M_TFN, M_MAN, cluster_labels):
+    def train(self, X, Y, Z, M_TFN, M_MAN, cluster_labels, local_to_global_idx, n_label_workers=4):
         
         self.reranker_config["kwargs"]["n_jobs"] = 1
         
@@ -86,8 +85,9 @@ class ReRanker():
                                                 M_TFN=M_TFN, 
                                                 M_MAN=M_MAN, 
                                                 cluster_labels=cluster_labels,
+                                                local_to_global_idx=local_to_global_idx,
                                                 config=self.reranker_config,
-                                                n_label_workers=4)
+                                                n_label_workers=n_label_workers)
         self.model_dict = reranker_models
     
     

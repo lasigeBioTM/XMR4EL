@@ -6,9 +6,9 @@ class MatcherTrainer():
     
     # Y = Y_binazer
     @staticmethod
-    def train(X, Y, local_label_indices, global_to_local_indices, C, config, dtype=np.float32):
+    def train(X, Y, local_to_global_idx, global_to_local_idx, C, config, dtype=np.float32):
     
-        label_indices_local = [global_to_local_indices[idx] for idx in local_label_indices]
+        label_indices_local = [global_to_local_idx[g] for g in local_to_global_idx]
         Y_sub = Y[:, label_indices_local]
         
         keep_mask = np.asarray(Y_sub.sum(axis=1)).flatten() > 0

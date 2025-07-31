@@ -12,12 +12,12 @@ class ReRankerTrainer():
     
     @staticmethod 
     def process_label(args):
-            label_idx, X, Y, Z, M_bar, M_mentions, cluster_idx, config = args
+            global_idx, local_idx, X, Y, Z, M_bar, M_mentions, cluster_idx, config = args
             
-            Y_col = Y[:, label_idx]
+            Y_col = Y[:, local_idx]
             positive_indices = Y_col.nonzero()[0]
             if len(positive_indices) <= 1:
-                return (label_idx, None)
+                return (global_idx, None)
 
             # Step 1: Restrict to cluster members only (C is [mention x cluster])
             # Get cluster id of the label (assumes labels aligned with cluster columns)
@@ -26,7 +26,7 @@ class ReRankerTrainer():
             candidate_indices = np.where(mention_in_cluster)[0]
             # print(candidate_indices.shape, candidate_indices)
             if len(candidate_indices) == 0:
-                return (label_idx, None)
+                return (global_idx, None)
 
             # Step 2: Weak matcher scores only on cluster members
             scores = M_bar[candidate_indices, cluster_idx].ravel() # toarray
@@ -36,7 +36,7 @@ class ReRankerTrainer():
             cluster_negative_mask = ~cluster_positive_mask
 
             if cluster_negative_mask.sum() == 0:
-                return (label_idx, None)
+                return (global_idx, None)
 
             # Step 4: Select top-K negatives from candidates
             negative_scores = scores[cluster_negative_mask]
@@ -50,37 +50,45 @@ class ReRankerTrainer():
 
             # Step 6: Build reranker input features
             X_valid = X[selected_indices]
-            label_emb = Z[label_idx]
+            label_emb = Z[local_idx]
             label_tile = np.tile(label_emb, (X_valid.shape[0], 1))
             X_combined = hstack([X_valid, label_tile])
 
-            print(f"[PID {os.getpid()}] Training label {label_idx} with {len(positive_indices)} positives, {len(negative_candidates)} hard negatives")
+            print(f"[PID {os.getpid()}] Training label {global_idx} with {len(positive_indices)} positives, {len(negative_candidates)} hard negatives")
 
             model = ClassifierModel.train(X_combined, Y_valid, config, onevsrest=True)
-            return (label_idx, model)
+            return (global_idx, model)
     
     # Mmentions and M TFN is the same thing
     @staticmethod
-    def train(X, Y, Z, M_TFN, M_MAN, cluster_labels, config, n_label_workers=4):
+    def train(X, Y, Z, M_TFN, M_MAN, cluster_labels, config, local_to_global_idx, n_label_workers=4):
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
         num_labels = Y.shape[1]
         reranker_models = {}
         
         tasks = []
-        for label_idx in range(num_labels):
-            cluster_idx = cluster_labels[label_idx] # C was below
-            tasks.append((label_idx, X, Y, Z, M_bar, M_TFN, cluster_idx, config))
+        for local_idx in range(num_labels):
+            global_idx = int(local_to_global_idx[local_idx])
+            cluster_idx = cluster_labels[local_idx]
+            tasks.append((global_idx, 
+                          local_idx,
+                          X, 
+                          Y, 
+                          Z, 
+                          M_bar, 
+                          M_TFN, 
+                          cluster_idx, 
+                          config
+                          ))
             
         # Process in parallel with dynamic batching
         with Pool(processes=n_label_workers, maxtasksperchild=5) as pool:
             # Use imap_unordered with chunksize=1 for optimal load balancing
-            for result in pool.imap_unordered(ReRankerTrainer.process_label, tasks, chunksize=1):
-                label_idx, model = result
+            for global_idx, model in pool.imap_unordered(
+                ReRankerTrainer.process_label, tasks, chunksize=1):
                 if model is not None:
-                    reranker_models[label_idx] = model
-                    print(f"Stored model for label {label_idx}/{num_labels})")
-                    # Immediately release memory after processing
+                    reranker_models[global_idx] = model
+                    print(f"Stored model for label {global_idx}/{num_labels})")
                     del model
                     
-        # M_MAN -> self._predict_classifier(leaf.classifier, X_node) NEED MATCHER
         return reranker_models
