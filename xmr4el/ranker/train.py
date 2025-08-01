@@ -2,7 +2,9 @@ import os
 
 import numpy as np
 
-from multiprocessing import Pool
+from multiprocessing import get_context
+from joblib import Parallel, delayed
+
 from scipy.sparse import hstack
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
@@ -11,9 +13,7 @@ from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 class ReRankerTrainer():
     
     @staticmethod 
-    def process_label(args):
-            global_idx, local_idx, X, Y, Z, M_bar, M_mentions, cluster_idx, config = args
-            
+    def process_label(global_idx, local_idx, X, Y, Z, M_bar, M_mentions, cluster_idx, config):            
             Y_col = Y[:, local_idx]
             positive_indices = Y_col.nonzero()[0]
             if len(positive_indices) <= 1:
@@ -65,30 +65,26 @@ class ReRankerTrainer():
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
         num_labels = Y.shape[1]
         reranker_models = {}
-        
-        tasks = []
-        for local_idx in range(num_labels):
-            global_idx = int(local_to_global_idx[local_idx])
-            cluster_idx = cluster_labels[local_idx]
-            tasks.append((global_idx, 
-                          local_idx,
-                          X, 
-                          Y, 
-                          Z, 
-                          M_bar, 
-                          M_TFN, 
-                          cluster_idx, 
-                          config
-                          ))
-            
-        # Process in parallel with dynamic batching
-        with Pool(processes=n_label_workers, maxtasksperchild=5) as pool:
-            # Use imap_unordered with chunksize=1 for optimal load balancing
-            for global_idx, model in pool.imap_unordered(
-                ReRankerTrainer.process_label, tasks, chunksize=1):
-                if model is not None:
-                    reranker_models[global_idx] = model
-                    print(f"Stored model for label {global_idx}/{num_labels})")
-                    del model
-                    
+
+        results = Parallel(n_jobs=n_label_workers, backend="loky", verbose=10)(
+            delayed(ReRankerTrainer.process_label)(
+                int(local_to_global_idx[local_idx]),
+                local_idx,
+                X,
+                Y,
+                Z,
+                M_bar,
+                M_TFN,
+                cluster_labels[local_idx],
+                config
+            )
+            for local_idx in range(num_labels)
+        )
+
+        for global_idx, model in results:
+            if model is not None:
+                reranker_models[global_idx] = model
+                print(f"Stored model for label {global_idx}/{num_labels})")
+                del model  # Free memory
+
         return reranker_models

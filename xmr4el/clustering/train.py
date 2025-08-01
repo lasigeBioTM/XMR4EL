@@ -33,6 +33,10 @@ class ClusteringTrainer():
                 invalid_clusters.append(key)
             else:
                 valid_clusters.append(key)
+                
+        if len(invalid_clusters) > 0:
+            print("Invalid clusters found")
+            return None, None, None
         
         # Save Z and kb_indices
             

@@ -24,7 +24,9 @@ class XModel():
                  clustering_config=None,
                  matcher_config=None,
                  reranker_config=None,
-                 depth=1
+                 n_workers=8,
+                 depth=1,
+                 emb_flag=1,
                  ):
         
         self.vectorizer_config = vectorizer_config
@@ -33,7 +35,9 @@ class XModel():
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.reranker_config = reranker_config
+        self.n_workers = n_workers
         self.depth = depth
+        self.emb_flag =emb_flag
         
         self._text_encoder = None
         self._hml = None
@@ -162,7 +166,7 @@ class XModel():
             vectorizer_config=self.vectorizer_config,
             transformer_config=self.transformer_config,
             dimension_config=self.dimension_config, 
-            flag=1 # Needs to be a variable, could have a stop to check
+            flag=self.emb_flag # Needs to be a variable, could have a stop to check
             )
         
         self.text_encoder = text_encoder
@@ -195,6 +199,7 @@ class XModel():
         hml = HierarchicaMLModel(clustering_config=self.clustering_config, 
                                  matcher_config=self.matcher_config, 
                                  reranker_config=self.reranker_config, 
+                                 n_workers=self.n_workers,
                                  layer=self.depth)
         
         hml.train(X_train=self.X, 

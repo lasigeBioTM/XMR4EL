@@ -133,15 +133,15 @@ class TextEncoder():
         if transformer_config is None:
             print("Running on default config of BioBert")
         
-        model = Transformer.transform(X_test, transformer_config)
-        dense_emb = model.embeddings
-        return dense_emb, model
+        _, transformer_embeddings = Transformer.transform(X_test, transformer_config)
+        return transformer_embeddings
     
     @staticmethod
     def _predict_text_using_transformer(X_test, transformer_config):
         if transformer_config is None:
             raise AttributeError("No config found in transformer_config")
-        return Transformer.transform(X_test, transformer_config).embeddings
+        _, transformer_embeddings = Transformer.transform(X_test, transformer_config)
+        return transformer_embeddings
         
     def encode(self, X_test):
         """Encode the training data"""
@@ -155,8 +155,7 @@ class TextEncoder():
             reduced_x_tfidf = csr_matrix(reduced_x_tfidf) # sparse
         
         if self.flag == 2:
-            X_transformer, transformer_model = self._encode_text_using_transformer(X_test, self.transformer_config) # dense
-            self.transformer_config = transformer_model
+            X_transformer = self._encode_text_using_transformer(X_test, self.transformer_config) # dense
             
             sparse_X_transformer = csr_matrix(X_transformer) # sparse
             concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])

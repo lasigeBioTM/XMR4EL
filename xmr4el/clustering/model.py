@@ -56,6 +56,10 @@ class Clustering():
     def cluster_to_labels(self, value):
         self._cluster_to_labels = value
         
+    @property
+    def is_empty(self):
+        return True if self.c_node is None else False
+        
     def save(self, save_dir):
         os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
 
@@ -100,6 +104,9 @@ class Clustering():
                                               config=self.clustering_config, 
                                               min_leaf_size=min_leaf_size, 
                                               dtype=self.dtype)
+        
+        if Z is None or C is None or model is None:
+            return
         
         self.z_node = Z
         self.c_node = C

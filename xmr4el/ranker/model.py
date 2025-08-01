@@ -75,7 +75,7 @@ class ReRanker():
         setattr(model, "_reranker_models", model_dict)
         return model
         
-    def train(self, X, Y, Z, M_TFN, M_MAN, cluster_labels, local_to_global_idx, n_label_workers=4):
+    def train(self, X, Y, Z, M_TFN, M_MAN, cluster_labels, local_to_global_idx, n_label_workers=8):
         
         self.reranker_config["kwargs"]["n_jobs"] = 1
         

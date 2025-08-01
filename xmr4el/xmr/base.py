@@ -21,11 +21,13 @@ class MLModel():
                  clustering_config=None, 
                  matcher_config=None, 
                  reranker_config=None,
+                 n_workers=8,
                  ):
         
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.reranker_config = reranker_config
+        self.n_workers = n_workers
         
         self._local_to_global_idx = None
         self._global_to_local_idx = None
@@ -87,6 +89,10 @@ class MLModel():
     @fused_scores.setter
     def fused_scores(self, value):
         self._fused_scores = value
+        
+    @property
+    def is_empty(self):
+        return True if self.cluster_model is None else False
     
     def save(self, save_dir):
         os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
@@ -163,43 +169,44 @@ class MLModel():
                 f"Reranker Model: {"✔" if self.reranker_model is not None else "✖"}\n" 
         return _str
     
-    def fused_predict(self, X, Z, alpha=0.5):
+    def fused_predict(self, X, Z, C, alpha=0.5):
         
         # Get weak matcher scores for all clusters
         matcher_scores = self.matcher_model.model.predict_proba(X)
         matcher_scores = csr_matrix(matcher_scores)
-        # print(matcher_scores)
-        N, L_local = matcher_scores.shape
+        
+        N, K_next = matcher_scores.shape
+        L_local = Z.shape[0]
 
-        G = len(self.local_to_global_idx)
-        fused_scores = lil_matrix((N, G))
+        entity_fused = lil_matrix((N, L_local))
         
         for i in range(N):
             row = matcher_scores.getrow(i)
-            local_idxs = row.indices
-            match_scores = row.data            
+            local_idxs, match_scores = row.indices, row.data  
             mention_emb = X[i].toarray().ravel()
            
             for local_idx, matcher_score in zip(local_idxs, match_scores):
                 global_idx = int(self.local_to_global_idx[local_idx])
-
                 reranker_score = 0
+                
                 if global_idx in self.reranker_model.model_dict:
                     # Create reranker input: concat(mention_emb, label_emb)
-                    label_emb = Z[global_idx]
-                    input_vec = np.hstack([mention_emb, label_emb]).reshape(1, -1)
-                   
-                    model = self.reranker_model.model_dict[global_idx]
-                    raw = model.decision_function(input_vec)
+                    label_emb = Z[local_idx]
+                    inp = np.hstack([mention_emb, label_emb]).reshape(1, -1)
+                    raw = self.reranker_model.model_dict[global_idx].decision_function(inp)
                     reranker_score = np.clip(expit(raw), 1e-6, 1.0)
                 else:
                     reranker_score = 0
                 
                 # Lp-Hinge
                 fused = (matcher_score ** (1 - alpha)) * (reranker_score ** alpha)
-                fused_scores[i, global_idx] = fused
+                entity_fused[i, global_idx] = fused
                 
-        return fused_scores.tocsr()
+        entity_fused = entity_fused.tocsr()
+        cluster_fused = entity_fused.dot(C)
+        
+        return csr_matrix(cluster_fused)
+        
         
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
@@ -219,6 +226,9 @@ class MLModel():
                             local_to_global_idx=self.local_to_global_idx,
                             min_leaf_size=20
                             ) # Hardcoded
+        
+        if cluster_model.is_empty:
+            return
         
         self.cluster_model = cluster_model
         del cluster_model
@@ -253,14 +263,14 @@ class MLModel():
                              M_MAN, 
                              cluster_labels,
                              local_to_global_idx=self.local_to_global_idx,
-                             n_label_workers=4
+                             n_label_workers=self.n_workers
                              )
         
         self.reranker_model = reranker_model
         del reranker_model
         
         print("Fusing Scores")
-        fused_scores = self.fused_predict(X_train, Z_train)
+        fused_scores = self.fused_predict(X_train, Z_train, C)
         # print(fused_scores)
         self.fused_scores = fused_scores
         del fused_scores
@@ -272,11 +282,13 @@ class HierarchicaMLModel():
                  clustering_config=None, 
                  matcher_config=None, 
                  reranker_config=None, 
+                 n_workers=8,
                  layer=1):
         
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.reranker_config = reranker_config
+        self.n_workers = n_workers
         
         self._hmodel = []
         self._layer = layer
@@ -302,7 +314,7 @@ class HierarchicaMLModel():
     
         state = self.__dict__.copy()
 
-        for layer_idx in range(self.layers):
+        for layer_idx in range(len(self.hmodel)):
             model_list = self.hmodel[layer_idx]
             layer_path = os.path.join(save_dir, f"layer_{layer_idx}")
             os.makedirs(layer_path, exist_ok=True)
@@ -436,12 +448,14 @@ class HierarchicaMLModel():
             
             next_inputs = []
             ml_list = []
+            layer_failed = False
             
             for X_node, Y_node, Z_node, local_to_label_node, global_to_local_node in inputs:
                 
                 ml = MLModel(clustering_config=self.clustering_config, 
                              matcher_config=self.matcher_config,
-                             reranker_config=self.reranker_config
+                             reranker_config=self.reranker_config,
+                             n_workers=self.n_workers
                             )
                 
                 ml._local_to_global_idx = local_to_global
@@ -453,6 +467,9 @@ class HierarchicaMLModel():
                          global_to_local=global_to_local_node
                          )
                 
+                if ml.is_empty:
+                    layer_failed = True
+                    break
                 
                 
                 ml_list.append(ml)
@@ -469,6 +486,9 @@ class HierarchicaMLModel():
                                                  )
                 
                 next_inputs.extend(child_inputs)
+            
+            if layer_failed:
+                break
             
             self.hmodel.append(ml_list)
             # reformat inputs for next iteration: drop cluster id and label_idx

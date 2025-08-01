@@ -23,10 +23,6 @@ def main():
     
     start = time.time()
 
-    min_leaf_size = 5
-    depth = 3
-    n_features = 1000
-
     vectorizer_config = {
         "type": "tfidf", 
         "kwargs": {'max_features': 20000}
@@ -149,6 +145,9 @@ def main():
     raw_labels = train_data["labels"]
     X_cross_train = train_data["corpus"] # list of lists
     
+    # min_leaf_size = 5
+    depth = 4
+    # n_features = 1000
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
@@ -156,7 +155,8 @@ def main():
                     clustering_config=clustering_config,
                     matcher_config=matcher_config,
                     reranker_config=reranker_config,
-                    depth=2
+                    depth=depth,
+                    emb_flag=1
                     )
     
     xmodel.train(X_cross_train, raw_labels)
