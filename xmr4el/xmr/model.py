@@ -24,6 +24,8 @@ class XModel():
                  clustering_config=None,
                  matcher_config=None,
                  reranker_config=None,
+                 min_leaf_size=20,
+                 max_leaf_size=None,
                  n_workers=8,
                  depth=1,
                  emb_flag=1,
@@ -35,7 +37,12 @@ class XModel():
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.reranker_config = reranker_config
+        
+        self.min_leaf_size = min_leaf_size
+        self.max_leaf_size = max_leaf_size
+        
         self.n_workers = n_workers
+        
         self.depth = depth
         self.emb_flag =emb_flag
         
@@ -199,6 +206,8 @@ class XModel():
         hml = HierarchicaMLModel(clustering_config=self.clustering_config, 
                                  matcher_config=self.matcher_config, 
                                  reranker_config=self.reranker_config, 
+                                 min_leaf_size=self.min_leaf_size,
+                                 max_leaf_size=self.max_leaf_size,
                                  n_workers=self.n_workers,
                                  layer=self.depth)
         

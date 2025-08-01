@@ -2,7 +2,6 @@ import os
 
 import numpy as np
 
-from multiprocessing import get_context
 from joblib import Parallel, delayed
 
 from scipy.sparse import hstack

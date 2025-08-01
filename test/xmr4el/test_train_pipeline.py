@@ -139,13 +139,14 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=200
+        truncate_data=400
         )
     
     raw_labels = train_data["labels"]
     X_cross_train = train_data["corpus"] # list of lists
     
-    # min_leaf_size = 5
+    min_leaf_size = 20
+    max_leaf_size = 50
     depth = 4
     # n_features = 1000
 
@@ -155,6 +156,9 @@ def main():
                     clustering_config=clustering_config,
                     matcher_config=matcher_config,
                     reranker_config=reranker_config,
+                    min_leaf_size=min_leaf_size,
+                    max_leaf_size=max_leaf_size,
+                    n_workers=10,
                     depth=depth,
                     emb_flag=1
                     )

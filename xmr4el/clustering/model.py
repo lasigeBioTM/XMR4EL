@@ -99,10 +99,11 @@ class Clustering():
         
         return model
     
-    def train(self, Z, local_to_global_idx, min_leaf_size):
+    def train(self, Z, local_to_global_idx, min_leaf_size, max_leaf_size):
         Z, C, model = ClusteringTrainer.train(Z=Z, 
                                               config=self.clustering_config, 
                                               min_leaf_size=min_leaf_size, 
+                                              max_leaf_size=max_leaf_size,
                                               dtype=self.dtype)
         
         if Z is None or C is None or model is None:

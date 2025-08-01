@@ -21,12 +21,16 @@ class MLModel():
                  clustering_config=None, 
                  matcher_config=None, 
                  reranker_config=None,
+                 min_leaf_size=20,
+                 max_leaf_size=None,
                  n_workers=8,
                  ):
         
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.reranker_config = reranker_config
+        self.min_leaf_size = min_leaf_size
+        self.max_leaf_size = max_leaf_size
         self.n_workers = n_workers
         
         self._local_to_global_idx = None
@@ -224,7 +228,8 @@ class MLModel():
         cluster_model = Clustering(self.clustering_config)
         cluster_model.train(Z=Z_train, 
                             local_to_global_idx=self.local_to_global_idx,
-                            min_leaf_size=20
+                            min_leaf_size=self.min_leaf_size,
+                            max_leaf_size=self.max_leaf_size,
                             ) # Hardcoded
         
         if cluster_model.is_empty:
@@ -283,12 +288,16 @@ class HierarchicaMLModel():
                  clustering_config=None, 
                  matcher_config=None, 
                  reranker_config=None, 
+                 min_leaf_size=20,
+                 max_leaf_size=None,
                  n_workers=8,
                  layer=1):
         
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.reranker_config = reranker_config
+        self.min_leaf_size = min_leaf_size
+        self.max_leaf_size = max_leaf_size
         self.n_workers = n_workers
         
         self._hmodel = []
@@ -459,6 +468,8 @@ class HierarchicaMLModel():
                 ml = MLModel(clustering_config=self.clustering_config, 
                              matcher_config=self.matcher_config,
                              reranker_config=self.reranker_config,
+                             min_leaf_size=self.min_leaf_size,
+                             max_leaf_size=self.max_leaf_size,
                              n_workers=self.n_workers
                             )
                 
