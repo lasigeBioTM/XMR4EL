@@ -235,7 +235,8 @@ class MLModel():
         
         # Retrieve C
         C = self.cluster_model.c_node
-        cluster_labels = self.cluster_model.model.labels()
+        cluster_labels = np.asarray(C.argmax(axis=1)).flatten()
+        print(cluster_labels, type(cluster_labels))
         print(Counter(cluster_labels))
     
         print("Matcher")
@@ -403,7 +404,10 @@ class HierarchicaMLModel():
         
         for c in range(K_next):
             # 1. which labels are in cluster c
-            local_idxs = np.where(C[:, c] > 0)[0]
+            local_idxs = C[:, c].nonzero()[0]
+            
+            if len(local_idxs) == 0:
+                continue
             
             # 2. map them to *global* label IDs
             local_to_global_next = local_to_global_idx[local_idxs]

@@ -13,28 +13,27 @@ from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 class ReRankerTrainer():
     
     @staticmethod 
-    def process_label(global_idx, local_idx, X, Y, Z, M_bar, M_mentions, cluster_idx, config):            
+    def process_label(global_idx, local_idx, X, Y, Z, M_bar, M_mentions, cluster_idx, config):  
+            # Extract the column for this label from Y (sparse)          
             Y_col = Y[:, local_idx]
             positive_indices = Y_col.nonzero()[0]
             if len(positive_indices) <= 1:
                 return (global_idx, None)
 
             # Step 1: Restrict to cluster members only (C is [mention x cluster])
-            # Get cluster id of the label (assumes labels aligned with cluster columns)
-            mention_in_cluster = M_mentions[:, cluster_idx].ravel().astype(bool) # toarray
-            # print(label_cluster)
-            candidate_indices = np.where(mention_in_cluster)[0]
-            # print(candidate_indices.shape, candidate_indices)
+            # Step 1: Get mention indices assigned to this cluster from M_mentions (sparse)
+            candidate_indices = M_mentions[:, cluster_idx].nonzero()[0]
             if len(candidate_indices) == 0:
                 return (global_idx, None)
 
             # Step 2: Weak matcher scores only on cluster members
-            scores = M_bar[candidate_indices, cluster_idx].ravel() # toarray
+            scores_sparse = M_bar[candidate_indices, :][:, cluster_idx]
+            
+            scores = scores_sparse.toarray().flatten()
 
             # Step 3: Identify positives and negatives from cluster
             cluster_positive_mask = np.isin(candidate_indices, positive_indices)
             cluster_negative_mask = ~cluster_positive_mask
-
             if cluster_negative_mask.sum() == 0:
                 return (global_idx, None)
 
