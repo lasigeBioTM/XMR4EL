@@ -8,7 +8,7 @@ def parse_requirements(filename):
 
 setup(
     name='xmr4el',
-    version='0.1',
+    version='0.2',
     packages=find_packages(),
     install_requires=parse_requirements('requirements.txt'),
     description='eXtreme Multi-Label Ranking for Entity Linking',
