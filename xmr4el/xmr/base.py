@@ -463,6 +463,8 @@ class HierarchicaMLModel():
             ml_list = []
             layer_failed = False
             
+            self.clustering_config["kwargs"]["n_clusters"] = max(2, self.clustering_config["kwargs"]["n_clusters"] / 2)
+            
             for X_node, Y_node, Z_node, local_to_label_node, global_to_local_node in inputs:
                 
                 ml = MLModel(clustering_config=self.clustering_config, 
