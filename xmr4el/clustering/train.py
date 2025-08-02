@@ -60,7 +60,7 @@ class ClusteringTrainer():
             
             if count > max_leaf_size:
                 # print("Inside")
-                sub_n_clusters = max(2, count // (min_leaf_size * n_clusters))
+                sub_n_clusters = 2
                 sub_config = config.copy()
                 sub_config["kwargs"]["n_clusters"] = sub_n_clusters
                 print(f"[Depth {depth}] Reclustering large cluster {cluster_id} with {count} points into {sub_n_clusters} clusters")

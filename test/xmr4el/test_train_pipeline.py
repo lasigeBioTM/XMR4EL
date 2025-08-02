@@ -146,7 +146,7 @@ def main():
     X_cross_train = train_data["corpus"] # list of lists
     
     min_leaf_size = 20
-    max_leaf_size = 50
+    max_leaf_size = 200
     depth = 4
     # n_features = 1000
 
