@@ -11,3 +11,4 @@ lightgbm
 umap-learn
 fuzzywuzzy
 python-Levenshtein
+git+https://github.com/kernelmachine/balanced-kmeans.git
