@@ -21,7 +21,7 @@ class ClusteringTrainer():
         """
         gc.collect()
 
-        if depth > 5:
+        if depth > 10:
             print(f"Limit Depth Reached")
             return None, None, None
 
