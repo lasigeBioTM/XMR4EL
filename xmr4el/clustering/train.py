@@ -10,6 +10,7 @@ from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
 class ClusteringTrainer():
 
+
     @staticmethod
     def train(Z, config, min_leaf_size=20, max_leaf_size=None, depth=0, dtype=np.float32):
         """
