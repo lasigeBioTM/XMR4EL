@@ -20,6 +20,10 @@ class ClusteringTrainer():
         """
         gc.collect()
 
+        if depth > 2:
+            print(f"Limit Depth Reached")
+            return None, None, None
+
         n_clusters = config["kwargs"]["n_clusters"]
         n_points = Z.shape[0]
         
