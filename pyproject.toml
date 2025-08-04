@@ -26,5 +26,5 @@ dependencies = [
   "umap-learn",
   "fuzzywuzzy",
   "python-Levenshtein",
-  "balanced-kmeans @ git+https://github.com/kernelmachine/balanced-kmeans.git@main"
+  "kmeans-pytorch @ git+https://github.com/kernelmachine/balanced-kmeans.git@main"
 ]
