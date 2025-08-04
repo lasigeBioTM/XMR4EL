@@ -53,6 +53,13 @@ def main():
     }
     
     """
+    
+    clustering_config = {
+        "type": "balancedkmeans",
+        "kwargs": {"n_clusters": 6}
+    }
+    
+    """
     clustering_config = {
     "type": "faisskmeans",  # Matches the registered name in your ClusterMeta system
     "kwargs": {
@@ -66,6 +73,7 @@ def main():
         "tol": 1e-4,               # Early stopping tolerance
         }
     }
+    """
     """
     classifier_config = {
         "type": "sklearnlogisticregression",

@@ -2,6 +2,7 @@
 /test/test_data/saved_trees
 /test/test_data
 /_REEL
+/joblib_tmp
 
 .DS_store
 

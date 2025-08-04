@@ -68,7 +68,7 @@ def main():
 
     # train_disease_100
     trained_xtree = XModel.load(
-        "test/test_data/saved_trees/xmodel_2025-08-01_13-35-53" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-04_14-31-01" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
@@ -91,20 +91,26 @@ def main():
     # print(input_embs[0])
     # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
     
-    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=10)
+    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=1000, beam_size=10)
 
     print(predicted_labels)
     
     print(hits)
     
     found_ratio = []
-    for found, _, _ in hits:
+    matcher_found_ratio = []
+    for found, _, matcher_found, _ in hits:
         if found == 1:
             found_ratio.append(1)
         else:
             found_ratio.append(0)
             
-    print(Counter(found_ratio))
+        if matcher_found:
+            matcher_found_ratio.append(1)
+        else:
+            matcher_found_ratio.append(0)
+            
+    print("Found Ratio", Counter(found_ratio), "Matcher Ratio", Counter(matcher_found_ratio))
 
     end = time.time()
 

@@ -1,6 +1,11 @@
 import os
+
+os.makedirs("/app/joblib_tmp", exist_ok=True)
+os.environ["JOBLIB_TEMP_FOLDER"] = "/app/joblib_tmp"
+
 import joblib
 import pickle
+import heapq
 
 import numpy as np
 
@@ -229,77 +234,78 @@ class XModel():
         - csr_matrix of predicted scores (N x G, G = total global labels)
         - hits list for evaluation
         """
-        # 1) Encode the query and get globals
+        # Encode queries and get globals
         X_query = self.text_encoder.predict(X_text_query).toarray()  # (N, D)
-        Z = self.Z                                                    # (G, D_label)
+        Z = self.Z                                                  # (G, D_label)
         N = X_query.shape[0]
-        G = Z.shape[0]                                                # total global labels
+        G = Z.shape[0]
 
         rows, cols, data = [], [], []
         hits = []
 
         for i in range(N):
-            label_scores = {}  # dict: global_label -> best fused score
+            label_scores = {}
             x_init = X_query[i]
+            gold_set = set(gold_labels[i]) if gold_labels else set()
 
-            # Initialize beam: start at layer 0, each root MLModel, score=0, feature vec=x_init
+            # Initialize beam at root layer
             beam = [(0, ml, 0.0, x_init) for ml in self.model.hmodel[0]]
 
-            # Beam‐search down the hierarchy
+            # Track if matcher predicted cluster containing true label
+            matched_cluster_found = False
+
             while beam:
                 next_beam = []
 
                 for layer_idx, ml, cum_score, x_aug in beam:
-                    # 2) Get cluster‐membership scores for this node
-                    #    matcher.proba shape: (1, n_clusters)
                     matcher_scores = ml.matcher_model.predict_proba(x_aug.reshape(1, -1))[0]
                     if matcher_scores.size == 0:
                         continue
 
-                    # 3) Pick top‐k clusters
+                    # Pick top-k clusters predicted by matcher
                     top_clusters = np.argsort(matcher_scores)[::-1][:topk]
 
+                    # Check for ground truth label in predicted clusters
+                    for rank, c in enumerate(top_clusters):
+                        cluster_labels = ml.cluster_model.cluster_to_labels[c]
+                        cluster_label_names = {self.initial_labels[g] for g in cluster_labels}
+                        if gold_set.intersection(cluster_label_names):
+                            matched_cluster_found = True
+                            # print(f"Query {i}: Ground truth label found in cluster {c} at rank {rank}")
+                            break  # Found a hit in top clusters
+
+                    # Proceed with usual reranking & fusion
                     for c in top_clusters:
                         cluster_score = matcher_scores[c]
-
-                        # 4) Map cluster -> list of global label IDs
                         global_labels = ml.cluster_model.cluster_to_labels[c]
 
                         for g in global_labels:
-                            # 5) Compute reranker score if available
                             rerank_score = cluster_score
                             reranker = ml.reranker_model
+
                             if reranker is not None and g in reranker.model_dict:
                                 vec = np.hstack([x_aug, Z[g]]).reshape(1, -1)
                                 raw = reranker.model_dict[g].decision_function(vec)[0]
                                 rerank_score = expit(raw)
 
-                            # 6) Fuse matcher+reranker with Lp‐hinge
-                            fused = (cluster_score ** (1 - alpha)) * (rerank_score ** alpha)
+                            fused = ((cluster_score + 1e-8) ** (1 - alpha)) * ((rerank_score + 1e-8) ** alpha)
 
-                            # 7) Record best score for this global label
                             prev = label_scores.get(g, -np.inf)
                             label_scores[g] = max(prev, fused)
 
-                            # 8) Prepare the feature extension for the next layer
-                            #    Here we stack [fused, fused, fused]; you can compute
-                            #    feat_sum/max over all clusters if desired.
-                            feat_node = np.array([fused, fused, fused])
+                            feat_node = np.array([fused, cluster_score, rerank_score])
                             x_next = np.hstack([x_aug, feat_node])
 
-                            # 9) Route to next‐layer models that handle label g
                             if layer_idx + 1 < len(self.model.hmodel):
                                 for child_ml in self.model.hmodel[layer_idx + 1]:
-                                    # child_ml.local_to_global_idx is array of globals it knows
                                     if g in child_ml.local_to_global_idx:
-                                        next_beam.append((layer_idx + 1, child_ml,
-                                                        cum_score + fused, x_next))
+                                        next_beam.append((layer_idx + 1, child_ml, cum_score + fused, x_next))
 
-                # 10) Prune the beam to the top `beam_size` by cumulative score
-                next_beam.sort(key=lambda tup: -tup[2])
-                beam = next_beam[:beam_size]
+                beam = heapq.nlargest(beam_size, next_beam, key=lambda tup: tup[2])
+                if not beam:
+                    break
 
-            # --- finalize this query’s top‐k global labels ---
+            # Final top-k global labels sorted by fused score
             sorted_labels = sorted(label_scores.items(), key=lambda kv: -kv[1])
             top_labels = sorted_labels[:topk]
 
@@ -308,21 +314,13 @@ class XModel():
                 cols.append(g)
                 data.append(score)
 
-            # --- compute hit for evaluation ---
-            all_labels_id = [idx for idx, _ in sorted_labels]
-            all_labels = [self.initial_labels[idx] for idx in all_labels_id]
-            gold_set = set(gold_labels[i]) if gold_labels else set()
-            found = False
-            label_idx_found = -1
+            # Compute hit for evaluation
+            top_label_ids = [g for g, _ in top_labels]
+            label_idx_found = next((idx for idx, g in enumerate(top_label_ids)
+                                    if self.initial_labels[g] in gold_set), -1)
 
-            for idx, label in enumerate(all_labels):
-                if label in gold_set:
-                    found = True
-                    label_idx_found = idx
-                    break
+            hit = 1 if label_idx_found != -1 else 0
+            hits.append((hit, label_idx_found, matched_cluster_found, gold_set))
 
-            hits.append((1, label_idx_found, gold_set) if found else (0, -1, gold_set))
-
-        # Build final CSR: shape (N, G)
         csr = csr_matrix((data, (rows, cols)), shape=(N, G))
         return csr, hits

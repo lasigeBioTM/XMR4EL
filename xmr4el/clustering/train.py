@@ -8,16 +8,25 @@ from scipy.sparse import csr_matrix
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
 
-class ClusteringTrainer():
-
+class ClusteringTrainer:
 
     @staticmethod
-    def train(Z, config, min_leaf_size=20, max_leaf_size=None, depth=0, dtype=np.float32):
+    def train(Z, config, min_leaf_size=20, max_leaf_size=None, depth=0, dtype=np.float32, partition=False):
         """
-        Recursive cluster generation with optimizations:
-        - Vectorized operations
-        - Memory-efficient processing
-        - Better cluster validation
+        Trains a (recursive) clustering tree unless partition=False.
+
+        Args:
+            Z: np.ndarray of shape (n_samples, n_features)
+            config: dict with clustering config, including 'kwargs'->'n_clusters'
+            min_leaf_size: int, min size for a cluster to be accepted
+            max_leaf_size: int, optional max size for a leaf cluster
+            depth: current recursion depth
+            dtype: type used for csr_matrix
+            partition: if False, disables recursive splitting
+        Returns:
+            Z: input data
+            C: csr_matrix of shape (n_samples, n_clusters)
+            clustering_model: fitted clustering model
         """
         gc.collect()
 
@@ -43,37 +52,35 @@ class ClusteringTrainer():
         print(f"[Depth {depth}] Cluster sizes: {cluster_counts}")
 
         invalid_clusters = [cid for cid, cnt in cluster_counts.items() if cnt < min_leaf_size]
-        
         if len(invalid_clusters) > 0:
             print(f"[Depth {depth}] {len(invalid_clusters)} invalid clusters, stopping clustering.")
-            return None, None, None  # fail clustering here, no clusters with < min_leaf_size 
+            return None, None, None
 
         valid_clusters = [cid for cid, cnt in cluster_counts.items() if cnt >= min_leaf_size]
-    
         if len(valid_clusters) <= 1:
             print(f"[Depth {depth}] Only {len(valid_clusters)} valid clusters after pruning, refusing singleton cluster.")
-            return None, None, None  # fail clustering here, no single cluster allowed
+            return None, None, None
 
         cluster_id_offset = 0
         rows = []
         cols = []
-        
-        for cluster_id in valid_clusters:            
+
+        for cluster_id in valid_clusters:
             count = cluster_counts[cluster_id]
             indices = np.where(cluster_labels == cluster_id)[0]
             Z_sub = Z[indices]
-            
-            if count > max_leaf_size:
-                # print("Inside")
-                sub_n_clusters = 2
+
+            if partition and count > max_leaf_size:
+                # Recursive partitioning
                 sub_config = config.copy()
-                sub_config["kwargs"]["n_clusters"] = sub_n_clusters
-                print(f"[Depth {depth}] Reclustering large cluster {cluster_id} with {count} points into {sub_n_clusters} clusters")
-                
-                _, C_sub, _ = ClusteringTrainer.train(Z_sub, sub_config, min_leaf_size, max_leaf_size, depth + 1, dtype)
-                
+                sub_config["kwargs"] = sub_config["kwargs"].copy()
+                sub_config["kwargs"]["n_clusters"] = 2
+                print(f"[Depth {depth}] Reclustering large cluster {cluster_id} with {count} points into 2 clusters")
+
+                _, C_sub, _ = ClusteringTrainer.train(Z_sub, sub_config, min_leaf_size, max_leaf_size, depth + 1, dtype, partition)
+
                 if C_sub is None:
-                    # If reclustering failed, fallback to treating as a single cluster
+                    # Fallback to treating as a single cluster
                     for i in indices:
                         rows.append(i)
                         cols.append(cluster_id_offset)
@@ -85,16 +92,15 @@ class ClusteringTrainer():
                         cols.append(cluster_id_offset + cluster_local)
                     cluster_id_offset += C_sub.shape[1]
             else:
-                # Cluster is small enough, accept it as-is
+                # Cluster is small enough or partitioning is disabled
                 for i in indices:
                     rows.append(i)
                     cols.append(cluster_id_offset)
                 cluster_id_offset += 1
-            
+
         if len(rows) == 0:
             print(f"[Depth {depth}] No valid clusters found, returning None")
             return None, None, None
-        
+
         C = csr_matrix((np.ones(len(rows), dtype=dtype), (rows, cols)), shape=(n_points, cluster_id_offset))   
-            
         return Z, C, clustering_model
