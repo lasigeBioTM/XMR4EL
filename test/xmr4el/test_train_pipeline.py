@@ -156,7 +156,6 @@ def main():
     min_leaf_size = 20
     max_leaf_size = 200
     depth = 4
-    # n_features = 1000
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,

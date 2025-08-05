@@ -68,7 +68,7 @@ def main():
 
     # train_disease_100
     trained_xtree = XModel.load(
-        "test/test_data/saved_trees/xmodel_2025-08-04_14-31-01" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-05_11-20-52" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])

@@ -758,8 +758,8 @@ class BalancedKMeans(ClusteringModel):
                 f"clustering config {config} contains unexpected keyword arguments for CumlKMeans Clustering"
             )
 
-        print(config["n_clusters"])
-        print(type(trn_corpus))
+        # print(config["n_clusters"])
+        # print(type(trn_corpus))
         trn_corpus = torch.from_numpy(trn_corpus)
         
         # Check for zero vectors (norm == 0)

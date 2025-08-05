@@ -17,28 +17,34 @@ class ReRankerTrainer():
         if len(positive_indices) <= 1:
             return (global_idx, None)
 
+        M_mentions_col = M_bar[:, cluster_idx]
         candidate_indices = M_mentions_col.nonzero()[0]
         if len(candidate_indices) == 0:
             return (global_idx, None)
 
-        scores_sparse = M_bar[candidate_indices, cluster_idx]
-        scores = scores_sparse.toarray().flatten()
+        
+            # Get label embedding
+        label_emb = Z[local_idx]
+        label_tile = np.tile(label_emb, (len(candidate_indices), 1))
+        
+        # Compute dot-product scores between candidate mentions and the label
+        scores = np.sum(X[candidate_indices].multiply(label_tile), axis=1).A1
 
         cluster_positive_mask = np.isin(candidate_indices, positive_indices)
         cluster_negative_mask = ~cluster_positive_mask
+        
         if cluster_negative_mask.sum() == 0:
             return (global_idx, None)
 
         negative_scores = scores[cluster_negative_mask]
         negative_indices_sorted = np.argsort(-negative_scores)
-        negative_candidates = candidate_indices[cluster_negative_mask][negative_indices_sorted]
+        negative_candidates = candidate_indices[cluster_negative_mask][negative_indices_sorted][:500] # Hard Coded
 
         selected_indices = np.concatenate([positive_indices, negative_candidates])
         Y_valid = np.zeros(len(selected_indices), dtype=np.int8)
         Y_valid[:len(positive_indices)] = 1
 
         X_valid = X[selected_indices]
-        label_emb = Z[local_idx]
         label_tile = np.tile(label_emb, (X_valid.shape[0], 1))
         X_combined = hstack([X_valid, label_tile])
 
