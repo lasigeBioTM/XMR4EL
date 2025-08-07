@@ -1,7 +1,15 @@
 import os
+import gc
+import psutil
 import pickle
 
 import numpy as np
+
+from scipy.sparse import csr_matrix
+
+from joblib import Memory
+
+from sklearn.preprocessing import normalize
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.ranker.train import ReRankerTrainer
@@ -11,12 +19,17 @@ class ReRanker():
     
     def __init__(self, 
                  reranker_config=None, 
-                 dtype=np.float32):
+                 dtype=np.float32,
+                 temp_dir='./temp'):
         
         self.reranker_config = reranker_config
         self.dtype = dtype
         
         self._reranker_models = None # Reranker Model
+        
+        # Configure joblib memory caching
+        self.memory = Memory(temp_dir, verbose=0)
+        self._cached_process_label = self.memory.cache(ReRankerTrainer.process_label)
     
     @property
     def model_dict(self):
@@ -75,8 +88,7 @@ class ReRanker():
         setattr(model, "_reranker_models", model_dict)
         return model
         
-    def train(self, X, Y, Z, M_TFN, M_MAN, cluster_labels, local_to_global_idx, n_label_workers=8):
-        
+    def train(self, X, Y, Z, M_TFN, M_MAN, cluster_labels, local_to_global_idx, layer, n_label_workers=8):
         self.reranker_config["kwargs"]["n_jobs"] = 1
         
         reranker_models = ReRankerTrainer.train(X=X,
@@ -87,7 +99,6 @@ class ReRanker():
                                                 cluster_labels=cluster_labels,
                                                 local_to_global_idx=local_to_global_idx,
                                                 config=self.reranker_config,
+                                                layer=layer,
                                                 n_label_workers=n_label_workers)
         self.model_dict = reranker_models
-    
-    

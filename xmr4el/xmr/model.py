@@ -1,4 +1,5 @@
 import os
+import gc
 
 os.makedirs("/app/joblib_tmp", exist_ok=True)
 os.environ["JOBLIB_TEMP_FOLDER"] = "/app/joblib_tmp"
@@ -31,6 +32,7 @@ class XModel():
                  reranker_config=None,
                  min_leaf_size=20,
                  max_leaf_size=None,
+                 cut_half_cluster=False,
                  n_workers=8,
                  depth=1,
                  emb_flag=1,
@@ -45,6 +47,7 @@ class XModel():
         
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
+        self.cut_half_cluster = cut_half_cluster
         
         self.n_workers = n_workers
         
@@ -214,6 +217,7 @@ class XModel():
                                  min_leaf_size=self.min_leaf_size,
                                  max_leaf_size=self.max_leaf_size,
                                  n_workers=self.n_workers,
+                                 cut_half_cluster=self.cut_half_cluster,
                                  layer=self.depth)
         
         hml.train(X_train=self.X, 
@@ -224,7 +228,10 @@ class XModel():
                   )
         
         self.model = hml
+        
         del hml
+        gc.collect()
+        
         print(self.model)
 
     def predict(self, X_text_query, gold_labels=None, topk=10, alpha=0.5, beam_size=10):
@@ -236,9 +243,20 @@ class XModel():
         """
         # Encode queries and get globals
         X_query = self.text_encoder.predict(X_text_query).toarray()  # (N, D)
-        Z = self.Z                                                  # (G, D_label)
+        Z = self.Z
+        n_layers = len(self.model.hmodel)
+                
+        # (G, D_label)
+        # print(Z, type(Z))
         N = X_query.shape[0]
         G = Z.shape[0]
+        
+        z_layer = [Z]
+        
+        for x in range(n_layers - 1):
+            z_layer.append(np.hstack([Z, np.zeros((G, 3 * (x + 1)), dtype=Z.dtype)]))
+
+        del Z
 
         rows, cols, data = [], [], []
         hits = []
@@ -258,6 +276,9 @@ class XModel():
                 next_beam = []
 
                 for layer_idx, ml, cum_score, x_aug in beam:
+                    
+                    z_aug = z_layer[layer_idx]
+                    
                     matcher_scores = ml.matcher_model.predict_proba(x_aug.reshape(1, -1))[0]
                     if matcher_scores.size == 0:
                         continue
@@ -282,9 +303,10 @@ class XModel():
                         for g in global_labels:
                             rerank_score = cluster_score
                             reranker = ml.reranker_model
-
+                            
                             if reranker is not None and g in reranker.model_dict:
-                                vec = np.hstack([x_aug, Z[g]]).reshape(1, -1)
+                                vec = np.hstack([x_aug, z_aug[g]]).reshape(1, -1)
+                                
                                 raw = reranker.model_dict[g].decision_function(vec)[0]
                                 rerank_score = expit(raw)
 
@@ -296,7 +318,7 @@ class XModel():
                             feat_node = np.array([fused, cluster_score, rerank_score])
                             x_next = np.hstack([x_aug, feat_node])
 
-                            if layer_idx + 1 < len(self.model.hmodel):
+                            if layer_idx + 1 < n_layers:
                                 for child_ml in self.model.hmodel[layer_idx + 1]:
                                     if g in child_ml.local_to_global_idx:
                                         next_beam.append((layer_idx + 1, child_ml, cum_score + fused, x_next))

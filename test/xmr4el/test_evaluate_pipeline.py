@@ -67,8 +67,9 @@ def main():
         input_texts = file.read().splitlines()
 
     # train_disease_100
+    #. 3 flag better than, more depth more score
     trained_xtree = XModel.load(
-        "test/test_data/saved_trees/xmodel_2025-08-05_11-20-52" # 5 excluded
+        "test/test_data/saved_trees/xmodel_depth2_emb_flag_3" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
@@ -91,7 +92,14 @@ def main():
     # print(input_embs[0])
     # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
     
-    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=1000, beam_size=10)
+    # topk50 - 6 - topk100 - 8
+    # topk50 - 6 - topk100 - 6, topk200 - 38
+    
+    # flag 1 - topk10 - 0, topk100 - 9, topk200 - 42, after normalizing, topk100 - 32, topk200 - 40, 500 negatives
+    # flag 2 - topk10 - 0, topk100 - 10, topk200 - 29
+    # flag 3 - topk10 - 0, topk100 - 8, topk200 - 36
+    
+    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=10)
 
     print(predicted_labels)
     

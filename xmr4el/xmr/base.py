@@ -1,5 +1,6 @@
 import os
 import re
+import gc
 import pickle
 import joblib
 
@@ -7,6 +8,8 @@ import numpy as np
 
 from scipy.sparse import csr_matrix, lil_matrix, hstack
 from scipy.special import expit
+
+from sklearn.preprocessing import normalize
 
 from typing import Counter
 
@@ -23,6 +26,7 @@ class MLModel():
                  reranker_config=None,
                  min_leaf_size=20,
                  max_leaf_size=None,
+                 layer=None,
                  n_workers=8,
                  ):
         
@@ -31,6 +35,7 @@ class MLModel():
         self.reranker_config = reranker_config
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
+        self.layer = layer
         self.n_workers = n_workers
         
         self._local_to_global_idx = None
@@ -181,9 +186,14 @@ class MLModel():
         
         N, K_next = matcher_scores.shape
         L_local = Z.shape[0]
-
-        entity_fused = lil_matrix((N, L_local))
+        G = int(self.local_to_global_idx.max()) + 1  # total number of global labels
         
+        entity_fused = lil_matrix((N, G))
+        
+        if self.layer > 0:
+            Z = np.hstack([Z, np.zeros((L_local, 3 * self.layer), dtype=Z.dtype)])
+        
+
         for i in range(N):
             row = matcher_scores.getrow(i)
             local_idxs, match_scores = row.indices, row.data  
@@ -199,6 +209,7 @@ class MLModel():
                     inp = np.hstack([mention_emb, label_emb]).reshape(1, -1)
                     raw = self.reranker_model.model_dict[global_idx].decision_function(inp)
                     reranker_score = np.clip(expit(raw), 1e-6, 1.0)
+                    
                 else:
                     reranker_score = 0
                 
@@ -207,7 +218,9 @@ class MLModel():
                 entity_fused[i, global_idx] = fused
                 
         entity_fused = entity_fused.tocsr()
-        cluster_fused = entity_fused.dot(C)
+        
+        entity_fused_aligned = entity_fused[:, self.local_to_global_idx]
+        cluster_fused = entity_fused_aligned.dot(C)
         
         return csr_matrix(cluster_fused)
         
@@ -237,6 +250,7 @@ class MLModel():
         
         self.cluster_model = cluster_model
         del cluster_model
+        gc.collect()
         
         # Retrieve C
         C = self.cluster_model.c_node
@@ -256,6 +270,7 @@ class MLModel():
          
         self.matcher_model = matcher_model 
         del matcher_model
+        gc.collect()
         
         M_TFN = self.matcher_model.m_node
         M_MAN = self.matcher_model.model.predict(X_train)
@@ -269,17 +284,22 @@ class MLModel():
                              M_MAN, 
                              cluster_labels,
                              local_to_global_idx=self.local_to_global_idx,
+                             layer=self.layer,
                              n_label_workers=self.n_workers
                              )
         
         self.reranker_model = reranker_model
         del reranker_model
+        gc.collect()
+        
+        # Dont predict fused scores if no layer ?
         
         print("Fusing Scores")
         fused_scores = self.fused_predict(X_train, Z_train, C)
         # print(fused_scores)
         self.fused_scores = fused_scores
         del fused_scores
+        gc.collect()
         
         
 class HierarchicaMLModel():
@@ -290,6 +310,7 @@ class HierarchicaMLModel():
                  reranker_config=None, 
                  min_leaf_size=20,
                  max_leaf_size=None,
+                 cut_half_cluster=False,
                  n_workers=8,
                  layer=1):
         
@@ -298,6 +319,7 @@ class HierarchicaMLModel():
         self.reranker_config = reranker_config
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
+        self.cut_half_cluster=cut_half_cluster
         self.n_workers = n_workers
         
         self._hmodel = []
@@ -445,6 +467,7 @@ class HierarchicaMLModel():
             sparse_feats = csr_matrix(feat_node)
             
             X_aug = hstack([X_node, sparse_feats], format="csr") # Combine the two 
+            X_aug = normalize(X_aug, norm="l2", axis=1)
             
             inputs.append((X_aug, Y_node, Z_node, local_to_global_next, global_to_local_next))
             
@@ -457,13 +480,14 @@ class HierarchicaMLModel():
         
         inputs = [(X_train, Y_train, Z_train, local_to_global, global_to_local)]
         
-        for _ in range(self.layers):
+        for layer in range(self.layers):
             
             next_inputs = []
             ml_list = []
             layer_failed = False
             
-            # self.clustering_config["kwargs"]["n_clusters"] = int(max(2, self.clustering_config["kwargs"]["n_clusters"] / 2))
+            if self.cut_half_cluster and layer > 0:
+                self.clustering_config["kwargs"]["n_clusters"] = int(max(2, self.clustering_config["kwargs"]["n_clusters"] / 2))
             
             for X_node, Y_node, Z_node, local_to_label_node, global_to_local_node in inputs:
                 
@@ -472,7 +496,8 @@ class HierarchicaMLModel():
                              reranker_config=self.reranker_config,
                              min_leaf_size=self.min_leaf_size,
                              max_leaf_size=self.max_leaf_size,
-                             n_workers=self.n_workers
+                             layer=layer,
+                             n_workers=self.n_workers,
                             )
                 
                 ml._local_to_global_idx = local_to_global
@@ -508,6 +533,10 @@ class HierarchicaMLModel():
                 break
             
             self.hmodel.append(ml_list)
+            
+            del ml_list
+            gc.collect()
+            
             # reformat inputs for next iteration: drop cluster id and label_idx
             inputs = next_inputs
             

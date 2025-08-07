@@ -1,7 +1,6 @@
 import numpy as np
 
-from sklearn.preprocessing import MultiLabelBinarizer
-
+from sklearn.preprocessing import MultiLabelBinarizer, normalize
 
 class LabelEmbeddingFactory():
         
@@ -42,6 +41,6 @@ class LabelEmbeddingFactory():
                 Z.append(z_ell)
 
         Z = np.vstack(Z)  # shape: [num_labels, feature_dim] # label/entity embeddings
-
+        Z = normalize(Z, norm="l2", axis=1)
         return Z
     

@@ -1,6 +1,12 @@
 import os
 import time
 
+import platform
+
+if platform.machine() == 'aarch64':  # ARM only
+    os.environ['LD_PRELOAD'] = '/lib/aarch64-linux-gnu/libgomp.so.1'
+
+# LD_PRELOAD=/lib/aarch64-linux-gnu/libgomp.so.1
 import numpy as np
 
 from xmr4el.featurization.preprocessor import Preprocessor
@@ -141,6 +147,30 @@ def main():
         }
     }
     
+    """
+    reranker_config = {
+        "type": "lightgbmclassifier",
+        "kwargs": {
+            "boosting_type": "gbdt",
+            # "objective": "binary",              # REQUIRED for OneVsRest
+            "learning_rate": 0.05,
+            "n_estimators": 200,
+            "max_depth": 7,
+            "min_data_in_leaf": 10,
+            "feature_fraction": 0.8,
+            "bagging_fraction": 0.8,
+            "bagging_freq": 5,
+            "lambda_l1": 1.0,
+            "lambda_l2": 1.0,
+            "class_weight": "balanced",
+            "n_jobs": -1,
+            "random_state": 42,
+            "verbosity": -1,
+            "force_col_wise": True  # Faster for sparse
+        }
+    }
+    """
+    
     training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
     
@@ -153,9 +183,10 @@ def main():
     raw_labels = train_data["labels"]
     X_cross_train = train_data["corpus"] # list of lists
     
-    min_leaf_size = 20
+    min_leaf_size = 10
     max_leaf_size = 200
-    depth = 4
+    cut_half_cluster=True
+    depth = 2
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
@@ -165,9 +196,10 @@ def main():
                     reranker_config=reranker_config,
                     min_leaf_size=min_leaf_size,
                     max_leaf_size=max_leaf_size,
-                    n_workers=10,
+                    cut_half_cluster=cut_half_cluster,
+                    n_workers=8,
                     depth=depth,
-                    emb_flag=1
+                    emb_flag=2
                     )
     
     xmodel.train(X_cross_train, raw_labels)

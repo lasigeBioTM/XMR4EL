@@ -1,5 +1,5 @@
 import importlib
-import logging
+import platform
 import os
 import json
 import pickle
@@ -9,7 +9,6 @@ import torch
 import multiprocessing
 
 import numpy as np
-# import lightgbm as lgb
 
 from abc import ABCMeta
 
@@ -17,6 +16,8 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC as SVC
 from sklearn.multiclass import OneVsRestClassifier
+
+from lightgbm import LGBMClassifier
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -370,8 +371,8 @@ class SklearnSGDClassifier(ClassifierModel):
     def decision_function(self, X):
         return self.model.decision_function(X)
 
-    def predict_proba(self, X):
-        return self.model.predict_proba(X) 
+    # def predict_proba(self, X):
+    #     return self.model.predict_proba(X) 
     
     def classes(self):
         return self.model.classes_
@@ -682,7 +683,7 @@ class LightGBMClassifier(ClassifierModel):
         return model
 
     @classmethod
-    def train(cls, X_train, y_train, config={}, dtype=np.float32):
+    def train(cls, X_train, y_train, config={}, dtype=np.float32, onevsrest=False):
         """Train on a corpus.
 
         Args:
@@ -716,13 +717,16 @@ class LightGBMClassifier(ClassifierModel):
             "random_state": None,
             "n_jobs": -1,                     # or -1 for all cores
             "importance_type": "split",         # 'split' or 'gain'
+            "verbosity": -1,
             **{"num_class": len(np.unique(y_train))}
             # "**kwargs": {...}                # Additional parameters if needed
         }
 
         try:
             config = {**defaults, **config}
-            model = lgb.LGBMClassifier(**config)
+            model = LGBMClassifier(**config)
+            if onevsrest:
+                model = OneVsRestClassifier(model, n_jobs=config["n_jobs"])
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"

@@ -45,32 +45,29 @@ class TextEncoder():
         self._dimension_model = value
         
     def save(self, save_dir):
-        os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
-    
+        os.makedirs(save_dir, exist_ok=True)
+
         state = self.__dict__.copy()
-        
-        models = ["vectorizer_model", "dimension_model"] # reranker
+        models = ["vectorizer_model", "dimension_model"]
         models_data = [getattr(self, model_name, None) for model_name in models]
 
         for idx, model in enumerate(models_data):
-            if model is not None:  # Ensure model exists before saving
+            if model is not None:
                 model_path = os.path.join(save_dir, models[idx])
-                # Handle models with different save methods
                 if hasattr(model, 'save'):
                     model.save(model_path)
                 else:
-                    # For models without save method, use joblib or pickle
                     try:
                         joblib.dump(model, f"{model_path}.joblib")
                     except ImportError:
                         with open(f"{model_path}.pkl", "wb") as f:
                             pickle.dump(model, f)
-                            
-                state.pop(model, None) # Delete the model
-        
+                state.pop(models[idx], None)
+
         with open(os.path.join(save_dir, "text_encoder.pkl"), "wb") as fout:
             pickle.dump(state, fout)
-    
+
+
     @classmethod
     def load(cls, load_dir):
         text_encoder_path = os.path.join(load_dir, "text_encoder.pkl")
@@ -94,7 +91,10 @@ class TextEncoder():
             if os.path.exists(model_path) and model_class is not None:
                 setattr(model, model_name, model_class.load(model_path))
             else:
-                raise "Some Model is does not have an load() method"
+                if model.flag == 3:
+                    setattr(model, model_name, None)
+                else:
+                    raise Exception("Something with the loading the models is not right")
             
         return model
     
@@ -144,48 +144,65 @@ class TextEncoder():
         return transformer_embeddings
         
     def encode(self, X_test):
-        """Encode the training data"""
-        
-        X_tfidf, vec_model = self._encode_text_using_text_vectorizer(X_test, self.vectorizer_config) # sparse
-        
-        reduced_x_tfidf, dim_model = self._reduce_dimensions(X_tfidf, self.dimension_config) # dense
-        if dim_model is None:
-            reduced_x_tfidf = X_tfidf # sparse
-        else:
-            reduced_x_tfidf = csr_matrix(reduced_x_tfidf) # sparse
-        
-        if self.flag == 2:
-            X_transformer = self._encode_text_using_transformer(X_test, self.transformer_config) # dense
-            
-            sparse_X_transformer = csr_matrix(X_transformer) # sparse
-            concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
-            
+        """Encode the training data."""
+        use_tfidf = self.flag in [1, 2]
+        use_transformer = self.flag in [2, 3]
+
+        if use_tfidf:
+            X_tfidf, vec_model = self._encode_text_using_text_vectorizer(X_test, self.vectorizer_config)
+            reduced_x_tfidf, dim_model = self._reduce_dimensions(X_tfidf, self.dimension_config)
+
+            if dim_model is None:
+                reduced_x_tfidf = X_tfidf  # already sparse
+            else:
+                reduced_x_tfidf = csr_matrix(reduced_x_tfidf)  # ensure sparse
+
+            self.vectorizer_model = vec_model
+            self.dimension_model = dim_model
+
+        if use_transformer:
+            X_transformer = self._encode_text_using_transformer(X_test, self.transformer_config)
+            sparse_X_transformer = csr_matrix(X_transformer)
+
+            if use_tfidf:
+                concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
+            else:
+                concat_emb = sparse_X_transformer
         else:
             concat_emb = reduced_x_tfidf
-        
+
         concat_emb = normalize(concat_emb, norm="l2", axis=1)
-
-        self.vectorizer_model = vec_model
-        self.dimension_model = dim_model
-
         return concat_emb
     
     def predict(self, X_text_query):
-        X_tfidf_query = self._predict_text_using_text_vectorizer(X_test=X_text_query, vec_model=self.vectorizer_model)
-    
-        if self.dimension_model is None:
-            reduced_x_tfidf = X_tfidf_query
-        else:
-            reduced_x_tfidf = csr_matrix(self._predict_dimension(X_tfidf_query, self.dimension_model))
-            
-        if self.flag == 2:
-            X_transformer = self._predict_text_using_transformer(X_test=X_text_query, transformer_config=self.transformer_config)
+        """Encode query data for prediction."""
+        use_tfidf = self.flag in [1, 2]
+        use_transformer = self.flag in [2, 3]
+
+        if use_tfidf:
+            X_tfidf_query = self._predict_text_using_text_vectorizer(
+                X_test=X_text_query, vec_model=self.vectorizer_model
+            )
+
+            if self.dimension_model is None:
+                reduced_x_tfidf = X_tfidf_query
+            else:
+                reduced_x_tfidf = csr_matrix(
+                    self._predict_dimension(X_tfidf_query, self.dimension_model)
+                )
+
+        if use_transformer:
+            X_transformer = self._predict_text_using_transformer(
+                X_test=X_text_query, transformer_config=self.transformer_config
+            )
             sparse_X_transformer = csr_matrix(X_transformer)
-            concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
-        
+
+            if use_tfidf:
+                concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
+            else:
+                concat_emb = sparse_X_transformer
         else:
             concat_emb = reduced_x_tfidf
-            
+
         concat_emb = normalize(concat_emb, norm="l2", axis=1)
-        
         return concat_emb
