@@ -193,6 +193,11 @@ class MLModel():
         if self.layer > 0:
             Z = np.hstack([Z, np.zeros((L_local, 3 * self.layer), dtype=Z.dtype)])
         
+        first_model = next(iter(self.reranker_model.model_dict.values()))
+        
+        has_predict_proba = True
+        if first_model.config["type"] == "sklearnsgdclassifier" and first_model.config["kwargs"]["loss"] == "hinge":
+            has_predict_proba = False
 
         for i in range(N):
             row = matcher_scores.getrow(i)
@@ -207,8 +212,13 @@ class MLModel():
                     # Create reranker input: concat(mention_emb, label_emb)
                     label_emb = Z[local_idx]
                     inp = np.hstack([mention_emb, label_emb]).reshape(1, -1)
-                    raw = self.reranker_model.model_dict[global_idx].decision_function(inp)
-                    reranker_score = np.clip(expit(raw), 1e-6, 1.0)
+                    
+                    if has_predict_proba:
+                        raw = self.reranker_model.model_dict[global_idx].predict_proba(inp)
+                        reranker_score = np.clip(raw, 1e-6, 1.0)   
+                    else:              
+                        raw = self.reranker_model.model_dict[global_idx].decision_function(inp)
+                        reranker_score = np.clip(expit(raw), 1e-6, 1.0)
                     
                 else:
                     reranker_score = 0

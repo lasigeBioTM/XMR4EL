@@ -129,7 +129,6 @@ def main():
         }
     }
 
-    """
     reranker_config = {
         "type": "sklearnsgdclassifier",
         "kwargs": {
@@ -147,8 +146,8 @@ def main():
             "eta0": 0.01,                  # Higher initial learning rate for ranking
         }
     }
-    """
     
+    """
     reranker_config = {
         "type": "lightgbmclassifier",
         "kwargs": {
@@ -171,6 +170,7 @@ def main():
             "force_col_wise": True  # Faster for sparse
         }
     }
+    """
     
     training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
@@ -178,7 +178,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=400
+        truncate_data=200
         )
     
     raw_labels = train_data["labels"]
@@ -200,7 +200,7 @@ def main():
                     cut_half_cluster=cut_half_cluster,
                     n_workers=6,
                     depth=depth,
-                    emb_flag=3
+                    emb_flag=1
                     )
     
     xmodel.train(X_cross_train, raw_labels)
