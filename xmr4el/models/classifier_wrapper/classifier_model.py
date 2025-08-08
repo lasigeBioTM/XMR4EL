@@ -145,6 +145,15 @@ class ClassifierModel(metaclass=ClassifierMeta):
     
     def classes(self):
         return self.model.classes()
+    
+    def coef(self):
+        return self.model.coef()
+    
+    def intercept(self):
+        return self.model.intercept()
+    
+    def is_linear_model(self):
+        return self.model.is_linear_model()
 
     @staticmethod
     def load_config_from_args(args):
@@ -270,6 +279,15 @@ class SklearnLogisticRegression(ClassifierModel):
     
     def classes(self):
         return self.model.classes_
+    
+    def coef(self):
+        return self.model.coef_
+    
+    def intercept(self):
+        return self.model.intercept_
+    
+    def is_linear_model(self):
+        return True
 
 
 class SklearnSGDClassifier(ClassifierModel):
@@ -370,12 +388,18 @@ class SklearnSGDClassifier(ClassifierModel):
 
     def decision_function(self, X):
         return self.model.decision_function(X)
-
-    # def predict_proba(self, X):
-    #     return self.model.predict_proba(X) 
     
     def classes(self):
         return self.model.classes_
+    
+    def coef(self):
+        return self.model.coef_
+    
+    def intercept(self):
+        return self.model.intercept_
+
+    def is_linear_model(self):
+        return True
     
 
 class SklearnRandomForestClassifier(ClassifierModel):
@@ -468,6 +492,9 @@ class SklearnRandomForestClassifier(ClassifierModel):
     def predict(self, predict_input):
         return self.model.predict(predict_input)
 
+    def is_linear_model(self):
+        return False
+
 
 class SklearnSupportVectorClassification(ClassifierModel):
     """SKlearn SVC"""
@@ -554,6 +581,9 @@ class SklearnSupportVectorClassification(ClassifierModel):
 
     def predict(self, predict_input):
         return self.model.predict(predict_input)
+    
+    def is_linear_model(self):
+        return False
 
 class CumlLogisticRegression(ClassifierModel):
     """Cuml Logistic Regression"""
@@ -739,3 +769,6 @@ class LightGBMClassifier(ClassifierModel):
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)
+    
+    def is_linear_model(self):
+        return False

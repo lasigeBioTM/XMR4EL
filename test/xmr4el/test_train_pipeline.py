@@ -62,7 +62,7 @@ def main():
     
     clustering_config = {
         "type": "balancedkmeans",
-        "kwargs": {"n_clusters": 6}
+        "kwargs": {"n_clusters": 2}
     }
     
     """
@@ -183,10 +183,10 @@ def main():
     raw_labels = train_data["labels"]
     X_cross_train = train_data["corpus"] # list of lists
     
-    min_leaf_size = 10
+    min_leaf_size = 5
     max_leaf_size = 200
-    cut_half_cluster=True
-    depth = 2
+    cut_half_cluster=False
+    depth = 4
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
@@ -197,9 +197,9 @@ def main():
                     min_leaf_size=min_leaf_size,
                     max_leaf_size=max_leaf_size,
                     cut_half_cluster=cut_half_cluster,
-                    n_workers=8,
+                    n_workers=6,
                     depth=depth,
-                    emb_flag=2
+                    emb_flag=3
                     )
     
     xmodel.train(X_cross_train, raw_labels)

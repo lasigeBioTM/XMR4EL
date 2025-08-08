@@ -66,10 +66,10 @@ def main():
     with open(file_test_input, "r") as file:
         input_texts = file.read().splitlines()
 
-    # train_disease_100
+    # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
-    trained_xtree = XModel.load(
-        "test/test_data/saved_trees/xmodel_depth2_emb_flag_3" # 5 excluded
+    trained_xtree = XModel.load( # better 5
+        "test/test_data/saved_trees/xmodel_depth5_emb_flag_3" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
