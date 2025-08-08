@@ -129,6 +129,7 @@ def main():
         }
     }
 
+    """
     reranker_config = {
         "type": "sklearnsgdclassifier",
         "kwargs": {
@@ -146,13 +147,14 @@ def main():
             "eta0": 0.01,                  # Higher initial learning rate for ranking
         }
     }
-    
     """
+    
     reranker_config = {
         "type": "lightgbmclassifier",
         "kwargs": {
             "boosting_type": "gbdt",
             # "objective": "binary",              # REQUIRED for OneVsRest
+            "device": "cpu",
             "learning_rate": 0.05,
             "n_estimators": 200,
             "max_depth": 7,
@@ -169,7 +171,6 @@ def main():
             "force_col_wise": True  # Faster for sparse
         }
     }
-    """
     
     training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
@@ -186,7 +187,7 @@ def main():
     min_leaf_size = 5
     max_leaf_size = 200
     cut_half_cluster=False
-    depth = 4
+    depth = 5
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
