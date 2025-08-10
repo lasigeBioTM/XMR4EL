@@ -748,15 +748,26 @@ class BalancedKMeans(ClusteringModel):
         """
         defaults = {
             "n_clusters": 8,
+            "distance": "cosine",
+            "tol": 1e-4,
+            "tqdm_flag": True,
+            "iter_limit": 400,
+            "iter_k": None,
+            "device": None,
+            "gamma_for_soft_dtw": 0.001,
         }
 
         try:
             config = {**defaults, **config}
-            model = PyTorchBalancedKMeans(n_clusters=config["n_clusters"], balanced=True)
+            device = torch.device("cuda" if config["device"] == "gpu" and torch.cuda.is_available() else "cpu")
+            model = PyTorchBalancedKMeans(n_clusters=config["n_clusters"], balanced=True, device=device)
         except TypeError:
             raise Exception(
                 f"clustering config {config} contains unexpected keyword arguments for CumlKMeans Clustering"
             )
+
+        config.pop("n_clusters")
+        config.pop("device")
 
         # print(config["n_clusters"])
         # print(type(trn_corpus))
@@ -769,7 +780,7 @@ class BalancedKMeans(ClusteringModel):
             # You might want to remove or fix these vectors, e.g.:
             trn_corpus = trn_corpus[norms > 0]
         
-        cluster_labels = model.fit(X=trn_corpus, distance="cosine")
+        cluster_labels = model.fit(X=trn_corpus, **config)
         cluster_labels = cluster_labels.cpu().numpy()
         model = {"cluster_labels": cluster_labels}
         return cls(config, model)

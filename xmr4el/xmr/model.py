@@ -261,13 +261,15 @@ class XModel():
         else:
             for lbl in label_indices:
                 model = model_dict[lbl]
-                raw_preds = model.predict(feat_mat, raw_score=True)
-                rerank_scores[lbl] = expit(raw_preds)
+                pos_index = list(model.classes()).index(1)
+                raw_preds = model.predict_proba(feat_mat)[:, pos_index]
+                rerank_scores[lbl] = raw_preds
 
         return rerank_scores
 
     def _predict(i, X_query, z_layer, model, initial_labels,
                 gold_labels, topk, alpha, beam_size, n_layers, G):
+        print(i)
         label_scores = {}
         gold_set = set(gold_labels[i]) if gold_labels else set()
 

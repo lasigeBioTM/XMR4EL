@@ -181,9 +181,7 @@ class MLModel():
     def fused_predict(self, X, Z, C, alpha=0.5):
         
         # Get weak matcher scores for all clusters
-        matcher_scores = self.matcher_model.model.predict_proba(X)
-        matcher_scores = csr_matrix(matcher_scores)
-        
+        matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X))
         N, K_next = matcher_scores.shape
         L_local = Z.shape[0]
         G = int(self.local_to_global_idx.max()) + 1  # total number of global labels
@@ -206,7 +204,6 @@ class MLModel():
            
             for local_idx, matcher_score in zip(local_idxs, match_scores):
                 global_idx = int(self.local_to_global_idx[local_idx])
-                reranker_score = 0
                 
                 if global_idx in self.reranker_model.model_dict:
                     # Create reranker input: concat(mention_emb, label_emb)
@@ -215,20 +212,19 @@ class MLModel():
                     
                     if has_predict_proba:
                         raw = self.reranker_model.model_dict[global_idx].predict_proba(inp)
-                        reranker_score = np.clip(raw, 1e-6, 1.0)   
+                        reranker_score = np.clip(raw[0, 1], 1e-6, 1.0)   
                     else:              
                         raw = self.reranker_model.model_dict[global_idx].decision_function(inp)
-                        reranker_score = np.clip(expit(raw), 1e-6, 1.0)
+                        reranker_score = np.clip(expit(raw)[0], 1e-6, 1.0)
                     
                 else:
-                    reranker_score = 0
+                    reranker_score = 1.0
                 
                 # Lp-Hinge
                 fused = (matcher_score ** (1 - alpha)) * (reranker_score ** alpha)
                 entity_fused[i, global_idx] = fused
                 
         entity_fused = entity_fused.tocsr()
-        
         entity_fused_aligned = entity_fused[:, self.local_to_global_idx]
         cluster_fused = entity_fused_aligned.dot(C)
         

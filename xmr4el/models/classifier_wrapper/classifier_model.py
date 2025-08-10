@@ -770,5 +770,8 @@ class LightGBMClassifier(ClassifierModel):
     def predict_proba(self, X):
         return self.model.predict_proba(X)
     
+    def classes(self):
+        return self.model.classes_
+    
     def is_linear_model(self):
         return False
