@@ -766,9 +766,6 @@ class BalancedKMeans(ClusteringModel):
                 f"clustering config {config} contains unexpected keyword arguments for CumlKMeans Clustering"
             )
 
-        config.pop("n_clusters")
-        config.pop("device")
-
         # print(config["n_clusters"])
         # print(type(trn_corpus))
         trn_corpus = torch.from_numpy(trn_corpus)
@@ -780,7 +777,14 @@ class BalancedKMeans(ClusteringModel):
             # You might want to remove or fix these vectors, e.g.:
             trn_corpus = trn_corpus[norms > 0]
         
-        cluster_labels = model.fit(X=trn_corpus, **config)
+        cluster_labels = model.fit(X=trn_corpus, 
+                                   distance=config["distance"], 
+                                   tol=config["tol"], 
+                                   tqdm_flag=config["tqdm_flag"],
+                                   iter_limit=config["iter_limit"], 
+                                   gamma_for_soft_dtw=config["gamma_for_soft_dtw"],
+                                   iter_k=config["iter_k"]
+                                   )
         cluster_labels = cluster_labels.cpu().numpy()
         model = {"cluster_labels": cluster_labels}
         return cls(config, model)
