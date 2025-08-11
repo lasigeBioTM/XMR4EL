@@ -365,7 +365,7 @@ class XModel():
             pad_width = 3 * layer_idx
             z_layer.append(np.hstack([Z, np.zeros((G, pad_width), dtype=Z.dtype)]))
 
-        results = Parallel(n_jobs=n_jobs, backend="threading", verbose=10)( # was locky
+        results = Parallel(n_jobs=n_jobs, backend="locky", verbose=10)( # was locky
             delayed(XModel._predict)(
                 i, X_query, z_layer, self.model, self.initial_labels,
                 gold_labels, topk, alpha, beam_size, n_layers, G
