@@ -179,7 +179,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=200
+        truncate_data=400
         )
     
     raw_labels = train_data["labels"]
@@ -199,9 +199,9 @@ def main():
                     min_leaf_size=min_leaf_size,
                     max_leaf_size=max_leaf_size,
                     cut_half_cluster=cut_half_cluster,
-                    n_workers=6,
+                    n_workers=8,
                     depth=depth,
-                    emb_flag=1
+                    emb_flag=3
                     )
     
     xmodel.train(X_cross_train, raw_labels)
