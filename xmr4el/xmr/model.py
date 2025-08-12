@@ -1,8 +1,7 @@
 import os
-import gc
 
 os.makedirs("/app/joblib_tmp", exist_ok=True)
-os.environ["JOBLIB_TEMP_FOLDER"] = "/app/joblib_tmp"
+os.environ["JOBLIB_TEMP_FOLDER"] = "/app/temp"
 
 import joblib
 import pickle

@@ -16,7 +16,10 @@ class ReRankerTrainer:
     @staticmethod
     def process_label(global_idx, local_idx, X, Z, Y_col, M_bar, M_mentions_col, cluster_idx, config):
         positive_indices = Y_col.nonzero()[0]
-        if len(positive_indices) <= 1:
+        num_pos = len(positive_indices)
+        
+        # Need at least 2 positives to train
+        if num_pos <= 1:
             return (global_idx, None)
 
         M_mentions_col = M_bar[:, cluster_idx]
@@ -39,7 +42,11 @@ class ReRankerTrainer:
         
         negative_scores = scores[cluster_negative_mask]
         negative_indices_sorted = np.argsort(-negative_scores)
-        negative_candidates = candidate_indices[cluster_negative_mask][negative_indices_sorted][:1500] # Hard Coded
+        negative_candidates = candidate_indices[cluster_negative_mask][negative_indices_sorted] # [:2000] # Hard Coded
+
+        # Cap negatives to 5* positives
+        max_neg = num_pos * 15
+        negative_candidates = negative_candidates[:max_neg]
 
         selected_indices = np.concatenate([positive_indices, negative_candidates])
         Y_valid = np.zeros(len(selected_indices), dtype=np.int8)
@@ -49,8 +56,6 @@ class ReRankerTrainer:
         label_tile = np.tile(label_emb, (X_valid.shape[0], 1))
         X_combined = hstack([X_valid, label_tile])
         X_combined = csr_matrix(X_combined)
-        
-        # print(local_idx, np.unique(Y_valid), Y_valid)
 
         print(f"[PID {os.getpid()}] Training label {global_idx} with {len(positive_indices)} positives, {len(negative_candidates)} hard negatives")
         model = ClassifierModel.train(X_combined, Y_valid, config, onevsrest=False) # True
