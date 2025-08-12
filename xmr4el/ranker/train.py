@@ -39,7 +39,7 @@ class ReRankerTrainer:
         
         negative_scores = scores[cluster_negative_mask]
         negative_indices_sorted = np.argsort(-negative_scores)
-        negative_candidates = candidate_indices[cluster_negative_mask][negative_indices_sorted][:500] # Hard Coded
+        negative_candidates = candidate_indices[cluster_negative_mask][negative_indices_sorted][:1500] # Hard Coded
 
         selected_indices = np.concatenate([positive_indices, negative_candidates])
         Y_valid = np.zeros(len(selected_indices), dtype=np.int8)
