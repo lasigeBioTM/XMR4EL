@@ -182,7 +182,7 @@ class MLModel():
         
         # Get weak matcher scores for all clusters
         matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X))
-        N, K_next = matcher_scores.shape
+        N, _ = matcher_scores.shape
         L_local = Z.shape[0]
         G = int(self.local_to_global_idx.max()) + 1  # total number of global labels
         

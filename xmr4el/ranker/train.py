@@ -96,7 +96,7 @@ class ReRankerTrainer:
 
     @staticmethod
     def train(X, Y, Z, M_TFN, M_MAN, cluster_labels, config, local_to_global_idx,
-              layer=None, n_label_workers=4, parallel_backend="loky"):
+              layer=None, n_label_workers=4, parallel_backend="threading"):
         """
         Pre-slice mentions by cluster and run per-label reranker training in parallel.
 
