@@ -89,7 +89,7 @@ class ReRanker():
         return model
         
     def train(self, X, Y, Z, M_TFN, M_MAN, cluster_labels, local_to_global_idx, layer, n_label_workers=8):
-        self.reranker_config["kwargs"]["n_jobs"] = 1
+        # self.reranker_config["kwargs"]["n_jobs"] = 1
         
         reranker_models = ReRankerTrainer.train(X=X,
                                                 Y=Y,

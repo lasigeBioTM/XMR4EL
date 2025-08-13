@@ -153,7 +153,7 @@ def main():
         "type": "lightgbmclassifier",
         "kwargs": {
             "boosting_type": "gbdt",
-            # "objective": "binary",              # REQUIRED for OneVsRest
+            "objective": "binary",              # REQUIRED for OneVsRest
             "device": "cpu",
             "learning_rate": 0.05,
             "n_estimators": 200,
@@ -201,7 +201,7 @@ def main():
                     cut_half_cluster=cut_half_cluster,
                     n_workers=8,
                     depth=depth,
-                    emb_flag=3
+                    emb_flag=1
                     )
     
     xmodel.train(X_cross_train, raw_labels)

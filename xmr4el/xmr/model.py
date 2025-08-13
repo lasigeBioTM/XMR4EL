@@ -260,6 +260,7 @@ class XModel():
 
             # Group beam items by (layer_idx, ml) to batch predict matcher scores
             beam_groups = {}
+            
             for (layer_idx, ml, cum_score, x_aug) in beam:
                 beam_groups.setdefault((layer_idx, ml), []).append((cum_score, x_aug))
 
