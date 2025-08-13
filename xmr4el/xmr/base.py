@@ -13,9 +13,12 @@ from sklearn.preprocessing import normalize
 
 from typing import Counter
 
+from joblib import Parallel, delayed
+
 from xmr4el.clustering.model import Clustering
 from xmr4el.matcher.model import Matcher
 from xmr4el.ranker.model import ReRanker
+
 
 
 class MLModel():
@@ -178,56 +181,70 @@ class MLModel():
                 f"Reranker Model: {"✔" if self.reranker_model is not None else "✖"}\n" 
         return _str
     
-    def fused_predict(self, X, Z, C, alpha=0.5):
-        
-        # Get weak matcher scores for all clusters
+    def fused_predict(self, X, Z, C, alpha=0.5, n_jobs=None, backend="threading"):
+        """
+        Simple per-mention parallelized fused_predict.
+        backend: 'loky' (processes) or 'threading'
+        n_jobs: None => auto (cpu_count()-1)
+        """
+        if n_jobs is None:
+            n_jobs = max(1, (os.cpu_count() or 2) - 1)
+
         matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X))
         N, _ = matcher_scores.shape
         L_local = Z.shape[0]
-        G = int(self.local_to_global_idx.max()) + 1  # total number of global labels
-        
-        entity_fused = lil_matrix((N, G))
-        
+        G = int(self.local_to_global_idx.max()) + 1
+
+        # prepad Z if layer > 0
         if self.layer > 0:
             Z = np.hstack([Z, np.zeros((L_local, 3 * self.layer), dtype=Z.dtype)])
-        
-        first_model = next(iter(self.reranker_model.model_dict.values()))
-        
+
+        # detect reranker type once
+        first_model = next(iter(self.reranker_model.model_dict.values())) if self.reranker_model else None
         has_predict_proba = True
-        if first_model.config["type"] == "sklearnsgdclassifier" and first_model.config["kwargs"]["loss"] == "hinge":
+        if first_model is not None and first_model.config.get("type") == "sklearnsgdclassifier" and first_model.config.get("kwargs", {}).get("loss") == "hinge":
             has_predict_proba = False
 
-        for i in range(N):
+        def process_row(i):
             row = matcher_scores.getrow(i)
-            local_idxs, match_scores = row.indices, row.data  
+            local_idxs, match_scores = row.indices, row.data
+            # using .toarray() for each row; if memory allows, convert X.toarray() once outside
             mention_emb = X[i].toarray().ravel()
-           
+
+            out = []
             for local_idx, matcher_score in zip(local_idxs, match_scores):
                 global_idx = int(self.local_to_global_idx[local_idx])
-                
-                if global_idx in self.reranker_model.model_dict:
-                    # Create reranker input: concat(mention_emb, label_emb)
+
+                if self.reranker_model and global_idx in self.reranker_model.model_dict:
                     label_emb = Z[local_idx]
                     inp = np.hstack([mention_emb, label_emb]).reshape(1, -1)
-                    
                     if has_predict_proba:
                         raw = self.reranker_model.model_dict[global_idx].predict_proba(inp)
-                        reranker_score = np.clip(raw[0, 1], 1e-6, 1.0)   
-                    else:              
+                        reranker_score = np.clip(raw[0, 1], 1e-6, 1.0)
+                    else:
                         raw = self.reranker_model.model_dict[global_idx].decision_function(inp)
                         reranker_score = np.clip(expit(raw)[0], 1e-6, 1.0)
-                    
                 else:
                     reranker_score = 1.0
-                
-                # Lp-Hinge
+
                 fused = (matcher_score ** (1 - alpha)) * (reranker_score ** alpha)
-                entity_fused[i, global_idx] = fused
-                
-        entity_fused = entity_fused.tocsr()
+                out.append((i, global_idx, fused))
+            return out
+
+        # run in parallel
+        results = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
+            delayed(process_row)(i) for i in range(N)
+        )
+
+        # flatten results → build sparse matrix
+        rows, cols, data = [], [], []
+        for r in results:
+            for i, g, s in r:
+                rows.append(i); cols.append(g); data.append(s)
+
+        entity_fused = csr_matrix((data, (rows, cols)), shape=(N, G))
         entity_fused_aligned = entity_fused[:, self.local_to_global_idx]
         cluster_fused = entity_fused_aligned.dot(C)
-        
         return csr_matrix(cluster_fused)
         
         
