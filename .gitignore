@@ -3,6 +3,7 @@
 /test/test_data
 /_REEL
 /joblib_tmp
+/debug_folder
 
 .DS_store
 
