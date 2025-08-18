@@ -181,68 +181,68 @@ class MLModel():
                 f"Reranker Model: {"✔" if self.reranker_model is not None else "✖"}\n" 
         return _str
     
-    def fused_predict(self, X, Z, C, alpha=0.5, n_jobs=None, backend="threading"):
+    def fused_predict(self, X, Z, C, alpha=0.5):
         """
-        Simple per-mention parallelized fused_predict.
-        backend: 'loky' (processes) or 'threading'
-        n_jobs: None => auto (cpu_count()-1)
+        Fully vectorized fused_predict: matcher + reranker fusion, avoiding per-mention loops.
         """
-        if n_jobs is None:
-            n_jobs = max(1, (os.cpu_count() or 2) - 1)
-
-        matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X))
-        N, _ = matcher_scores.shape
+        N = X.shape[0]
         L_local = Z.shape[0]
         G = int(self.local_to_global_idx.max()) + 1
 
-        # detect reranker type once
-        first_model = next(iter(self.reranker_model.model_dict.values())) if self.reranker_model else None
-        has_predict_proba = True
-        if first_model is not None and first_model.config.get("type") == "sklearnsgdclassifier" and first_model.config.get("kwargs", {}).get("loss") == "hinge":
-            has_predict_proba = False
+        # --- matcher scores ---
+        matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X))
 
-        def process_row(i):
+        # --- flatten mention-local label pairs ---
+        rows_list, cols_list, matcher_flat = [], [], []
+        for i in range(N):
             row = matcher_scores.getrow(i)
-            local_idxs, match_scores = row.indices, row.data
-            # using .toarray() for each row; if memory allows, convert X.toarray() once outside
-            mention_emb = X[i].toarray().ravel()
+            local_idxs, scores = row.indices, row.data
+            rows_list.extend([i] * len(local_idxs))
+            cols_list.extend(local_idxs)
+            matcher_flat.extend(scores)
+        rows_list = np.array(rows_list)
+        cols_list = np.array(cols_list)
+        matcher_flat = np.array(matcher_flat)
 
-            out = []
-            for local_idx, matcher_score in zip(local_idxs, match_scores):
+        # --- reranker ---
+        reranker_score = np.ones(len(rows_list), dtype=np.float32)
+        if self.reranker_model:
+            X_dense = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
+            reranker_input = np.hstack([X_dense[rows_list], Z[cols_list]])
+
+            # reranker type detection
+            first_model = next(iter(self.reranker_model.model_dict.values()))
+            is_hinge = first_model.config.get("type") == "sklearnsgdclassifier" and \
+                    first_model.config.get("kwargs", {}).get("loss") == "hinge"
+
+            # vectorized per-label batch scoring
+            unique_labels = np.unique(cols_list)
+            for local_idx in unique_labels:
+                idx_mask = (cols_list == local_idx)
                 global_idx = int(self.local_to_global_idx[local_idx])
+                if global_idx not in self.reranker_model.model_dict:
+                    continue
+                mdl = self.reranker_model.model_dict[global_idx]
+                batch_inp = reranker_input[idx_mask]
 
-                if self.reranker_model and global_idx in self.reranker_model.model_dict:
-                    label_emb = Z[local_idx]
-                    inp = np.hstack([mention_emb, label_emb]).reshape(1, -1)
-                    if has_predict_proba:
-                        raw = self.reranker_model.model_dict[global_idx].predict_proba(inp)
-                        reranker_score = np.clip(raw[0, 1], 1e-6, 1.0)
+                try:
+                    if is_hinge:
+                        batch_scores = np.clip(expit(mdl.decision_function(batch_inp)), 1e-6, 1.0)
                     else:
-                        raw = self.reranker_model.model_dict[global_idx].decision_function(inp)
-                        reranker_score = np.clip(expit(raw)[0], 1e-6, 1.0)
-                else:
-                    reranker_score = 1.0
+                        batch_scores = np.clip(mdl.predict_proba(batch_inp)[:, 1], 1e-6, 1.0)
+                    reranker_score[idx_mask] = batch_scores
+                except Exception:
+                    reranker_score[idx_mask] = 1.0
 
-                fused = (matcher_score ** (1 - alpha)) * (reranker_score ** alpha)
-                out.append((i, global_idx, fused))
-            return out
+        # --- fuse matcher + reranker ---
+        fused = (matcher_flat ** (1 - alpha)) * (reranker_score ** alpha)
 
-        # run in parallel
-        results = Parallel(n_jobs=n_jobs, backend=backend, verbose=10)(
-            delayed(process_row)(i) for i in range(N)
-        )
+        # --- build entity fused matrix with local label alignment ---
+        entity_fused = csr_matrix((fused, (rows_list, cols_list)), shape=(N, L_local))
 
-        # flatten results → build sparse matrix
-        rows, cols, data = [], [], []
-        for r in results:
-            for i, g, s in r:
-                rows.append(i); cols.append(g); data.append(s)
-
-        entity_fused = csr_matrix((data, (rows, cols)), shape=(N, G))
-        entity_fused_aligned = entity_fused[:, self.local_to_global_idx]
-        cluster_fused = entity_fused_aligned.dot(C)
+        # --- project to clusters ---
+        cluster_fused = entity_fused.dot(C)  # shape (N, K), matches number of clusters
         return csr_matrix(cluster_fused)
-        
         
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
