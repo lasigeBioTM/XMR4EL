@@ -181,9 +181,10 @@ class MLModel():
                 f"Reranker Model: {"✔" if self.reranker_model is not None else "✖"}\n" 
         return _str
     
-    def fused_predict(self, X, Z, C, alpha=0.5):
+    def fused_predict(self, X, Z, C, alpha=0.5, batch_size=32768):
         """
-        Fully vectorized fused_predict: matcher + reranker fusion, avoiding per-mention loops.
+        Batched fused_predict: matcher + reranker fusion, memory-efficient.
+        Computes reranker scores in chunks to avoid exploding memory.
         """
         N = X.shape[0]
         L_local = Z.shape[0]
@@ -204,10 +205,11 @@ class MLModel():
         cols_list = np.array(cols_list)
         matcher_flat = np.array(matcher_flat)
 
-        # --- reranker ---
+        # --- prepare reranker input embeddings ---
         reranker_score = np.ones(len(rows_list), dtype=np.float32)
         if self.reranker_model:
             X_dense = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
+            global_idxs = np.array([self.local_to_global_idx[i] for i in cols_list])
             reranker_input = np.hstack([X_dense[rows_list], Z[cols_list]])
 
             # reranker type detection
@@ -215,35 +217,44 @@ class MLModel():
             is_hinge = first_model.config.get("type") == "sklearnsgdclassifier" and \
                     first_model.config.get("kwargs", {}).get("loss") == "hinge"
 
-            # vectorized per-label batch scoring
-            unique_labels = np.unique(cols_list)
-            for local_idx in unique_labels:
-                idx_mask = (cols_list == local_idx)
-                global_idx = int(self.local_to_global_idx[local_idx])
-                if global_idx not in self.reranker_model.model_dict:
-                    continue
-                mdl = self.reranker_model.model_dict[global_idx]
-                batch_inp = reranker_input[idx_mask]
+            # --- batch processing to limit memory ---
+            num_pairs = reranker_input.shape[0]
+            for start in range(0, num_pairs, batch_size):
+                end = min(start + batch_size, num_pairs)
+                batch_idx = slice(start, end)
+                batch_global_labels = global_idxs[batch_idx]
 
-                try:
-                    if is_hinge:
-                        batch_scores = np.clip(expit(mdl.decision_function(batch_inp)), 1e-6, 1.0)
-                    else:
-                        batch_scores = np.clip(mdl.predict_proba(batch_inp)[:, 1], 1e-6, 1.0)
-                    reranker_score[idx_mask] = batch_scores
-                except Exception:
-                    reranker_score[idx_mask] = 1.0
+                # unique labels in batch
+                unique_labels = np.unique(batch_global_labels)
+                batch_scores = np.ones(end - start, dtype=np.float32)
+
+                for g in unique_labels:
+                    mask = (batch_global_labels == g)
+                    if g not in self.reranker_model.model_dict:
+                        continue
+                    mdl = self.reranker_model.model_dict[g]
+                    inp = reranker_input[batch_idx][mask]
+
+                    try:
+                        if is_hinge:
+                            batch_scores[mask] = np.clip(expit(mdl.decision_function(inp)), 1e-6, 1.0)
+                        else:
+                            batch_scores[mask] = np.clip(mdl.predict_proba(inp)[:, 1], 1e-6, 1.0)
+                    except Exception:
+                        batch_scores[mask] = 1.0
+
+                reranker_score[batch_idx] = batch_scores
 
         # --- fuse matcher + reranker ---
         fused = (matcher_flat ** (1 - alpha)) * (reranker_score ** alpha)
 
-        # --- build entity fused matrix with local label alignment ---
+        # --- build entity fused matrix ---
         entity_fused = csr_matrix((fused, (rows_list, cols_list)), shape=(N, L_local))
 
         # --- project to clusters ---
-        cluster_fused = entity_fused.dot(C)  # shape (N, K), matches number of clusters
+        cluster_fused = entity_fused.dot(C)
         return csr_matrix(cluster_fused)
-        
+            
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
             X_train: X_processed
@@ -313,8 +324,12 @@ class MLModel():
         
         # Dont predict fused scores if no layer ?
         
+        base_alpha = 0.3
+        alpha_growth = 0.15  # increase per layer
+        alpha_dyn = min(0.9, base_alpha + self.layer * alpha_growth)
+        
         print("Fusing Scores")
-        fused_scores = self.fused_predict(X_train, Z_train, C)
+        fused_scores = self.fused_predict(X_train, Z_train, C, alpha=alpha_dyn)
         # print(fused_scores)
         self.fused_scores = fused_scores
         del fused_scores
