@@ -10,7 +10,7 @@ from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
 
 class Clustering():
-    """Matcher pipeline"""
+    """Clustering pipeline"""
     
     def __init__(self, 
                  clustering_config=None,

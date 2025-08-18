@@ -138,7 +138,7 @@ def main():
             "alpha": 0.0001,               # Stronger regularization (C=1/alpha)
             "max_iter": 1000,              # Ensure convergence
             "tol": 1e-4,
-            "class_weight": "balanced",    # Critical for imbalanced ranking data
+            "class_weight": {1: 10, 0: 1}, # Better for some reason # Emphasize positives # "class_weight": "balanced",    # Critical for imbalanced ranking data
             "n_jobs": -1,                  # Parallelize OvR if multi-label
             "random_state": 0,
             "verbose": 0,
@@ -201,7 +201,7 @@ def main():
                     cut_half_cluster=cut_half_cluster,
                     n_workers=8,
                     depth=depth,
-                    emb_flag=1
+                    emb_flag=3
                     )
     
     xmodel.train(X_cross_train, raw_labels)

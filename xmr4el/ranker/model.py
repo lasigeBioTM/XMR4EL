@@ -1,15 +1,9 @@
 import os
-import gc
-import psutil
 import pickle
 
 import numpy as np
 
-from scipy.sparse import csr_matrix
-
 from joblib import Memory
-
-from sklearn.preprocessing import normalize
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.ranker.train import ReRankerTrainer

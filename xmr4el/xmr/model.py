@@ -1,3 +1,4 @@
+from collections import defaultdict
 import os
 
 os.makedirs("/app/joblib_tmp", exist_ok=True)
@@ -5,13 +6,15 @@ os.environ["JOBLIB_TEMP_FOLDER"] = "/app/temp"
 
 import joblib
 import pickle
-import heapq
+import pandas as pd
 
 import numpy as np
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, hstack
 from scipy.special import expit
 from joblib import Parallel, delayed
+
+from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
@@ -224,161 +227,161 @@ class XModel():
 
         self.model = hml
 
+    def predict(self, X_text, gold_labels=None, topk=10, beam_size=5, alpha=0.5, n_jobs=-1, debug=False, n_debug=5, dynamic_alpha=False):
+        """
+        PECOS-style inference with per-layer Z augmentation (+3 * layer),
+        row-wise Z normalization, hit-tracking, optional debug table, and dynamic alpha.
+        """
+        def _prepare_layer_infer(X_node, Z_node, mention_indices, C, fused_scores, top_clusters_idx):
+            inputs = []
+            K = C.shape[1]
+            fused_dense = fused_scores.toarray() if hasattr(fused_scores, "toarray") else np.asarray(fused_scores)
 
-    @staticmethod
-    def _batch_rerank_scores(model_dict, feat_mat):
-        if not model_dict:
-            return {}
+            for c in range(K):
+                mask = np.any(top_clusters_idx == c, axis=1)
+                if not np.any(mask):
+                    continue
+                X_sub = X_node[mask]
+                mentions_sub = mention_indices[mask]
 
-        first_model = next(iter(model_dict.values()))
-        if first_model.is_linear_model():
-            labels = list(model_dict.keys())
-            coef_mat = np.vstack([model_dict[l].coef().ravel() for l in labels])
-            intercept_vec = np.array([model_dict[l].intercept()[0] for l in labels])
-            raw_scores = feat_mat @ coef_mat.T + intercept_vec
-            probs = expit(raw_scores)
-            return {lbl: probs[:, i] for i, lbl in enumerate(labels)}
-        else:
-            # Non-linear: maybe also parallelize here
-            return {lbl: model_dict[lbl].predict_proba(feat_mat)[:, 1]
-                    for lbl in model_dict}
+                F = fused_dense[mask, :]
+                feat_c = F[:, c].reshape(-1, 1)
+                feat_sum = F.sum(axis=1, keepdims=True)
+                feat_max = F.max(axis=1, keepdims=True)
+                X_aug = hstack([X_sub, csr_matrix(np.hstack([feat_c, feat_sum, feat_max]))], format="csr")
+                X_aug = normalize(X_aug, norm="l2", axis=1)
 
+                local_idxs = C[:, c].nonzero()[0]
+                Z_node_base = Z_node[local_idxs, :]
 
-    def _predict(i, X_query, z_layer, model, initial_labels,
-             gold_labels, topk, alpha, beam_size, n_layers):
-        
-        print(i)
-        label_scores = {}
-        gold_set = set(gold_labels[i]) if gold_labels else set()
+                try:
+                    X_dense = X_sub.toarray()
+                except Exception:
+                    X_dense = np.asarray(X_sub)
 
-        # Start beam with first ML model at root layer
-        beam = [(0, model.hmodel[0][0], 0.0, X_query[i])]
-        matched_cluster_found = False
+                # label-wise aggregates
+                scores_mat = X_dense.dot(Z_node_base.T)
+                label_feats = np.vstack([scores_mat.mean(axis=0),
+                                        scores_mat.sum(axis=0),
+                                        scores_mat.max(axis=0)]).T
 
-        while beam:
-            next_beam = []
+                Z_aug = np.hstack([Z_node_base, label_feats])
+                # normalize row-wise
+                Z_aug = normalize(Z_aug, norm="l2", axis=1)
 
-            # Group beam items by (layer_idx, ml) to batch predict matcher scores
-            beam_groups = {}
-            
-            for (layer_idx, ml, cum_score, x_aug) in beam:
-                beam_groups.setdefault((layer_idx, ml), []).append((cum_score, x_aug))
+                inputs.append((X_aug, Z_aug, mentions_sub))
+            return inputs
 
-            for (layer_idx, ml), entries in beam_groups.items():
-                cum_scores, x_augs = zip(*entries)
-                x_augs_mat = np.vstack(x_augs)
+        # ----- encode -----
+        X = self.text_encoder.predict(X_text)
+        N = X.shape[0]
+        G = max([ml.local_to_global_idx.max() for layer in self.model.hmodel for ml in layer]) + 1
 
-                # Batch matcher prediction for all x_augs in this group
-                matcher_scores_mat = ml.matcher_model.predict_proba(x_augs_mat)  # shape: (batch_size, n_clusters)
-                if matcher_scores_mat.size == 0:
+        label_scores = [defaultdict(lambda: 0.0) for _ in range(N)]
+        matched_cluster_found = [False] * N
+        gold_sets = [set(g) for g in (gold_labels or [None] * N)]
+        has_initial_labels = hasattr(self, "initial_labels") and (self.initial_labels is not None)
+
+        current_inputs = [(X, None, np.arange(N))]
+        debug_tables = []
+
+        for layer_idx, mlmodels in enumerate(self.model.hmodel):
+            next_inputs = []
+            # dynamic alpha adjustment per layer
+            alpha_layer = alpha
+            if dynamic_alpha:
+                alpha_layer = min(0.9, 0.3 + 0.15 * layer_idx)  # example: deeper layers favor reranker more
+
+            for ml, (X_node, Z_node, mention_indices) in zip(mlmodels, current_inputs):
+                if X_node.shape[0] == 0:
                     continue
 
-                z_aug = z_layer[layer_idx]
+                matcher_scores = ml.matcher_model.predict_proba(X_node)
+                C = ml.cluster_model.c_node
+                top_clusters_idx = np.argsort(matcher_scores, axis=1)[:, -beam_size:]
 
-                for row_idx, matcher_scores in enumerate(matcher_scores_mat):
-                    cum_score = cum_scores[row_idx]
-                    x_aug = x_augs[row_idx]
+                for i_row, m_idx in enumerate(mention_indices):
+                    x_row = X_node[i_row]
+                    x_emb = x_row.toarray().ravel() if hasattr(x_row, "toarray") else np.asarray(x_row).ravel()
+                    gold_set = set(gold_labels[m_idx]) if (gold_labels is not None and gold_labels[m_idx] is not None) else set()
+                    row_debug = []
 
-                    # Get top-k clusters via argpartition for efficiency
-                    if matcher_scores.shape[0] > topk:
-                        top_clusters_idx = np.argpartition(matcher_scores, -topk)[-topk:]
-                        top_clusters = top_clusters_idx[np.argsort(matcher_scores[top_clusters_idx])[::-1]]
-                    else:
-                        top_clusters = np.argsort(matcher_scores)[::-1]
+                    for c in top_clusters_idx[i_row]:
+                        cluster_score = matcher_scores[i_row, c]
+                        labels_in_c = ml.cluster_model.cluster_to_labels[c]
+                        label_fused = []
 
-                    # Check if any cluster contains gold label
-                    for c in top_clusters:
-                        cluster_labels = ml.cluster_model.cluster_to_labels[c]
-                        if gold_set & {initial_labels[g] for g in cluster_labels}:
-                            matched_cluster_found = True
-                            break
+                        for g in labels_in_c:
+                            local_idx = ml.global_to_local_idx.get(g, None)
+                            if local_idx is None or (Z_node is not None and local_idx >= Z_node.shape[0]):
+                                continue
+                            z_emb = Z_node[local_idx] if Z_node is not None else np.zeros(ml.cluster_model.z_node.shape[1])
+                            feat = np.hstack([x_emb, z_emb])
+                            rerank_score = 1.0
+                            if ml.reranker_model is not None:
+                                mdl = ml.reranker_model.model_dict.get(g)
+                                if mdl is not None:
+                                    inp = feat.reshape(1, -1)
+                                    try:
+                                        rerank_score = np.clip(mdl.predict_proba(inp)[0, 1], 1e-6, 1.0)
+                                    except Exception:
+                                        rerank_score = np.clip(expit(mdl.decision_function(inp))[0], 1e-6, 1.0)
+                            fused = (cluster_score ** (1 - alpha_layer)) * (rerank_score ** alpha_layer)
+                            label_scores[m_idx][g] = max(label_scores[m_idx].get(g, 0.0), fused)
+                            label_fused.append((g, fused))
 
-                    # Prepare batch features for reranker
-                    all_global_labels = []
-                    all_feat_rows = []
-                    label_to_idx = {}
+                        row_debug.append((c, cluster_score, sorted(label_fused, key=lambda x: -x[1])[:topk]))
 
-                    total_labels = sum(len(ml.cluster_model.cluster_to_labels[c]) for c in top_clusters)
-                    feat_dim = x_aug.shape[0] + z_aug.shape[1]
-                    all_feat_rows = np.empty((total_labels, feat_dim), dtype=np.float32)
+                        if gold_set:
+                            if has_initial_labels:
+                                cluster_orig_labels = {self.initial_labels[g] for g in labels_in_c}
+                                if gold_set & cluster_orig_labels:
+                                    matched_cluster_found[m_idx] = True
+                            else:
+                                if set(labels_in_c) & gold_set:
+                                    matched_cluster_found[m_idx] = True
 
-                    idx = 0
-                    for c in top_clusters:
-                        cluster_score = matcher_scores[c]
-                        global_labels = ml.cluster_model.cluster_to_labels[c]
-                        for g in global_labels:
-                            all_feat_rows[idx, :x_aug.shape[0]] = x_aug
-                            all_feat_rows[idx, x_aug.shape[0]:] = z_aug[g]
-                            label_to_idx[g] = idx
-                            all_global_labels.append((g, cluster_score))
-                            idx += 1
+                    if debug and i_row < n_debug:
+                        df = pd.DataFrame([
+                            {"Cluster": c, "ClusterScore": cs, "TopLabelsFused": lbls}
+                            for c, cs, lbls in row_debug
+                        ])
+                        df.index.name = f"Mention {m_idx} Layer {layer_idx}"
+                        debug_tables.append(df)
 
-                    rerank_scores = np.array([score for _, score in all_global_labels], dtype=np.float32)
+                # prepare next-layer inputs
+                child_inputs = _prepare_layer_infer(X_node, ml.cluster_model.z_node, mention_indices, C, matcher_scores, top_clusters_idx)
+                next_inputs.extend(child_inputs)
 
-                    # Batch reranker scores
-                    if ml.reranker_model is not None and total_labels > 0:
-                        rerank_dict = XModel._batch_rerank_scores(ml.reranker_model.model_dict, all_feat_rows)
-                        for g, idx_local in label_to_idx.items():
-                            if g in rerank_dict:
-                                rerank_scores[idx_local] = rerank_dict[g][idx_local]
+            current_inputs = next_inputs
 
-                    # Fusion and beam expansion
-                    for idx_local, (g, cluster_score) in enumerate(all_global_labels):
-                        rerank_score = rerank_scores[idx_local]
-                        fused = ((cluster_score + 1e-8) ** (1 - alpha)) * ((rerank_score + 1e-8) ** alpha)
-
-                        if fused > label_scores.get(g, -np.inf):
-                            label_scores[g] = fused
-
-                        if layer_idx + 1 < n_layers:
-                            feat_node = np.array([fused, cluster_score, rerank_score])
-                            x_next = np.hstack([x_aug, feat_node])
-                            for child_ml in model.hmodel[layer_idx + 1]:
-                                if g in child_ml.local_to_global_idx:
-                                    next_beam.append((layer_idx + 1, child_ml, cum_score + fused, x_next))
-
-            # Keep top beam_size items for next iteration
-            beam = heapq.nlargest(beam_size, next_beam, key=lambda tup: tup[2])
-
-        # Gather top-k results
-        top_labels = sorted(label_scores.items(), key=lambda kv: -kv[1])[:topk]
+        # ----- aggregate top-k & hits -----
         rows, cols, data = [], [], []
-        for g, score in top_labels:
-            rows.append(i)
-            cols.append(g)
-            data.append(score)
+        hits = []
+        for i in range(N):
+            d = label_scores[i]
+            gold_set = set(gold_labels[i]) if (gold_labels is not None and gold_labels[i] is not None) else set()
+            top_labels = sorted(d.items(), key=lambda kv: -kv[1])[:topk] if d else []
 
-        label_idx_found = next((idx for idx, g in enumerate([g for g, _ in top_labels])
-                                if initial_labels[g] in gold_set), -1)
-        hit = int(label_idx_found != -1)
+            for g, s in top_labels:
+                rows.append(i)
+                cols.append(g)
+                data.append(s)
 
-        return rows, cols, data, (hit, label_idx_found, matched_cluster_found, gold_set)
+            label_idx_found = -1
+            for idx, (g, _) in enumerate(top_labels):
+                if has_initial_labels:
+                    if self.initial_labels[g] in gold_set:
+                        label_idx_found = idx
+                        break
+                else:
+                    if g in gold_set:
+                        label_idx_found = idx
+                        break
 
-    def predict(self, X_text_query, gold_labels=None, topk=10, alpha=0.5, beam_size=10, n_jobs=-1):
-        X_query = self.text_encoder.predict(X_text_query).toarray()
-        Z = self.Z
-        n_layers = len(self.model.hmodel)
+            hit = int(label_idx_found != -1)
+            matched_cluster = bool(matched_cluster_found[i])
+            hits.append((hit, label_idx_found, matched_cluster, gold_set))
 
-        # Precompute augmented label embeddings for each layer (+3 features per layer)
-        z_layer = [Z]
-        for layer_idx in range(1, n_layers):
-            pad_width = 3 * layer_idx
-            z_layer.append(np.hstack([Z, np.zeros((Z.shape[0], pad_width), dtype=Z.dtype)]))
-
-        results = Parallel(n_jobs=n_jobs, backend="threading", verbose=10)( # was locky
-            delayed(XModel._predict)(
-                i, X_query, z_layer, self.model, self.initial_labels,
-                gold_labels, topk, alpha, beam_size, n_layers
-            )
-            for i in range(X_query.shape[0])
-        )
-
-        # Aggregate batch results
-        rows, cols, data, hits = [], [], [], []
-        for r, c, d, h in results:
-            rows.extend(r)
-            cols.extend(c)
-            data.extend(d)
-            hits.append(h)
-
-        return csr_matrix((data, (rows, cols)), shape=(X_query.shape[0], Z.shape[0])), hits
+        score_mat = csr_matrix((data, (rows, cols)), shape=(N, G))
+        return score_mat, hits, debug_tables

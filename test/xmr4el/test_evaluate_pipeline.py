@@ -56,6 +56,19 @@ def filter_labels_and_inputs(gold_labels, input_texts, allowed_labels):
 
     return filtered_labels, filtered_texts
 
+# debug_tables: list of DataFrames returned from predict(debug=True)
+def save_debug_tables(debug_tables, filename_prefix="debug_folder/debug_file"):
+    """
+    Save all debug tables to separate CSV files.
+    """
+    for i, df in enumerate(debug_tables):
+        # build filename with mention/layer index
+        fname = f"{filename_prefix}_{i}.csv"
+        # reset index to keep mention/layer info as a column
+        df_reset = df.reset_index()
+        df_reset.rename(columns={"index": "Mention_Layer"}, inplace=True)
+        df_reset.to_csv(fname, index=False)
+        # print(f"Saved debug table to {fname}")
 
 def main():
 
@@ -69,7 +82,7 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/xmodel_optimal_scores" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-18_11-19-41" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
@@ -99,12 +112,15 @@ def main():
     # flag 2 - topk10 - 0, topk100 - 10, topk200 - 29
     # flag 3 - topk10 - 0, topk100 - 8, topk200 - 36
     
-    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=10, beam_size=100)
+    # predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=10)
+    predicted_labels, hits, debug_table = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=1, debug=True, dynamic_alpha=True)
 
     print(predicted_labels)
-    
     print(hits)
+    # print(debug_table)
     
+    # save_debug_tables(debug_table)
+
     found_ratio = []
     matcher_found_ratio = []
     for found, _, matcher_found, _ in hits:

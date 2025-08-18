@@ -195,10 +195,6 @@ class MLModel():
         L_local = Z.shape[0]
         G = int(self.local_to_global_idx.max()) + 1
 
-        # prepad Z if layer > 0
-        if self.layer > 0:
-            Z = np.hstack([Z, np.zeros((L_local, 3 * self.layer), dtype=Z.dtype)])
-
         # detect reranker type once
         first_model = next(iter(self.reranker_model.model_dict.values())) if self.reranker_model else None
         has_predict_proba = True
@@ -447,55 +443,79 @@ class HierarchicaMLModel():
             
     def prepare_layer(self, X, Y, Z, C, fused_scores, local_to_global_idx):
         """
-        Given current-layer data, split into per-cluster inputs for next layer:
-          - X_node: mention embeddings under this cluster
-          - Y_node: gold mention x label matrix under this cluster
-          - Z_node: label embeddings under this cluster
-          - fused_scores_node: fused mention-label scores under this cluster
+        Simplified prepare_layer that:
+        - selects labels in each cluster
+        - selects mentions relevant to that cluster (by Y)
+        - builds X_aug = [X_node | feat_c, feat_sum, feat_max] (L2-normalized)
+        - builds Z_node_aug = [Z_node_base | label_mean, label_sum, label_max]
+        Returns list of (X_aug, Y_node, Z_node_aug, local_to_global_next, global_to_local_next)
         """
         K_next = C.shape[1]
         inputs = []
-        
+
+        # Make fused_scores dense once for indexing (works whether fused_scores is sparse or dense)
+        fused_dense = fused_scores.toarray() if hasattr(fused_scores, "toarray") else np.asarray(fused_scores)
+
         for c in range(K_next):
-            # 1. which labels are in cluster c
+            # 1. which labels are in cluster c (local indices relative to Z)
             local_idxs = C[:, c].nonzero()[0]
-            
             if len(local_idxs) == 0:
                 continue
-            
-            # 2. map them to *global* label IDs
+
+            # 2. map them to *global* label IDs and build inverse map
             local_to_global_next = local_to_global_idx[local_idxs]
-        
-            # 3. build the inverse map for the child
             global_to_local_next = {g: i for i, g in enumerate(local_to_global_next)}
-            
-            # 2. restrict Y to those labels, then find which mentions have any of them
+
+            # 3. restrict Y to those labels, then find which mentions have any of them
             Y_sub = Y[:, local_idxs]
-            mention_mask = (Y_sub.sum(axis=1).A1 > 0)            
-            
-            # 3. slice X and Y
+            mention_mask = (Y_sub.sum(axis=1).A1 > 0)
+
+            # 4. slice X and Y
             X_node = X[mention_mask]
             Y_node = Y_sub[mention_mask, :]
-            Z_node = Z[local_idxs, :]
-            
-            # 4. Compute fused scores features
-            fused_c = fused_scores[mention_mask, :].toarray()
-            
-            feat_c = fused_c[:, c].ravel()    
+
+            # if no mentions for this cluster, skip it
+            if X_node.shape[0] == 0:
+                continue
+
+            # base label embeddings for this cluster (n_labels_in_cluster, emb_dim)
+            Z_node_base = Z[local_idxs, :]
+
+            # 5. Compute fused (per-mention) features and append to X_node
+            fused_c = fused_dense[mention_mask, :]  # shape (n_mentions_node, K_next)
+            feat_c = fused_c[:, c].ravel()
             feat_sum = fused_c.sum(axis=1).ravel()
             feat_max = fused_c.max(axis=1).ravel()
-
-            
             feat_node = np.vstack([feat_c, feat_sum, feat_max]).T
             sparse_feats = csr_matrix(feat_node)
-            
-            X_aug = hstack([X_node, sparse_feats], format="csr") # Combine the two 
+
+            X_aug = hstack([X_node, sparse_feats], format="csr")
             X_aug = normalize(X_aug, norm="l2", axis=1)
-            
-            inputs.append((X_aug, Y_node, Z_node, local_to_global_next, global_to_local_next))
-            
+
+            # 6. Compute per-label aggregates (vectorized) and append to Z_node_base
+            #    Scores matrix: (n_mentions_node, n_labels_in_cluster) = X_node_dense @ Z_node_base.T
+            try:
+                X_node_dense = X_node.toarray()
+            except Exception:
+                X_node_dense = np.asarray(X_node)
+
+            if X_node_dense.size == 0 or Z_node_base.size == 0:
+                label_feats = np.zeros((Z_node_base.shape[0], 3), dtype=Z_node_base.dtype)
+            else:
+                # vectorized dot-product
+                scores_mat = X_node_dense.dot(Z_node_base.T)            # (n_mentions, n_labels)
+                mean_per_label = scores_mat.mean(axis=0)               # (n_labels,)
+                sum_per_label = scores_mat.sum(axis=0)
+                max_per_label = scores_mat.max(axis=0)
+                label_feats = np.vstack([mean_per_label, sum_per_label, max_per_label]).T  # (n_labels,3)
+
+            Z_node_aug = np.hstack([Z_node_base, label_feats])  # (n_labels, emb_dim + 3)
+            Z_node_aug = normalize(Z_node_aug, norm="l2", axis=1)
+            # 7. append the tuple for this cluster
+            inputs.append((X_aug, Y_node, Z_node_aug, local_to_global_next, global_to_local_next))
+
         return inputs
-        
+            
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
         Train multiple layers of MLModel; after each layer, prepare data for the next.
