@@ -184,13 +184,12 @@ class MLModel():
     def fused_predict(self, X, Z, C, alpha=0.5, batch_size=32768):
         """
         Batched fused_predict: matcher + reranker fusion, memory-efficient.
-        Computes reranker scores in chunks to avoid exploding memory.
+        Computes reranker scores in chunks and never builds the full flattened (X|Z) matrix.
         """
         N = X.shape[0]
         L_local = Z.shape[0]
-        G = int(self.local_to_global_idx.max()) + 1
 
-        # --- matcher scores ---
+        # --- matcher (local label-level) scores ---
         matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X))
 
         # --- flatten mention-local label pairs ---
@@ -201,54 +200,60 @@ class MLModel():
             rows_list.extend([i] * len(local_idxs))
             cols_list.extend(local_idxs)
             matcher_flat.extend(scores)
-        rows_list = np.array(rows_list)
-        cols_list = np.array(cols_list)
-        matcher_flat = np.array(matcher_flat)
 
-        # --- prepare reranker input embeddings ---
+        rows_list = np.array(rows_list, dtype=np.int32)
+        cols_list = np.array(cols_list, dtype=np.int32)
+        matcher_flat = np.array(matcher_flat, dtype=np.float32)
+
         reranker_score = np.ones(len(rows_list), dtype=np.float32)
+
         if self.reranker_model:
+            # Transfer original mention embeddings to dense once
             X_dense = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
             global_idxs = np.array([self.local_to_global_idx[i] for i in cols_list])
-            reranker_input = np.hstack([X_dense[rows_list], Z[cols_list]])
 
-            # reranker type detection
+            # detect loss type
             first_model = next(iter(self.reranker_model.model_dict.values()))
             is_hinge = first_model.config.get("type") == "sklearnsgdclassifier" and \
                     first_model.config.get("kwargs", {}).get("loss") == "hinge"
 
-            # --- batch processing to limit memory ---
-            num_pairs = reranker_input.shape[0]
+            num_pairs = len(rows_list)
             for start in range(0, num_pairs, batch_size):
                 end = min(start + batch_size, num_pairs)
-                batch_idx = slice(start, end)
-                batch_global_labels = global_idxs[batch_idx]
 
-                # unique labels in batch
-                unique_labels = np.unique(batch_global_labels)
-                batch_scores = np.ones(end - start, dtype=np.float32)
+                b_rows = rows_list[start:end]
+                b_cols = cols_list[start:end]
+                b_global = global_idxs[start:end]
 
-                for g in unique_labels:
-                    mask = (batch_global_labels == g)
+                # build concatenated embeddings only for this small batch
+                X_part = X_dense[b_rows]
+                Z_part = Z[b_cols]
+                batch_inp = np.hstack([X_part, Z_part])
+
+                scores_batch = np.ones(end - start, dtype=np.float32)
+                # group by global label in this batch
+                for g in np.unique(b_global):
+                    mask = (b_global == g)
                     if g not in self.reranker_model.model_dict:
                         continue
                     mdl = self.reranker_model.model_dict[g]
-                    inp = reranker_input[batch_idx][mask]
+                    sub_inp = batch_inp[mask]
 
                     try:
                         if is_hinge:
-                            batch_scores[mask] = np.clip(expit(mdl.decision_function(inp)), 1e-6, 1.0)
+                            score = np.clip(expit(mdl.decision_function(sub_inp)), 1e-6, 1.0)
                         else:
-                            batch_scores[mask] = np.clip(mdl.predict_proba(inp)[:, 1], 1e-6, 1.0)
+                            score = np.clip(mdl.predict_proba(sub_inp)[:, 1], 1e-6, 1.0)
+                        scores_batch[mask] = score
                     except Exception:
-                        batch_scores[mask] = 1.0
+                        scores_batch[mask] = 1.0
 
-                reranker_score[batch_idx] = batch_scores
+                reranker_score[start:end] = scores_batch
 
         # --- fuse matcher + reranker ---
         fused = (matcher_flat ** (1 - alpha)) * (reranker_score ** alpha)
 
-        # --- build entity fused matrix ---
+        # --- build local-label fused matrix ---
         entity_fused = csr_matrix((fused, (rows_list, cols_list)), shape=(N, L_local))
 
         # --- project to clusters ---
