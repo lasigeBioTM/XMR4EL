@@ -100,22 +100,23 @@ class Clustering():
         return model
     
     def train(self, Z, local_to_global_idx, min_leaf_size, max_leaf_size):
-        Z, C, model = ClusteringTrainer.train(Z=Z, 
+        C_node, model = ClusteringTrainer.train(Z=Z, 
                                               config=self.clustering_config, 
                                               min_leaf_size=min_leaf_size, 
                                               max_leaf_size=max_leaf_size,
                                               dtype=self.dtype)
         
-        if Z is None or C is None or model is None:
-            return
-        
         self.z_node = Z
-        self.c_node = C
+        self.c_node = C_node
         self.model = model
         
+        # Build cluster_to_labels aligned with Z_node rows
         self.cluster_to_labels = defaultdict(list)
-        for local_idx, cluster_vector in enumerate(self.c_node):
+        for local_idx in range(C_node.shape[0]):  # iterate over actual rows in C_node
+            cluster_vector = C_node[local_idx].toarray().ravel() if hasattr(C_node[local_idx], "toarray") else np.asarray(C_node[local_idx]).ravel()
             cid = np.argmax(cluster_vector)
+            if local_idx >= len(local_to_global_idx):
+                continue  # skip rows that do not exist in Z_node
             gidx = local_to_global_idx[local_idx]
             self.cluster_to_labels[cid].append(int(gidx))
         

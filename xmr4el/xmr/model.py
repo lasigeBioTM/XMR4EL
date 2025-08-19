@@ -227,11 +227,14 @@ class XModel():
 
         self.model = hml
 
-    def predict(self, X_text, gold_labels=None, topk=10, beam_size=5, alpha=0.5, n_jobs=-1, debug=False, n_debug=5, dynamic_alpha=False):
+    def predict(self, X_text, gold_labels=None, topk=10, beam_size=5,
+            debug=False, n_debug=5, n_jobs=-1, backend="threading", TARGET_LABEL=None):
         """
-        PECOS-style inference with per-layer Z augmentation (+3 * layer),
-        row-wise Z normalization, hit-tracking, optional debug table, and dynamic alpha.
+        PECOS-style inference with per-layer Z augmentation.
+        TARGET_IDX: global label index we are debugging/tracking.
         """
+        TOPK_DBG = 20
+
         def _prepare_layer_infer(X_node, Z_node, mention_indices, C, fused_scores, top_clusters_idx):
             inputs = []
             K = C.shape[1]
@@ -245,143 +248,140 @@ class XModel():
                 mentions_sub = mention_indices[mask]
 
                 F = fused_dense[mask, :]
-                feat_c = F[:, c].reshape(-1, 1)
-                feat_sum = F.sum(axis=1, keepdims=True)
-                feat_max = F.max(axis=1, keepdims=True)
-                X_aug = hstack([X_sub, csr_matrix(np.hstack([feat_c, feat_sum, feat_max]))], format="csr")
-                X_aug = normalize(X_aug, norm="l2", axis=1)
+                feat_c  = F[:,c].reshape(-1,1)
+                feat_sum= F.sum(axis=1,keepdims=True)
+                feat_max= F.max(axis=1,keepdims=True)
+                X_aug   = hstack([X_sub, csr_matrix(np.hstack([feat_c,feat_sum,feat_max]))],format="csr")
+                X_aug   = normalize(X_aug, norm="l2", axis=1)
 
-                local_idxs = C[:, c].nonzero()[0]
-                Z_node_base = Z_node[local_idxs, :]
-
-                try:
-                    X_dense = X_sub.toarray()
-                except Exception:
-                    X_dense = np.asarray(X_sub)
-
-                # label-wise aggregates
-                scores_mat = X_dense.dot(Z_node_base.T)
-                label_feats = np.vstack([scores_mat.mean(axis=0),
-                                        scores_mat.sum(axis=0),
-                                        scores_mat.max(axis=0)]).T
-
-                Z_aug = np.hstack([Z_node_base, label_feats])
-                # normalize row-wise
-                Z_aug = normalize(Z_aug, norm="l2", axis=1)
-
+                local_idxs = C[:,c].nonzero()[0]
+                Z_base = Z_node[local_idxs, :]
+                X_dense = X_sub.toarray() if hasattr(X_sub,"toarray") else np.asarray(X_sub)
+                scores  = X_dense.dot(Z_base.T)
+                label_feats = np.vstack([scores.mean(axis=0), scores.sum(axis=0), scores.max(axis=0)]).T
+                Z_aug = normalize(np.hstack([Z_base,label_feats]), norm="l2", axis=1)
                 inputs.append((X_aug, Z_aug, mentions_sub))
             return inputs
 
-        # ----- encode -----
         X = self.text_encoder.predict(X_text)
+        Z = self.Z
         N = X.shape[0]
         G = max([ml.local_to_global_idx.max() for layer in self.model.hmodel for ml in layer]) + 1
 
-        label_scores = [defaultdict(lambda: 0.0) for _ in range(N)]
-        matched_cluster_found = [False] * N
-        gold_sets = [set(g) for g in (gold_labels or [None] * N)]
-        has_initial_labels = hasattr(self, "initial_labels") and (self.initial_labels is not None)
-
-        current_inputs = [(X, None, np.arange(N))]
-        debug_tables = []
+        label_scores = [defaultdict(lambda:0.0) for _ in range(N)]
+        # matched_cluster_found = [False]*N        
+        has_initial = hasattr(self,"initial_labels") and (self.initial_labels is not None)
+        
+        current_inputs = [(X, Z, np.arange(N))]
 
         for layer_idx, mlmodels in enumerate(self.model.hmodel):
             next_inputs = []
-            # dynamic alpha adjustment per layer
-            alpha_layer = alpha
-            if dynamic_alpha:
-                alpha_layer = min(0.9, 0.3 + 0.15 * layer_idx)  # example: deeper layers favor reranker more
+            print("Layer Idx", layer_idx)
 
             for ml, (X_node, Z_node, mention_indices) in zip(mlmodels, current_inputs):
+                alpha = ml.alpha
+                Z_local = ml.cluster_model.z_node
+                
+                if debug:
+                    print(f"  ML alpha (layer {layer_idx}): {alpha}")
+
                 if X_node.shape[0] == 0:
+                    if debug:
+                        print("  Skipping node with 0 samples")
                     continue
 
                 matcher_scores = ml.matcher_model.predict_proba(X_node)
                 C = ml.cluster_model.c_node
-                top_clusters_idx = np.argsort(matcher_scores, axis=1)[:, -beam_size:]
+                beam_size_eff = min(beam_size, matcher_scores.shape[1])
+                top_clusters_idx = np.argsort(-matcher_scores, axis=1)[:, :beam_size_eff]
 
-                for i_row, m_idx in enumerate(mention_indices):
+                def _process_single(i_row):
+                    m_idx = mention_indices[i_row]
                     x_row = X_node[i_row]
-                    x_emb = x_row.toarray().ravel() if hasattr(x_row, "toarray") else np.asarray(x_row).ravel()
-                    gold_set = set(gold_labels[m_idx]) if (gold_labels is not None and gold_labels[m_idx] is not None) else set()
-                    row_debug = []
+                    x_emb = x_row.toarray().ravel() if hasattr(x_row,"toarray") else np.asarray(x_row).ravel()
+                    
+                    gold_label = gold_labels[i_row]
+                    gold_label_idx = [idx for idx, init_label in enumerate(self.initial_labels) for gold_l in gold_label if init_label == gold_l]
+                    
+                    fused_pairs = []
+                    debug_this = debug and TARGET_LABEL in gold_label
 
-                    for c in top_clusters_idx[i_row]:
-                        cluster_score = matcher_scores[i_row, c]
-                        labels_in_c = ml.cluster_model.cluster_to_labels[c]
-                        label_fused = []
+                    if debug_this:
+                        print(f"\n=== DEBUG mention {m_idx} (beam={beam_size}, layer={layer_idx}) ===")
 
-                        for g in labels_in_c:
-                            local_idx = ml.global_to_local_idx.get(g, None)
-                            if local_idx is None or (Z_node is not None and local_idx >= Z_node.shape[0]):
-                                continue
-                            z_emb = Z_node[local_idx] if Z_node is not None else np.zeros(ml.cluster_model.z_node.shape[1])
+                    for c_id in top_clusters_idx[i_row]:
+                        matcher_score = float(matcher_scores[i_row, c_id])
+                        labels_in_c = ml.cluster_model.cluster_to_labels[c_id]
+                        
+                        if debug_this: 
+                            print(f" Cluster {c_id} matcher_score={matcher_score}")
+
+                        for g in labels_in_c:                      
+                            loc = ml.global_to_local_idx.get(g, None)
+                            z_emb = Z_local[loc]
                             feat = np.hstack([x_emb, z_emb])
-                            rerank_score = 1.0
-                            if ml.reranker_model is not None:
-                                mdl = ml.reranker_model.model_dict.get(g)
-                                if mdl is not None:
-                                    inp = feat.reshape(1, -1)
-                                    try:
-                                        rerank_score = np.clip(mdl.predict_proba(inp)[0, 1], 1e-6, 1.0)
-                                    except Exception:
-                                        rerank_score = np.clip(expit(mdl.decision_function(inp))[0], 1e-6, 1.0)
-                            fused = (cluster_score ** (1 - alpha_layer)) * (rerank_score ** alpha_layer)
-                            label_scores[m_idx][g] = max(label_scores[m_idx].get(g, 0.0), fused)
-                            label_fused.append((g, fused))
 
-                        row_debug.append((c, cluster_score, sorted(label_fused, key=lambda x: -x[1])[:topk]))
+                            # --- reranker ---
+                            rer = 1.0
+                            if ml.reranker_model and g in ml.reranker_model.model_dict:
+                                mdl = ml.reranker_model.model_dict[g]
+                                try:
+                                    proba = mdl.predict_proba(feat.reshape(1,-1))
+                                    rer = np.clip(proba[0,1], 1e-6, 1.0)
+                                except Exception:
+                                    rer = np.clip(expit(mdl.decision_function(feat.reshape(1,-1))[0]), 1e-6, 1.0)
 
-                        if gold_set:
-                            if has_initial_labels:
-                                cluster_orig_labels = {self.initial_labels[g] for g in labels_in_c}
-                                if gold_set & cluster_orig_labels:
-                                    matched_cluster_found[m_idx] = True
-                            else:
-                                if set(labels_in_c) & gold_set:
-                                    matched_cluster_found[m_idx] = True
+                            # --- fuse ---
+                            fused_val = (matcher_score**(1-alpha))*(rer**alpha)
+                            fused_pairs.append((g, fused_val))
 
-                    if debug and i_row < n_debug:
-                        df = pd.DataFrame([
-                            {"Cluster": c, "ClusterScore": cs, "TopLabelsFused": lbls}
-                            for c, cs, lbls in row_debug
-                        ])
-                        df.index.name = f"Mention {m_idx} Layer {layer_idx}"
-                        debug_tables.append(df)
+                            if debug_this:
+                                gold_flag = " <<-- GOLD" if g in gold_label_idx else ""
+                                print(f"     (label={g})  m={matcher_score:.4f} r={rer:.4f} fused={fused_val:.4f}{gold_flag}")
 
-                # prepare next-layer inputs
-                child_inputs = _prepare_layer_infer(X_node, ml.cluster_model.z_node, mention_indices, C, matcher_scores, top_clusters_idx)
-                next_inputs.extend(child_inputs)
+                    if debug_this:
+                        fused_pairs_sorted = sorted(fused_pairs, key=lambda kv:-kv[1])
+                        print(f"  --> Top-{TOPK_DBG} fused labels:")
+                        for g, s in fused_pairs_sorted[:TOPK_DBG]:
+                            gold_flag = " <<-- GOLD" if g in gold_label_idx else ""
+                            print(f"        {g:6d}  {s:.4f}{gold_flag}")
+
+                    return m_idx, fused_pairs, []
+
+                par_results = Parallel(n_jobs=n_jobs, backend=backend)(
+                    delayed(_process_single)(i_row) for i_row in range(len(mention_indices))
+                )
+
+                for m_idx, fused_pairs, _ in par_results:
+                    for g, fv in fused_pairs:
+                        prev = label_scores[m_idx].get(g, 0.0)
+                        if fv > prev:
+                            label_scores[m_idx][g] = fv
+
+                next_inputs.extend(_prepare_layer_infer(
+                    X_node, ml.cluster_model.z_node, mention_indices, C, matcher_scores, top_clusters_idx
+                ))
 
             current_inputs = next_inputs
 
-        # ----- aggregate top-k & hits -----
+        # final aggregation
         rows, cols, data = [], [], []
         hits = []
         for i in range(N):
             d = label_scores[i]
-            gold_set = set(gold_labels[i]) if (gold_labels is not None and gold_labels[i] is not None) else set()
-            top_labels = sorted(d.items(), key=lambda kv: -kv[1])[:topk] if d else []
+            gold_list = gold_labels[i]
+            top_labels = sorted(d.items(), key=lambda kv:-kv[1])[:topk] if d else []
 
             for g, s in top_labels:
-                rows.append(i)
-                cols.append(g)
-                data.append(s)
+                rows.append(i); cols.append(g); data.append(s)
 
             label_idx_found = -1
-            for idx, (g, _) in enumerate(top_labels):
-                if has_initial_labels:
-                    if self.initial_labels[g] in gold_set:
-                        label_idx_found = idx
-                        break
-                else:
-                    if g in gold_set:
-                        label_idx_found = idx
-                        break
+            for rank, (g, _) in enumerate(top_labels):
+                if has_initial and self.initial_labels[g] in gold_list:
+                    label_idx_found = rank; break
 
             hit = int(label_idx_found != -1)
-            matched_cluster = bool(matched_cluster_found[i])
-            hits.append((hit, label_idx_found, matched_cluster, gold_set))
+            hits.append((hit, label_idx_found, gold_list))
 
         score_mat = csr_matrix((data, (rows, cols)), shape=(N, G))
-        return score_mat, hits, debug_tables
+        return score_mat, hits

@@ -82,38 +82,22 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/xmodel_2025-08-18_11-19-41" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-19_16-14-30" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
     
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
     
-    
-    # print(trained_xtree.initial_labels)
-    # exit()
-    
     filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.initial_labels)
     
-    # print(filtered_labels)
-    
-    # input_embs = sp.generate_input_embeddigns(filtered_texts)
-    
-    # print(filtered_labels)
-    # print(filtered_labels[0][0]) # 
-    
-    # print(input_embs[0])
-    # print(trained_xtree.entity_centroids[filtered_labels[0][0]]) 
-    
-    # topk50 - 6 - topk100 - 8
-    # topk50 - 6 - topk100 - 6, topk200 - 38
-    
-    # flag 1 - topk10 - 0, topk100 - 9, topk200 - 42, after normalizing, topk100 - 32, topk200 - 40, 500 negatives
-    # flag 2 - topk10 - 0, topk100 - 10, topk200 - 29
-    # flag 3 - topk10 - 0, topk100 - 8, topk200 - 36
+    print(filtered_texts[0])
+    print(filtered_labels[0]) # 251
+    # exit()
     
     # predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=10)
-    predicted_labels, hits, debug_table = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=1, debug=True, dynamic_alpha=True)
+    # predicted_labels, hits, debug_table = trained_xtree.predict_old(filtered_texts, filtered_labels, topk=50, beam_size=1, n_jobs=1, debug=True)
+    predicted_labels, hits = trained_xtree.predict([filtered_texts[0]], [filtered_labels[0]], topk=50, beam_size=5, n_jobs=1, debug=True, TARGET_LABEL="D058186")
 
     print(predicted_labels)
     print(hits)
@@ -122,19 +106,13 @@ def main():
     # save_debug_tables(debug_table)
 
     found_ratio = []
-    matcher_found_ratio = []
-    for found, _, matcher_found, _ in hits:
+    for found, _, _ in hits:
         if found == 1:
             found_ratio.append(1)
         else:
             found_ratio.append(0)
             
-        if matcher_found:
-            matcher_found_ratio.append(1)
-        else:
-            matcher_found_ratio.append(0)
-            
-    print("Found Ratio", Counter(found_ratio), "Matcher Ratio", Counter(matcher_found_ratio))
+    print("Found Ratio", Counter(found_ratio))
 
     end = time.time()
 

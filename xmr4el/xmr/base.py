@@ -48,6 +48,7 @@ class MLModel():
         self._matcher_model = None
         self._reranker_model = None
         self._fused_scores = None
+        self._alpha = None
     
     @property
     def local_to_global_idx(self):
@@ -102,6 +103,14 @@ class MLModel():
     def fused_scores(self, value):
         self._fused_scores = value
         
+    @property
+    def alpha(self):
+        return self._alpha
+    
+    @alpha.setter
+    def alpha(self, value):
+        self._alpha = value
+    
     @property
     def is_empty(self):
         return True if self.cluster_model is None else False
@@ -251,7 +260,11 @@ class MLModel():
                 reranker_score[start:end] = scores_batch
 
         # --- fuse matcher + reranker ---
-        fused = (matcher_flat ** (1 - alpha)) * (reranker_score ** alpha)
+        # alpha_dyn = reranker_score / (matcher_flat + reranker_score + 1e-6)
+        # self.alpha = float(np.mean(alpha_dyn))
+        self.alpha = 0.5
+        
+        fused = (matcher_flat**(1-self.alpha))*(reranker_score**self.alpha)
 
         # --- build local-label fused matrix ---
         entity_fused = csr_matrix((fused, (rows_list, cols_list)), shape=(N, L_local))
@@ -329,9 +342,11 @@ class MLModel():
         
         # Dont predict fused scores if no layer ?
         
-        base_alpha = 0.3
-        alpha_growth = 0.15  # increase per layer
-        alpha_dyn = min(0.9, base_alpha + self.layer * alpha_growth)
+        # base_alpha = 0.3
+        # alpha_growth = 0.15  # increase per layer
+        # alpha_dyn = min(0.9, base_alpha + self.layer * alpha_growth)
+        
+        alpha_dyn = 0.5
         
         print("Fusing Scores")
         fused_scores = self.fused_predict(X_train, Z_train, C, alpha=alpha_dyn)

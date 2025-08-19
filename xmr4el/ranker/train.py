@@ -62,7 +62,7 @@ class ReRankerTrainer:
             scores = np.array(scores_raw).ravel()
 
         # select hard negatives: top k by score
-        max_neg = n_pos * 15
+        max_neg = n_pos * 10000
         k = min(max_neg, n_neg_total)
         if k <= 0:
             print(f"[PID {os.getpid()}] SKIP label {global_idx}: k==0 negatives")
