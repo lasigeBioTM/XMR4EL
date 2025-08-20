@@ -300,7 +300,7 @@ class XModel():
                     x_row = X_node[i_row]
                     x_emb = x_row.toarray().ravel() if hasattr(x_row,"toarray") else np.asarray(x_row).ravel()
                     
-                    gold_label = gold_labels[i_row]
+                    gold_label = gold_labels[m_idx]
                     gold_label_idx = [idx for idx, init_label in enumerate(self.initial_labels) for gold_l in gold_label if init_label == gold_l]
                     
                     fused_pairs = []
