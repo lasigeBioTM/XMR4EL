@@ -82,7 +82,7 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/xmodel_2025-08-19_16-38-53" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-20_11-24-24" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
@@ -92,12 +92,12 @@ def main():
     filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.initial_labels)
     
     print(filtered_texts[0])
-    print(filtered_labels[0]) # 251
+    print(filtered_labels[0]) # 25
     # exit()
     
     # predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=10)
     # predicted_labels, hits, debug_table = trained_xtree.predict_old(filtered_texts, filtered_labels, topk=50, beam_size=1, n_jobs=1, debug=True)
-    predicted_labels, hits = trained_xtree.predict([filtered_texts[0]], [filtered_labels[0]], topk=500, beam_size=1, n_jobs=1, debug=True, TARGET_LABEL="D058186")
+    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=3, n_jobs=-1, debug=False, TARGET_LABEL="D058186")
 
     print(predicted_labels)
     print(hits)

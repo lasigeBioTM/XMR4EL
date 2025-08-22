@@ -748,7 +748,7 @@ class LightGBMClassifier(ClassifierModel):
             "n_jobs": -1,                     # or -1 for all cores
             "importance_type": "split",         # 'split' or 'gain'
             "verbosity": -1,
-            **{"num_class": len(np.unique(y_train))}
+            # **{"num_class": len(np.unique(y_train))}
             # "**kwargs": {...}                # Additional parameters if needed
         }
 

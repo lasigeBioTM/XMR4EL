@@ -62,7 +62,7 @@ class ReRankerTrainer:
             scores = np.array(scores_raw).ravel()
 
         # select hard negatives: top k by score
-        max_neg = n_pos * 10000
+        max_neg = n_pos * 15
         k = min(max_neg, n_neg_total)
         if k <= 0:
             print(f"[PID {os.getpid()}] SKIP label {global_idx}: k==0 negatives")
@@ -84,6 +84,7 @@ class ReRankerTrainer:
 
         # combine positives + negatives (positions relative to X_cluster)
         selected_positions = np.concatenate([positive_positions, neg_positions])
+        
         Y_valid = np.zeros(selected_positions.size, dtype=np.int8)
         Y_valid[:n_pos] = 1
 
@@ -100,6 +101,12 @@ class ReRankerTrainer:
         print(f"[PID {os.getpid()}] Training label {global_idx} with {n_pos} positives, {n_neg_selected} negatives "
               f"(cluster_size={X_cluster.shape[0]})")
 
+        # CHECK: label must have both classes after selection
+        if np.unique(Y_valid).size == 1:
+            # just skip (no model) or return a constant model
+            print(f"[PID {os.getpid()}] SKIP label {global_idx}: only one class in Y_valid after hard-neg selection")
+            return (global_idx, None)
+        
         model = ClassifierModel.train(X_combined, Y_valid, config, onevsrest=False)
         return (global_idx, model)
 
