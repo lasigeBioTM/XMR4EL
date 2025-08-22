@@ -1,8 +1,11 @@
 import os
 import gc
-import psutil
+import shutil
+import tempfile
 
 import numpy as np
+
+from pathlib import Path
 
 from joblib import Parallel, delayed
 
@@ -10,8 +13,20 @@ from scipy.sparse import hstack, csr_matrix
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
-
+reranker_dir = Path(tempfile.mkdtemp(prefix="rerankers_store_"))
+ 
 class ReRankerTrainer:
+    
+    @staticmethod
+    def save_reranker_temp(model, label):
+        sub_dir = reranker_dir / str(label)
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        model.save(str(sub_dir))
+        return str(sub_dir)
+
+    @staticmethod
+    def delete_reranker_temp():
+        shutil.rmtree(reranker_dir)
 
     @staticmethod
     def process_label(global_idx, X_cluster, Y_col, label_emb, candidate_indices, config):
@@ -88,7 +103,10 @@ class ReRankerTrainer:
             return (global_idx, None)
         
         model = ClassifierModel.train(X_combined, Y_valid, config, onevsrest=False)
-        return (global_idx, model)
+        path = ReRankerTrainer.save_reranker_temp(model, global_idx)
+        del model
+        
+        return (global_idx, path)
 
 
     @staticmethod
@@ -130,9 +148,10 @@ class ReRankerTrainer:
             for (global_idx, X_cluster, Y_col, label_emb, candidate_indices) in tasks
         )
 
-        for global_idx, model in results:
-            if model is not None:
-                reranker_models[global_idx] = model
-                del model
+        for global_idx, path in results:
+            if path is not None:
+                reranker_models[global_idx] = ClassifierModel.load(path)
+            
+        ReRankerTrainer.delete_reranker_temp()
 
         return reranker_models

@@ -689,7 +689,7 @@ class LightGBMClassifier(ClassifierModel):
             pickle.dump(self.model, fout)
 
     @classmethod
-    def load(cls, load_dir, config):
+    def load(cls, load_dir, config, file_name=None):
         """Load a saved LightGBM Classifier model from disk.
 
         Args:
@@ -698,10 +698,7 @@ class LightGBMClassifier(ClassifierModel):
         Returns:
             SklearnLogisticRegression: The loaded object.
         """
-
-        # LOGGER.info(
-        #     f"Loading LightGBM Classifier Model from {load_dir}"
-        # )
+        
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
         assert os.path.exists(
             classifier_path
