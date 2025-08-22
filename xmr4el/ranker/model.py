@@ -91,8 +91,8 @@ class ReRanker():
                                                 M_TFN=M_TFN, 
                                                 M_MAN=M_MAN, 
                                                 cluster_labels=cluster_labels,
-                                                local_to_global_idx=local_to_global_idx,
                                                 config=self.reranker_config,
-                                                layer=layer,
-                                                n_label_workers=n_label_workers)
+                                                local_to_global_idx=local_to_global_idx,
+                                                n_label_workers=n_label_workers,
+                                                parallel_backend="threading")
         self.model_dict = reranker_models
