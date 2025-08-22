@@ -41,25 +41,9 @@ class ReRankerTrainer:
 
         # --- ensure dot uses base embedding of correct width ---
         n_feats = X_cluster.shape[1]
-        if label_emb.shape[0] != n_feats:
-            if label_emb.shape[0] > n_feats:
-                # label_emb is longer (likely augmented): use first n_feats entries for dot
-                base_emb = label_emb[:n_feats]
-                # helpful debug
-                # print(f"[PID {os.getpid()}] NOTE: label_emb length {label_emb.shape[0]} > X_cluster.features {n_feats}; using base_emb[:{n_feats}] for dot")
-            else:
-                # label_emb shorter than X_cluster (should be rare) -> pad with zeros
-                base_emb = np.pad(label_emb, (0, n_feats - label_emb.shape[0]))
-                # print(f"[PID {os.getpid()}] NOTE: label_emb length {label_emb.shape[0]} < X_cluster.features {n_feats}; padding base_emb to length {n_feats}")
-        else:
-            base_emb = label_emb
-
-        # compute dot-product scores for mentions in cluster (robustly convert to 1d array)
-        scores_raw = X_cluster.dot(base_emb)
-        try:
-            scores = np.asarray(scores_raw).ravel()
-        except Exception:
-            scores = np.array(scores_raw).ravel()
+        base_emb = label_emb[:n_feats] if label_emb.shape[0] >= n_feats \
+                else np.pad(label_emb, (0, n_feats - label_emb.shape[0]))
+        scores = X_cluster.dot(base_emb).ravel()
 
         # select hard negatives: top k by score
         max_neg = n_pos * 15
@@ -70,7 +54,6 @@ class ReRankerTrainer:
 
         neg_positions_all = np.where(neg_mask)[0]
         neg_scores = scores[neg_mask]
-
         if k < neg_scores.size:
             top_k_idx = np.argpartition(-neg_scores, k)[:k]
             neg_positions = neg_positions_all[top_k_idx]
@@ -84,19 +67,16 @@ class ReRankerTrainer:
 
         # combine positives + negatives (positions relative to X_cluster)
         selected_positions = np.concatenate([positive_positions, neg_positions])
-        
         Y_valid = np.zeros(selected_positions.size, dtype=np.int8)
         Y_valid[:n_pos] = 1
-
         # slice cluster matrix for training
         X_valid = X_cluster[selected_positions]
 
-        # build label tile using the FULL label_emb (augmented) so reranker sees full vector
-        label_tile = csr_matrix(np.repeat(label_emb[np.newaxis, :], X_valid.shape[0], axis=0))
+        n = X_valid.shape[0]
+        label_tile = csr_matrix((np.ones(n), (np.arange(n), np.zeros(n))),
+                                shape=(n, 1)).dot(csr_matrix(label_emb.reshape(1, -1)))
 
-        # concatenate [mention_features | label_embedding]
         X_combined = hstack([X_valid, label_tile])
-        X_combined = csr_matrix(X_combined)
 
         print(f"[PID {os.getpid()}] Training label {global_idx} with {n_pos} positives, {n_neg_selected} negatives "
               f"(cluster_size={X_cluster.shape[0]})")
@@ -113,13 +93,12 @@ class ReRankerTrainer:
 
     @staticmethod
     def train(X, Y, Z, M_TFN, M_MAN, cluster_labels, config, local_to_global_idx,
-              layer=None, n_label_workers=4, parallel_backend="threading"):
+              n_label_workers=-1, parallel_backend="threading"):
         """
         Note: we DO NOT pad Z here. prepare_layer should already have augmented Z for child models.
         """
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
         reranker_models = {}
-        num_labels = Y.shape[1]
 
         # GROUP labels by cluster
         labels_by_cluster = {}
