@@ -244,7 +244,7 @@ class XModel():
         ordered = np.argsort(-mat[idx, part], axis=1)
         return part[idx, ordered]
 
-    def _prepare_layer_infer(self, X_node, Z_node, mention_indices, C, matcher_scores, top_clusters_idx, prop_score):
+    def _prepare_layer_infer(self, X_node, Z_node, mention_indices, C, matcher_scores, top_clusters_idx, global_to_local_idx, prop_score):
         """
         Prepare augmented features and Z for the next layer.
         Returns list of tuples: (X_aug, Z_aug, mentions_sub, prop_score_sub)
@@ -280,7 +280,15 @@ class XModel():
             if local_idxs.size == 0:
                 continue
 
-            Z_base = Z_node[local_idxs, :]
+            Z_base_rows = []
+            for g in local_idxs:  # g is a global label
+                loc = global_to_local_idx.get(g, None)
+                if loc is not None and loc < Z_node.shape[0]:
+                    Z_base_rows.append(loc)
+            if not Z_base_rows:
+                continue  # skip cluster if no valid labels
+            Z_base = Z_node[Z_base_rows, :]
+            
             X_sub_dense = X_sub.toarray() if issparse(X_sub) else np.asarray(X_sub)
             scores = X_sub_dense.dot(Z_base.T)
             label_feats = np.vstack([scores.mean(axis=0), scores.sum(axis=0), scores.max(axis=0)]).T
@@ -344,10 +352,11 @@ class XModel():
                     local_labels = []
                     local_idxs = []
 
+                    # Build local indices safely: only keep indices within Z_node
                     for c in clusters:
-                        for g in cluster_to_labels[c]:
+                        for g in cluster_to_labels.get(c, []):
                             loc = ml.global_to_local_idx.get(g, None)
-                            if loc is None:
+                            if loc is None or loc >= Z_node.shape[0]:  # ignore labels outside cluster
                                 continue
                             local_labels.append(g)
                             local_idxs.append(loc)
@@ -355,6 +364,7 @@ class XModel():
                     if not local_labels:
                         return m_idx, fused_pairs
 
+                    # Slice Z_node using only valid local indices
                     Z_batch = Z_node[local_idxs, :]
                     X_rep = np.tile(x_emb.reshape(1, -1), (Z_batch.shape[0], 1))
                     feat_mat = np.hstack([X_rep, Z_batch])
@@ -414,7 +424,7 @@ class XModel():
                     top_clusters_idx_surv = self._topk_indices_rowwise(ms_surv * new_prop_score[:, None], beam_size_eff)
 
                     next_inputs.extend(self._prepare_layer_infer(
-                        X_surv, Z_node, surv_mentions, C, ms_surv, top_clusters_idx_surv, new_prop_score
+                        X_surv, Z_node, surv_mentions, C, ms_surv, top_clusters_idx_surv, ml.global_to_local_idx, new_prop_score
                     ))
 
             current_inputs = next_inputs

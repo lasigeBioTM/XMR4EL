@@ -24,7 +24,7 @@ class ClusteringTrainer:
 
         if n_points <= min_leaf_size:
             print(f"Too few points ({n_points}), stopping clustering.")
-            return None, None, None
+            return None, None
 
         if max_leaf_size is None:
             avg_cluster_size = n_points / n_clusters
@@ -40,7 +40,7 @@ class ClusteringTrainer:
         valid_clusters = [cid for cid, cnt in cluster_counts.items() if cnt >= min_leaf_size]
         if len(valid_clusters) <= 1:
             print(f"Only {len(valid_clusters)} valid clusters after pruning, stopping clustering.")
-            return None, None, None
+            return None, None
 
         # Build C_node
         rows, cols = [], []
@@ -53,7 +53,7 @@ class ClusteringTrainer:
             cluster_id_offset += 1
 
         if len(rows) == 0:
-            return None, None, None
+            return None, None
 
         C_node = csr_matrix((np.ones(len(rows), dtype=dtype), (rows, cols)), shape=(n_points, cluster_id_offset))
         return C_node, clustering_model

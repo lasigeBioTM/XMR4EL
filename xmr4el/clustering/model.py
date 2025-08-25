@@ -106,6 +106,10 @@ class Clustering():
                                               max_leaf_size=max_leaf_size,
                                               dtype=self.dtype)
         
+        if C_node is None or model is None:
+            self.is_empty = True
+            return
+        
         self.z_node = Z
         self.c_node = C_node
         self.model = model

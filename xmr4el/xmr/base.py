@@ -2,6 +2,8 @@ import os
 import re
 import gc
 import pickle
+import tempfile
+from uuid import uuid4
 import joblib
 
 import numpy as np
@@ -14,6 +16,7 @@ from sklearn.preprocessing import normalize
 from typing import Counter
 
 from joblib import Parallel, delayed
+from pathlib import Path
 
 from xmr4el.clustering.model import Clustering
 from xmr4el.matcher.model import Matcher
@@ -221,6 +224,8 @@ class MLModel():
             X_dense = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
             global_idxs = np.array([self.local_to_global_idx[i] for i in cols_list])
 
+            print(self.reranker_model.model_dict)
+
             # detect loss type
             first_model = next(iter(self.reranker_model.model_dict.values()))
             is_hinge = first_model.config.get("type") == "sklearnsgdclassifier" and \
@@ -379,6 +384,8 @@ class HierarchicaMLModel():
         self._hmodel = []
         self._layer = layer
         
+        self.ml_dir = Path(tempfile.mkdtemp(prefix="ml_store_"))
+        
     @property
     def hmodel(self):
         return self._hmodel
@@ -475,6 +482,12 @@ class HierarchicaMLModel():
         setattr(model, "_hmodel", hmodel)
 
         return model
+    
+    def save_ml_temp(self, model, name):
+        sub_dir =  self.ml_dir / str(name)
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        model.save(str(sub_dir))
+        return str(sub_dir)
             
     def prepare_layer(self, X, Y, Z, C, fused_scores, local_to_global_idx):
         """
@@ -553,69 +566,91 @@ class HierarchicaMLModel():
             
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
-        Train multiple layers of MLModel; after each layer, prepare data for the next.
+        Train multiple layers of MLModel; intermediate models are saved in a
+        temporary folder which is automatically deleted at the end of training.
         """
-        
         inputs = [(X_train, Y_train, Z_train, local_to_global, global_to_local)]
-        
-        for layer in range(self.layers):
-            
-            next_inputs = []
-            ml_list = []
-            layer_failed = False
-            
-            if self.cut_half_cluster and layer > 0:
-                self.clustering_config["kwargs"]["n_clusters"] = int(max(2, self.clustering_config["kwargs"]["n_clusters"] / 2))
-            
-            for X_node, Y_node, Z_node, local_to_label_node, global_to_local_node in inputs:
-                
-                ml = MLModel(clustering_config=self.clustering_config, 
-                             matcher_config=self.matcher_config,
-                             reranker_config=self.reranker_config,
-                             min_leaf_size=self.min_leaf_size,
-                             max_leaf_size=self.max_leaf_size,
-                             layer=layer,
-                             n_workers=self.n_workers,
-                            )
-                
-                ml._local_to_global_idx = local_to_global
-            
-                ml.train(X_train=X_node, 
-                         Y_train=Y_node, 
-                         Z_train=Z_node, 
-                         local_to_global=local_to_label_node,
-                         global_to_local=global_to_local_node
-                         )
-                
-                if ml.is_empty:
-                    layer_failed = True
+
+        # Use TemporaryDirectory to ensure cleanup
+        with tempfile.TemporaryDirectory(prefix="ml_store_") as temp_dir:
+            self.ml_dir = Path(temp_dir)
+            self.hmodel = []
+
+            for layer in range(self.layers):
+                next_inputs = []
+                ml_list = []
+                layer_failed = False
+
+                # Optional: adjust cluster size
+                if self.cut_half_cluster and layer > 0:
+                    self.clustering_config["kwargs"]["n_clusters"] = max(
+                        2, self.clustering_config["kwargs"]["n_clusters"] // 2
+                    )
+
+                for X_node, Y_node, Z_node, local_to_label_node, global_to_local_node in inputs:
+                    ml = MLModel(
+                        clustering_config=self.clustering_config,
+                        matcher_config=self.matcher_config,
+                        reranker_config=self.reranker_config,
+                        min_leaf_size=self.min_leaf_size,
+                        max_leaf_size=self.max_leaf_size,
+                        layer=layer,
+                        n_workers=self.n_workers,
+                    )
+                    ml._local_to_global_idx = local_to_global
+
+                    ml.train(
+                        X_train=X_node,
+                        Y_train=Y_node,
+                        Z_train=Z_node,
+                        local_to_global=local_to_label_node,
+                        global_to_local=global_to_local_node
+                    )
+
+                    if ml.is_empty:
+                        layer_failed = True
+                        break
+
+                    C = ml.cluster_model.c_node
+                    fused_scores = ml.fused_scores
+
+                    # Prepare inputs for next layer
+                    child_inputs = self.prepare_layer(
+                        X=X_node,
+                        Y=Y_node,
+                        Z=Z_node,
+                        C=C,
+                        fused_scores=fused_scores,
+                        local_to_global_idx=local_to_label_node
+                    )
+
+                    # Save model in temporary folder with unique name
+                    ml_path = self.save_ml_temp(ml, f"{layer}_{uuid4()}")
+                    del ml
+                    ml_list.append(ml_path)
+                    next_inputs.extend(child_inputs)
+
+                if layer_failed:
                     break
-                
-                
-                ml_list.append(ml)
-                
-                C = ml.cluster_model.c_node # Cluster mentions
-                fused_scores = ml.fused_scores
-            
-                child_inputs = self.prepare_layer(X=X_node, 
-                                                  Y=Y_node, 
-                                                  Z=Z_node, 
-                                                  C=C, 
-                                                  fused_scores=fused_scores,
-                                                  local_to_global_idx=local_to_label_node
-                                                 )
-                
-                next_inputs.extend(child_inputs)
-            
-            if layer_failed:
-                break
-            
-            self.hmodel.append(ml_list)
-            
-            del ml_list
-            gc.collect()
-            
-            # reformat inputs for next iteration: drop cluster id and label_idx
-            inputs = next_inputs
-            
-        return self.hmodel
+
+                self.hmodel.append(ml_list)
+
+                # Free memory after the layer
+                del ml_list
+                gc.collect()
+
+                # Prepare inputs for the next iteration
+                inputs = next_inputs
+
+            # Reload all models for final hmodel
+            new_hmodel_list = []
+            for model_list in self.hmodel:
+                ml_list = []
+                for ml_path in model_list:
+                    ml_list.append(MLModel.load(ml_path))
+                new_hmodel_list.append(ml_list)
+
+            self.hmodel = new_hmodel_list
+
+            # When this 'with' block ends, self.ml_dir and all temp models are deleted
+            return self.hmodel
