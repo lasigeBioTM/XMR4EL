@@ -285,6 +285,9 @@ class MLModel():
             Z, Pifa embeddings
         """
         
+        # --- Ensure Z is in fused space ---
+        Z_train = normalize(Z_train, norm="l2", axis=1) 
+        
         self.global_to_local_idx = global_to_local
         self.local_to_global_idx = np.array(local_to_global, dtype=int)
         # label_indices = np.array(x for x in range(label_indices.shape[0]))

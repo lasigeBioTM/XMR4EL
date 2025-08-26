@@ -82,7 +82,7 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/xmodel_2025-08-25_15-24-15" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-26_10-44-30" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
