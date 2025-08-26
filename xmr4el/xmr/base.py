@@ -8,7 +8,7 @@ import joblib
 
 import numpy as np
 
-from scipy.sparse import csr_matrix, lil_matrix, hstack
+from scipy.sparse import csr_matrix, hstack
 from scipy.special import expit
 
 from sklearn.preprocessing import normalize
@@ -224,7 +224,7 @@ class MLModel():
             X_dense = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
             global_idxs = np.array([self.local_to_global_idx[i] for i in cols_list])
 
-            print(self.reranker_model.model_dict)
+            # print(self.reranker_model.model_dict)
 
             # detect loss type
             first_model = next(iter(self.reranker_model.model_dict.values()))

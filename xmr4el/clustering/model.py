@@ -59,7 +59,7 @@ class Clustering():
     @property
     def is_empty(self):
         return True if self.c_node is None else False
-        
+    
     def save(self, save_dir):
         os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
 
@@ -107,7 +107,6 @@ class Clustering():
                                               dtype=self.dtype)
         
         if C_node is None or model is None:
-            self.is_empty = True
             return
         
         self.z_node = Z

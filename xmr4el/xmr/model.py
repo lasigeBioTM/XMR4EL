@@ -4,6 +4,9 @@ import os
 os.makedirs("/app/joblib_tmp", exist_ok=True)
 os.environ["JOBLIB_TEMP_FOLDER"] = "/app/temp"
 
+import warnings
+warnings.filterwarnings("ignore", message=".*does not have valid feature names.*")
+
 import joblib
 import pickle
 import pandas as pd
@@ -229,10 +232,9 @@ class XModel():
 
         self.model = hml
 
-    def _safe_log_fuse(self, m, r, a):
-        m = max(float(m), self.EPS)
-        r = max(float(r), self.EPS)
-        return (1.0 - a) * m + a * r
+    def _fuse(self, m, r, a): 
+        # (matcher_flat**(1-self.alpha))*(reranker_score**self.alpha)
+        return m ** (1-a) * (r ** a)
 
     def _topk_indices_rowwise(self, mat, k):
         if k <= 0:
@@ -243,193 +245,272 @@ class XModel():
         idx = np.arange(mat.shape[0])[:, None]
         ordered = np.argsort(-mat[idx, part], axis=1)
         return part[idx, ordered]
+    
+    def _compute_entity_fused_scores(self, ml, X_node, Z_node, alpha=0.5, batch_size=32768):
+        """
+        Return CSR matrix of shape (n_mentions_node, L_local) with fused scores per (mention, local_label).
+        Fusion matches training: fused = matcher^(1-alpha) * reranker^alpha
+        """
 
-    def _prepare_layer_infer(self, X_node, Z_node, mention_indices, C, matcher_scores, top_clusters_idx, global_to_local_idx, prop_score):
+        # ---- matcher scores: (n_mentions_node x L_local) ----
+        matcher_scores = ml.matcher_model.model.predict_proba(X_node)
+        # ensure csr
+        matcher_scores = csr_matrix(matcher_scores) if not hasattr(matcher_scores, "tocsr") else matcher_scores.tocsr()
+
+        # ---- flatten pairs (row i, local col j) only where matcher>0 ----
+        rows_list, cols_list, mvals = [], [], []
+        for i in range(X_node.shape[0]):
+            row = matcher_scores.getrow(i)
+            if row.nnz == 0:
+                continue
+            rows_list.extend([i] * row.indices.size)
+            cols_list.extend(row.indices.tolist())
+            mvals.extend(row.data.tolist())
+
+        if not rows_list:
+            # nothing scored -> return all-zeros
+            return matcher_scores  # just zeros
+
+        rows = np.asarray(rows_list, dtype=np.int32)
+        cols = np.asarray(cols_list, dtype=np.int32)
+        mvals = np.asarray(mvals, dtype=np.float32)
+
+        # ---- reranker on these pairs (batched) ----
+        rvals = np.ones_like(mvals, dtype=np.float32)
+        if ml.reranker_model and getattr(ml.reranker_model, "model_dict", None):
+            X_dense = X_node.toarray() if hasattr(X_node, "toarray") else np.asarray(X_node)
+            local_to_global = np.asarray(ml.local_to_global_idx, dtype=int)
+            global_cols = local_to_global[cols]  # map local label -> global id
+
+            # detect hinge vs proba from any one model
+            first_model = next(iter(ml.reranker_model.model_dict.values()))
+            is_hinge = first_model.config.get("type") == "sklearnsgdclassifier" and \
+                    first_model.config.get("kwargs", {}).get("loss") == "hinge"
+
+            for start in range(0, rows.size, batch_size):
+                end = min(start + batch_size, rows.size)
+                b_rows = rows[start:end]
+                b_cols = cols[start:end]
+                b_gids = global_cols[start:end]
+
+                X_part = X_dense[b_rows]
+                Z_part = Z_node[b_cols]  # local rows
+                batch = np.hstack([X_part, Z_part])
+
+                scores_batch = np.ones(end - start, dtype=np.float32)
+                # group by global id within the batch
+                for g in np.unique(b_gids):
+                    mask = (b_gids == g)
+                    mdl = ml.reranker_model.model_dict.get(int(g))
+                    if mdl is None:
+                        continue
+                    sub = batch[mask]
+                    try:
+                        if is_hinge:
+                            s = np.clip(expit(mdl.decision_function(sub)), 1e-6, 1.0)
+                        else:
+                            s = np.clip(mdl.predict_proba(sub)[:, 1], 1e-6, 1.0)
+                        scores_batch[mask] = s
+                    except Exception:
+                        # keep ones on error
+                        pass
+                rvals[start:end] = scores_batch
+
+        # ---- multiplicative fusion like training ----
+        a = ml.alpha if ml.alpha is not None else alpha
+        fused_flat = (mvals ** (1.0 - a)) * (rvals ** a)
+
+        # ---- assemble CSR in local row-space ----
+        n_rows = X_node.shape[0]
+        L_local = Z_node.shape[0]
+        entity_fused = csr_matrix((fused_flat, (rows, cols)), shape=(n_rows, L_local))
+        return entity_fused
+    
+    def _prepare_layer_infer(self, ml, X_node, Z_node, mention_indices, 
+                             prop_score, beam_size, debug=False):
         """
-        Prepare augmented features and Z for the next layer.
-        Returns list of tuples: (X_aug, Z_aug, mentions_sub, prop_score_sub)
+        Inference-time prepare for one node:
+        - Align Z to this node's local row-space
+        - Compute fused label scores (matcher+reranker, multiplicative)
+        - Project to clusters to build X's +3 features from fused cluster scores
+        - Build Z's +3 features from X·Zᵀ stats (mean/sum/max) for labels inside each cluster
+        - Produce child inputs for the next layer with (X_aug, Z_aug, mentions_sub, prop_score_sub,
+            local_to_global_next, global_to_local_next)
+        - Return (child_inputs, per-mention fused label updates for global accumulation)
         """
+        # ---------- Align to node-local space ----------
+        C = ml.cluster_model.c_node                      # (L_local x K_clusters)
+        local_to_global = np.asarray(ml.local_to_global_idx, dtype=int)
+        print(f"Shape of local to global: {local_to_global.shape}")
+        assert C.shape[0] == local_to_global.shape[0], "C rows must equal #local labels"
+        
+        print(f"C shape: {C.shape}, Z shape: {Z_node.shape}")
+
+        # ---------- Fused scores at label-level (local row-space) ----------
+        entity_fused = self._compute_entity_fused_scores(ml, X_node, Z_node, alpha=ml.alpha or 0.5)
+        # print(f"Entity Fused: {entity_fused.shape}")
+        # project to clusters to get fused cluster scores (for X features & routing)
+        cluster_fused = entity_fused.dot(C)  # (n_mentions_node x K_clusters)
+        # print(f"Cluster Fused: {cluster_fused.shape}")
+
+        # dense view for top-k & features
+        cluster_fused_dense = cluster_fused.toarray() if hasattr(cluster_fused, "toarray") else np.asarray(cluster_fused)
+
+        # ---------- Beam: pick top clusters per mention using fused cluster scores ----------
+        K = C.shape[1]
+        beam = min(beam_size, K) if K > 0 else 0
+        if beam <= 0 or K == 0:
+            return [], []  # no children / nothing to update
+
+        top_clusters_idx = self._topk_indices_rowwise(cluster_fused_dense, beam)
+
+        # ---------- Prepare child inputs (augment X, augment Z) ----------
+        n = X_node.shape[0]
         inputs = []
-        if matcher_scores is None or matcher_scores.size == 0:
-            return inputs
+        # For accumulating per-mention global label scores (restricted to routed clusters)
+        fused_updates = []  # list of (m_global_idx, [(global_label, fused_value), ...])
 
-        unique_clusters = np.unique(top_clusters_idx)
-        if unique_clusters.size == 0:
-            return inputs
+        # build a quick reverse map for the next step
+        global_to_local_next_cache = {}
 
-        col_map = {c: i for i, c in enumerate(unique_clusters)}
-        sliced = matcher_scores[:, unique_clusters]
+        # precompute union of local labels to consider per mention (labels in routed clusters)
+        labels_per_mention = []
+        for i in range(n):
+            clusters = top_clusters_idx[i]
+            local_idxs_union = np.unique(np.concatenate([C[:, c].nonzero()[0] for c in clusters])) if clusters.size else np.array([], dtype=int)
+            labels_per_mention.append(local_idxs_union)
 
-        for c in unique_clusters:
-            mask = np.any(top_clusters_idx == c, axis=1)
+        # ---- Update fused label scores (map local->global, apply propagation) ----
+        # We only update labels that lie in routed clusters for each mention (keeps it sparse).
+        entity_fused_dense = entity_fused.toarray() if hasattr(entity_fused, "toarray") else np.asarray(entity_fused)
+        for i_row in range(n):
+            m_idx = int(mention_indices[i_row])
+            lab_local = labels_per_mention[i_row]
+            if lab_local.size == 0:
+                fused_updates.append((m_idx, []))
+                continue
+            vals = entity_fused_dense[i_row, lab_local]
+            if prop_score is not None:
+                vals = vals * float(prop_score[i_row])
+            pairs = list(zip(local_to_global[lab_local].tolist(), vals.tolist()))
+            fused_updates.append((m_idx, pairs))
+
+        # ---------- Build child inputs by cluster (order by cluster id to match training) ----------
+        # We use the same per-cluster loop as training's prepare_layer, and the same X/Z feature recipes.
+        for c in range(C.shape[1]):
+            mask = np.any(top_clusters_idx == c, axis=1)  # mentions routed to cluster c
+            # print(mask)
             if not np.any(mask):
                 continue
 
             mentions_sub = mention_indices[mask]
             X_sub = X_node[mask]
-            F = sliced[mask]
 
-            feat_c = F[:, col_map[c]].reshape(-1, 1)
-            feat_sum = F.sum(axis=1).reshape(-1, 1)
-            feat_max = F.max(axis=1).reshape(-1, 1)
-            extra = csr_matrix(np.hstack([feat_c, feat_sum, feat_max]))
-            X_aug = hstack([X_sub, extra], format="csr")
+            # ----- X +3 features from fused cluster scores -----
+            F = cluster_fused_dense[mask, :]        # fused over all clusters for these mentions
+            feat_c = F[:, c].reshape(-1, 1)
+            feat_sum = F.sum(axis=1, keepdims=True)
+            feat_max = F.max(axis=1, keepdims=True)
+            X_aug = hstack([X_sub, csr_matrix(np.hstack([feat_c, feat_sum, feat_max]))], format="csr")
             X_aug = normalize(X_aug, norm="l2", axis=1)
 
+            # ----- Z +3 features from X_sub · Z_baseᵀ stats (mean/sum/max) -----
             local_idxs = C[:, c].nonzero()[0]
             if local_idxs.size == 0:
                 continue
-
-            Z_base_rows = []
-            for g in local_idxs:  # g is a global label
-                loc = global_to_local_idx.get(g, None)
-                if loc is not None and loc < Z_node.shape[0]:
-                    Z_base_rows.append(loc)
-            if not Z_base_rows:
-                continue  # skip cluster if no valid labels
-            Z_base = Z_node[Z_base_rows, :]
             
-            X_sub_dense = X_sub.toarray() if issparse(X_sub) else np.asarray(X_sub)
-            scores = X_sub_dense.dot(Z_base.T)
-            label_feats = np.vstack([scores.mean(axis=0), scores.sum(axis=0), scores.max(axis=0)]).T
+            print(f"{c} -> Local Indices: {local_idxs}, {local_idxs.shape}")
+            # Map node-local to parent-local first
+            parent_local_idxs = [g2l_parent[int(l2g_parent[i])] for i in ml.local_to_global_idx[local_idxs]]
+            Z_base = Z_node[parent_local_idxs, :]
+            
+            try:
+                X_sub_dense = X_sub.toarray()
+            except Exception:
+                X_sub_dense = np.asarray(X_sub)
+
+            if X_sub_dense.size == 0 or Z_base.size == 0:
+                label_feats = np.zeros((Z_base.shape[0], 3), dtype=Z_base.dtype)
+            else:
+                scores = X_sub_dense.dot(Z_base.T)
+                label_feats = np.vstack([scores.mean(axis=0), scores.sum(axis=0), scores.max(axis=0)]).T
+
             Z_aug = normalize(np.hstack([Z_base, label_feats]), norm="l2", axis=1)
 
-            # Propagate prop_score for this subset
-            prop_score_sub = prop_score[mask]
+            # ----- mappings for the child node -----
+            local_to_global_next = l2g_parent[ml.local_to_global_idx[local_idxs]]
+            global_to_local_next = global_to_local_next_cache.get(id(local_to_global_next))
+            if global_to_local_next is None:
+                global_to_local_next = {int(g): int(i) for i, g in enumerate(local_to_global_next)}
+                global_to_local_next_cache[id(local_to_global_next)] = global_to_local_next
 
-            inputs.append((X_aug, Z_aug, mentions_sub, prop_score_sub))
+            # ----- propagate prop score -----
+            prop_score_sub = prop_score[mask] if prop_score is not None else np.ones(mentions_sub.shape[0], dtype=float)
 
-        return inputs
-    
+            print(f"Augmented Z: {Z_aug.shape}")
+
+            # collect child tuple in the SAME semantic format training used
+            inputs.append((X_aug, Z_aug, mentions_sub, prop_score_sub, local_to_global_next, global_to_local_next))
+
+            if debug:
+                print(f"[infer] cluster {c}: X_sub={X_sub.shape} -> X_aug={X_aug.shape}, "
+                    f"Z_base={Z_base.shape} -> Z_aug={Z_aug.shape}, routed_mentions={mentions_sub.size}")
+
+        return inputs, fused_updates
+
     def predict(self, X_text, gold_labels=None, topk=10, beam_size=5,
-                debug=False, n_jobs=-1, backend="threading", TARGET_LABEL=None):
+            debug=False, n_jobs=-1, backend="threading", TARGET_LABEL=None):
 
-        X = self.text_encoder.predict(X_text)
-        Z = self.Z
-        N = X.shape[0]
+        X0 = self.text_encoder.predict(X_text)          # (N x d)
+        Z0 = self.Z                                      # global base/augmented label matrix
+        N = X0.shape[0]
 
-        all_global_max = [int(ml.local_to_global_idx.max()) for layer in self.model.hmodel for ml in layer]
-        G = (max(all_global_max) + 1) if all_global_max else 0
+        # global label-space size
+        G = int(max([int(ml.local_to_global_idx.max()) for layer in self.model.hmodel for ml in layer]) + 1)
 
         label_scores = [dict() for _ in range(N)]
 
-        # Initial inputs: X, Z, mention idxs, prop_score=1
-        current_inputs = [(X, Z, np.arange(N), np.ones(N, dtype=float))]
+        # Initial inputs: (X, Z, mention idxs, prop_score, l2g, g2l)
+        current_inputs = [(X0, Z0, np.arange(N), np.ones(N, dtype=float))]
 
         for layer_idx, mlmodels in enumerate(self.model.hmodel):
-            next_inputs = []
             if debug:
-                print(f"Layer {layer_idx}")
+                print(f"\n=== Layer {layer_idx} ===\n")
+            next_inputs = []
 
-            for ml, (X_node, Z_node, mention_indices, prop_score) in zip(mlmodels, current_inputs):
+            # one ml per input (same contract as training)
+            for ml, (X_node, Z_parent, mention_indices, prop_score) in zip(mlmodels, current_inputs):
+                # print(ml.cluster_model.z_node.shape, Z_parent.shape)
                 if X_node.shape[0] == 0:
                     continue
 
-                X_node_dense = X_node.toarray() if issparse(X_node) else np.asarray(X_node)
-                matcher_scores = ml.matcher_model.predict_proba(X_node)
-                matcher_scores = np.nan_to_num(matcher_scores, nan=0.0)
-
-                # Map clusters to labels
-                cluster_to_labels = ml.cluster_model.cluster_to_labels
-                label_to_clusters = {}
-                for c_id, labs in cluster_to_labels.items():
-                    for lab in labs:
-                        label_to_clusters.setdefault(int(lab), []).append(int(c_id))
-
-                # Top clusters for each mention
-                beam_size_eff = min(beam_size, matcher_scores.shape[1])
-                top_clusters_idx = self._topk_indices_rowwise(matcher_scores, beam_size_eff)
-
-                def _process_mention(i_row):
-                    m_idx = int(mention_indices[i_row])
-                    x_emb = X_node_dense[i_row].ravel()
-                    gold_list = gold_labels[m_idx] if gold_labels is not None else []
-                    gold_set = set(gold_list)
-                    fused_pairs = []
-                    debug_this = debug and (TARGET_LABEL is not None and TARGET_LABEL in gold_set)
-
-                    clusters = top_clusters_idx[i_row]
-                    local_labels = []
-                    local_idxs = []
-
-                    # Build local indices safely: only keep indices within Z_node
-                    for c in clusters:
-                        for g in cluster_to_labels.get(c, []):
-                            loc = ml.global_to_local_idx.get(g, None)
-                            if loc is None or loc >= Z_node.shape[0]:  # ignore labels outside cluster
-                                continue
-                            local_labels.append(g)
-                            local_idxs.append(loc)
-
-                    if not local_labels:
-                        return m_idx, fused_pairs
-
-                    # Slice Z_node using only valid local indices
-                    Z_batch = Z_node[local_idxs, :]
-                    X_rep = np.tile(x_emb.reshape(1, -1), (Z_batch.shape[0], 1))
-                    feat_mat = np.hstack([X_rep, Z_batch])
-
-                    for j, g in enumerate(local_labels):
-                        rer = 1.0
-                        if ml.reranker_model and g in ml.reranker_model.model_dict:
-                            mdl = ml.reranker_model.model_dict[g]
-                            xfeat = feat_mat[j:j+1, :]
-                            try:
-                                proba = mdl.predict_proba(xfeat)
-                                rer = float(np.clip(proba[0, 1], self.EPS, 1.0))
-                            except AttributeError:
-                                try:
-                                    df = mdl.decision_function(xfeat)[0]
-                                    rer = float(np.clip(expit(df), self.EPS, 1.0))
-                                except Exception:
-                                    rer = 1.0
-                            except Exception:
-                                rer = 1.0
-
-                        cluster_ids = label_to_clusters.get(int(g), [])
-                        matcher_score = 1.0
-                        if cluster_ids:
-                            cs = [matcher_scores[i_row, c] for c in cluster_ids if 0 <= c < matcher_scores.shape[1]]
-                            if cs:
-                                matcher_score = float(max(cs))
-
-                        fused_val = self._safe_log_fuse(matcher_score * prop_score[i_row], rer, ml.alpha)
-                        fused_pairs.append((g, fused_val))
-
-                        if debug_this:
-                            gold_flag = " <<-- GOLD" if self.initial_labels[g] in gold_set else ""
-                            print(f"    (label={g}) m={matcher_score:.6f} r={rer:.6f} fused={fused_val:.6f}{gold_flag}")
-
-                    return m_idx, fused_pairs
-
-                par_results = Parallel(n_jobs=n_jobs, backend=backend)(
-                    delayed(_process_mention)(i_row) for i_row in range(len(mention_indices))
+                print(f"\nSTART -> Prepare Layer Infer, layer {layer_idx}, ml {ml.__hash__}")
+                # prepare child inputs + local fused updates
+                child_inputs, fused_updates = self._prepare_layer_infer(
+                    ml=ml,
+                    X_node=X_node,
+                    Z_node=Z_parent,
+                    mention_indices=mention_indices,
+                    prop_score=prop_score,
+                    beam_size=beam_size,
+                    debug=debug
                 )
+                print(f"END -> Prepare Layer Infer, layer {layer_idx}, ml {ml.__hash__}\n")
+                
 
-                for m_idx, fused_pairs in par_results:
+                # accumulate fused label scores in GLOBAL id-space
+                for m_idx, pairs in fused_updates:
                     d = label_scores[m_idx]
-                    for g, fv in fused_pairs:
-                        if fv > d.get(g, 0.0):
-                            d[g] = fv
+                    for g_global, val in pairs:
+                        if val > d.get(int(g_global), 0.0):
+                            d[int(g_global)] = float(val)
 
-                # Propagate top clusters for next layer
-                surv_mask = np.array([len(top_clusters_idx[i]) > 0 for i in range(len(mention_indices))], dtype=bool)
-                if surv_mask.any():
-                    surv_mentions = mention_indices[surv_mask]
-                    X_surv = X_node[surv_mask]
-                    ms_surv = matcher_scores[surv_mask]
-                    new_prop_score = np.array([max(label_scores[m].values()) for m in surv_mentions], dtype=float)
-
-                    C = ml.cluster_model.c_node
-                    top_clusters_idx_surv = self._topk_indices_rowwise(ms_surv * new_prop_score[:, None], beam_size_eff)
-
-                    next_inputs.extend(self._prepare_layer_infer(
-                        X_surv, Z_node, surv_mentions, C, ms_surv, top_clusters_idx_surv, ml.global_to_local_idx, new_prop_score
-                    ))
+                # append children to next layer input queue
+                next_inputs.extend(child_inputs)
 
             current_inputs = next_inputs
 
-        # Build final sparse matrix and hits
+        # ----- finalize sparse score matrix and hits -----
         rows, cols, data = [], [], []
         hits = []
         for i in range(N):
@@ -437,8 +518,9 @@ class XModel():
             top_labels = sorted(d.items(), key=lambda kv: -kv[1])[:topk] if d else []
             for g, s in top_labels:
                 rows.append(i)
-                cols.append(g)
-                data.append(s)
+                cols.append(int(g))
+                data.append(float(s))
+
             label_idx_found = -1
             gold_list = gold_labels[i] if gold_labels is not None else []
             for rank, (g, _) in enumerate(top_labels):
