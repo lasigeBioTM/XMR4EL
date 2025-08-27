@@ -82,7 +82,7 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/xmodel_2025-08-26_10-44-30" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-26_13-43-15" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
@@ -97,14 +97,13 @@ def main():
     
     # predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=10)
     # predicted_labels, hits, debug_table = trained_xtree.predict_old(filtered_texts, filtered_labels, topk=50, beam_size=1, n_jobs=1, debug=True)
-    predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=100, beam_size=1, n_jobs=-1, debug=True, TARGET_LABEL="D058186")
-
-    print(predicted_labels)
-    print(hits)
-    # print(debug_table)
+    # predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=100, beam_size=1, n_jobs=-1, debug=True, TARGET_LABEL="D058186")
+    score_matrix, return_hits = trained_xtree.predict(filtered_texts, golden_labels=filtered_labels, topk=2, beam_size=1, return_hits=True)
     
-    # save_debug_tables(debug_table)
+    print(score_matrix)
+    print(return_hits)
 
+    exit()
     found_ratio = []
     for found, _, _ in hits:
         if found == 1:

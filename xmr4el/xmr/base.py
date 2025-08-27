@@ -1,9 +1,9 @@
+from collections import defaultdict
 import os
 import re
 import gc
 import pickle
 import tempfile
-from uuid import uuid4
 import joblib
 
 import numpy as np
@@ -13,7 +13,8 @@ from scipy.special import expit
 
 from sklearn.preprocessing import normalize
 
-from typing import Counter
+from typing import Counter, Optional
+from uuid import uuid4
 
 from joblib import Parallel, delayed
 from pathlib import Path
@@ -52,6 +53,7 @@ class MLModel():
         self._reranker_model = None
         self._fused_scores = None
         self._alpha = None
+        self._label_embeddings = None
     
     @property
     def local_to_global_idx(self):
@@ -113,6 +115,14 @@ class MLModel():
     @alpha.setter
     def alpha(self, value):
         self._alpha = value
+        
+    @property
+    def label_embeddings(self):
+        return self._label_embeddings
+    
+    @label_embeddings.setter
+    def label_embeddings(self, value):
+        self._label_embeddings = value
     
     @property
     def is_empty(self):
@@ -151,6 +161,12 @@ class MLModel():
         else:
             raise ValueError("fused_scores is None. Cannot save.")
 
+        # Save label embeddings separately
+        label_embeddings = self.label_embeddings
+        if label_embeddings is not None:
+            np.save(os.path.join(save_dir, "label_embeddings.npy"), label_embeddings)
+            state.pop("_label_embeddings", None)
+
         # Save remaining state
         with open(os.path.join(save_dir, "mlmodel.pkl"), "wb") as fout:
             pickle.dump(state, fout)
@@ -185,6 +201,12 @@ class MLModel():
         assert os.path.exists(emb_path), f"Expecting fused_scores to be in the path {emb_path}, but path doesnt exist"
         setattr(model, "fused_scores", np.load(emb_path, allow_pickle=True))
 
+        label_emb_path = os.path.join(load_dir, "label_embeddings.npy")
+        if os.path.exists(label_emb_path):
+            setattr(model, "label_embeddings", np.load(label_emb_path, allow_pickle=True))
+        else:
+            setattr(model, "label_embeddings", None)
+
         return model
         
     def __str__(self):
@@ -193,10 +215,33 @@ class MLModel():
                 f"Reranker Model: {"✔" if self.reranker_model is not None else "✖"}\n" 
         return _str
     
-    def fused_predict(self, X, Z, C, alpha=0.5, batch_size=32768):
-        """
-        Batched fused_predict: matcher + reranker fusion, memory-efficient.
-        Computes reranker scores in chunks and never builds the full flattened (X|Z) matrix.
+    def fused_predict(self, X, Z, C, alpha=0.5, batch_size=32768,
+                      fusion: str = "geometric", p: int = 2):
+        """Batched matcher/reranker fusion.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix
+            Query feature matrix.
+        Z : array-like or sparse matrix
+            Label embedding matrix in the fused space.
+        C : csr_matrix
+            Cluster assignment matrix for projecting label scores.
+        alpha : float, optional
+            Interpolation coefficient between matcher and reranker scores.
+        batch_size : int, optional
+            Number of (query, label) pairs processed per reranker batch.
+        fusion : {"geometric", "lp_hinge"}, optional
+            Fusion strategy. "geometric" uses the geometric mean of matcher and
+            reranker scores. "lp_hinge" performs an L-p interpolation with a
+            hinge at zero.
+        p : int, optional
+            The ``p`` parameter used when ``fusion="lp_hinge"``.
+
+        Returns
+        -------
+        csr_matrix
+            Fused cluster score matrix of shape ``(n_queries, n_clusters)``.
         """
         N = X.shape[0]
         L_local = Z.shape[0]
@@ -264,12 +309,14 @@ class MLModel():
 
                 reranker_score[start:end] = scores_batch
 
-        # --- fuse matcher + reranker ---
-        # alpha_dyn = reranker_score / (matcher_flat + reranker_score + 1e-6)
-        # self.alpha = float(np.mean(alpha_dyn))
-        self.alpha = 0.5
-        
-        fused = (matcher_flat**(1-self.alpha))*(reranker_score**self.alpha)
+        self.alpha = alpha
+
+        if fusion == "lp_hinge":
+            fused = ((1 - self.alpha) * (matcher_flat ** p) +
+                     self.alpha * (reranker_score ** p)) ** (1.0 / p)
+            fused = np.maximum(fused, 0.0)
+        else:
+            fused = (matcher_flat ** (1 - self.alpha)) * (reranker_score ** self.alpha)
 
         # --- build local-label fused matrix ---
         entity_fused = csr_matrix((fused, (rows_list, cols_list)), shape=(N, L_local))
@@ -277,7 +324,7 @@ class MLModel():
         # --- project to clusters ---
         cluster_fused = entity_fused.dot(C)
         return csr_matrix(cluster_fused)
-            
+    
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
             X_train: X_processed
@@ -287,6 +334,7 @@ class MLModel():
         
         # --- Ensure Z is in fused space ---
         Z_train = normalize(Z_train, norm="l2", axis=1) 
+        self.label_embeddings = Z_train
         
         self.global_to_local_idx = global_to_local
         self.local_to_global_idx = np.array(local_to_global, dtype=int)
@@ -348,12 +396,6 @@ class MLModel():
         del reranker_model
         gc.collect()
         
-        # Dont predict fused scores if no layer ?
-        
-        # base_alpha = 0.3
-        # alpha_growth = 0.15  # increase per layer
-        # alpha_dyn = min(0.9, base_alpha + self.layer * alpha_growth)
-        
         alpha_dyn = 0.5
         
         print("Fusing Scores")
@@ -363,6 +405,136 @@ class MLModel():
         del fused_scores
         gc.collect()
         
+    def predict(self, X_query, beam_size: int = 5, topk: Optional[int] = None, return_matrix: bool = False, 
+            fusion: str = "lp_hinge", eps: float = 1e-6, alpha: float = 0.5, p: int = 2):
+        # --- 1) Top-k clusters from matcher (cluster-level proba) ---
+        cluster_scores = self.matcher_model.predict_proba(X_query)  # shape (n_queries, K)
+        n, K = cluster_scores.shape
+
+        C = self.cluster_model.c_node                                # shape (L, K) label->cluster (CSR)
+        L = C.shape[0]
+        assert K == C.shape[1], f"Matcher outputs K={K} clusters, but C has {C.shape[1]}."
+        assert L == len(self.local_to_global_idx), "C rows must equal #local labels"
+
+        k = min(beam_size, K)
+        if k == 0:
+            M = csr_matrix((n, 0))
+            M.global_labels = np.array([], dtype=object)
+            return M if return_matrix else ([np.array([])] * n, [np.array([], dtype=object)] * n)
+
+        # pick top-k clusters per query
+        idx_part = np.argpartition(cluster_scores, K - k, axis=1)[:, -k:]     # (n, k), unordered
+        part = np.take_along_axis(cluster_scores, idx_part, axis=1)
+        order = np.argsort(-part, axis=1)
+        topk_clusters = np.take_along_axis(idx_part, order, axis=1)           # (n, k)
+
+        # --- 2) Precompute mappings ---
+        # cluster -> GLOBAL label ids (fast via CSC column indices)
+        C_csc = C.tocsc()
+        cluster_to_global = [self.local_to_global_idx[C_csc[:, c].indices] for c in range(K)]
+
+        # label (local) -> cluster (single membership expected)
+        label_cluster = np.asarray(C.argmax(axis=1)).ravel()
+
+        g2l = self.global_to_local_idx
+        Z = self.label_embeddings
+
+        # --- 3) Build queries_per_label by expanding top-k clusters to all their labels ---
+        queries_per_label = defaultdict(list)  # gid -> [query_idx,...]
+        for qi in range(n):
+            cand_global = np.unique(np.concatenate([cluster_to_global[c] for c in topk_clusters[qi]])) \
+                        if k > 0 else np.array([], dtype=self.local_to_global_idx.dtype)
+            for gid in cand_global:
+                queries_per_label[int(gid)].append(qi)
+
+        # --- 4) Batch reranker per label and fuse with the label's cluster score ---
+        X_dense = X_query.toarray() if hasattr(X_query, "toarray") else np.asarray(X_query)
+        model_dict = self.reranker_model.model_dict
+
+        # detect hinge-style rerankers (like in your earlier code)
+        is_hinge = False
+        if len(model_dict):
+            any_model = next(iter(model_dict.values()))
+            cfg = getattr(any_model, "config", {})
+            is_hinge = (cfg.get("type") == "sklearnsgdclassifier" and
+                        cfg.get("kwargs", {}).get("loss") == "hinge")
+
+        results = [[] for _ in range(n)]  # per-query list of (gid, fused_score)
+
+        for gid, q_indices in queries_per_label.items():
+            li = g2l.get(gid)
+            mdl = model_dict.get(gid)
+            if li is None or mdl is None or not q_indices:
+                continue
+
+            # matcher score for (query, label) = cluster score of the label's cluster
+            c = int(label_cluster[li])
+            q_idx = np.asarray(q_indices, dtype=int)
+            m = cluster_scores[q_idx, c]  # vector of length len(q_idx)
+
+            # reranker score for (query, label)
+            zvec = Z[li]
+            Z_tiled = np.tile(zvec, (len(q_idx), 1))
+            batch_inp = np.hstack([X_dense[q_idx], Z_tiled])
+
+            try:
+                if hasattr(mdl, "predict_proba") and not is_hinge:
+                    r = mdl.predict_proba(batch_inp)[:, 1]
+                elif hasattr(mdl, "decision_function"):
+                    r = expit(mdl.decision_function(batch_inp))
+                else:
+                    r = np.ones(len(q_idx), dtype=float)
+            except Exception:
+                r = np.ones(len(q_idx), dtype=float)
+
+            # fuse (no reduction; label uses its single cluster)
+            m = np.clip(m, eps, 1.0)
+            r = np.clip(r, eps, 1.0)
+            if fusion == "lp_hinge":
+                fused = ((1 - alpha) * (m ** p) + alpha * (r ** p)) ** (1.0 / p)
+                fused = np.maximum(fused, 0.0)
+            else:  # "geometric"
+                fused = (m ** (1 - alpha)) * (r ** alpha)
+
+            for qi, sc in zip(q_idx, fused):
+                results[qi].append((gid, float(sc)))
+
+        # --- 5) Pack results ---
+        if return_matrix:
+            
+            if topk:
+                results = [pairs[:topk] for pairs in results]
+
+            # 2) collect the (possibly reduced) set of global ids
+            all_gids = sorted({gid for pairs in results for gid, _ in pairs})
+            gid_to_col = {g: i for i, g in enumerate(all_gids)}
+
+            # 3) build CSR triplets
+            rows, cols, data = [], [], []
+            for qi, pairs in enumerate(results):
+                for gid, sc in pairs:
+                    rows.append(qi)
+                    cols.append(gid_to_col[gid])
+                    data.append(sc)
+
+            M = csr_matrix((data, (rows, cols)), shape=(n, len(all_gids)))
+            M.global_labels = np.array(all_gids, dtype=object)
+            return M
+        
+        scores_per_query, labels_per_query = [], []
+        for pairs in results:
+            if topk:
+                pairs = pairs[:topk]
+                
+            if not pairs:
+                scores_per_query.append(np.array([], dtype=float))
+                labels_per_query.append(np.array([], dtype=object))
+            else:
+                pairs.sort(key=lambda t: -t[1])
+                labels_per_query.append(np.array([g for g, _ in pairs], dtype=object))
+                scores_per_query.append(np.array([s for _, s in pairs], dtype=float))
+                
+        return scores_per_query, labels_per_query
         
 class HierarchicaMLModel():
     """Loops MLModel"""
@@ -657,3 +829,40 @@ class HierarchicaMLModel():
 
             # When this 'with' block ends, self.ml_dir and all temp models are deleted
             return self.hmodel
+        
+    def predict(self, X_query, topk: int = 5, beam_size: int | None = None,
+                golden_labels=None, return_hits: bool = False,
+                fusion: str = "lp_hinge", p: int = 2, debug: bool = False):
+        """Predict label scores using hierarchical beam search.
+
+        Parameters
+        ----------
+        X_query : array-like or sparse matrix
+            Query feature vectors.
+        topk : int, optional
+            Number of labels to consider when computing hit counts.
+        beam_size : int, optional
+            Maximum number of nodes to expand per layer. Defaults to ``topk`` if
+            not specified.
+        golden_labels : Sequence[Sequence[str]], optional
+            Gold standard label IDs per query (strings) for hit counting.
+        return_hits : bool, optional
+            If ``True`` and ``golden_labels`` are provided, also return hit
+            counts per query.
+
+        Returns
+        -------
+        csr_matrix
+            Sparse matrix with global label scores for each query.
+        list, optional
+            Hit counts when ``return_hits`` is ``True`` and ``golden_labels`` is
+            provided.
+        """
+        
+        beam_size = 1 if beam_size is None else beam_size
+        
+        for layer, mlmodels in enumerate(self.hmodel):
+            for mlmodel in mlmodels:
+                score = mlmodel.predict(X_query, beam_size, topk=10, return_matrix=True)
+                print(f"Layer {layer}: {score}")
+                exit()

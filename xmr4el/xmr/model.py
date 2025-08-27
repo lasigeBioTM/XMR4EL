@@ -231,5 +231,34 @@ class XModel():
         )
 
         self.model = hml
+        
+    def predict(self, X_text, topk: int = 5, beam_size: int | None = None,
+                    golden_labels=None, return_hits: bool = False):
+            """Predict label scores for given text inputs.
 
-    
+            Parameters
+            ----------
+            X_text : list-like
+                Raw text queries.
+            topk : int, optional
+                Number of labels to consider when computing hit counts.
+            beam_size : int, optional
+                Beam width for hierarchical traversal.
+            golden_labels : Sequence[Sequence[str]], optional
+                Gold standard label IDs per query (strings).
+            return_hits : bool, optional
+                If ``True`` and ``golden_labels`` provided, returns hit counts.
+
+            Returns
+            -------
+            csr_matrix
+                Sparse score matrix for all queries.
+            list, optional
+                Hit counts per query when ``return_hits`` is ``True``.
+            """
+
+            X_query = self.text_encoder.predict(X_text)
+            return self.model.predict(X_query, topk, beam_size,
+                                    golden_labels=golden_labels,
+                                    return_hits=return_hits)
+            
