@@ -19,6 +19,6 @@ class MatcherTrainer():
         M_raw = Y_node @ C
         M = (M_raw > 0).astype(int)
         
-        model = ClassifierModel.train(X, M, config, dtype, onevsrest=True)
+        model = ClassifierModel.train(X_node, M, config, dtype, onevsrest=True)
         
         return X_node, Y_node, M, model

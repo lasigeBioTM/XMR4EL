@@ -232,8 +232,7 @@ class XModel():
 
         self.model = hml
         
-    def predict(self, X_text, topk: int = 5, beam_size: int | None = None,
-                    golden_labels=None, return_hits: bool = False):
+    def predict(self, X_text, topk: int = 5, beam_size: int | None = None, fusion: str = "geometric"):
             """Predict label scores for given text inputs.
 
             Parameters
@@ -258,7 +257,5 @@ class XModel():
             """
 
             X_query = self.text_encoder.predict(X_text)
-            return self.model.predict(X_query, topk, beam_size,
-                                    golden_labels=golden_labels,
-                                    return_hits=return_hits)
+            return self.model.predict(X_query)
             

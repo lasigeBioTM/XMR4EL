@@ -1,5 +1,3 @@
-# import pytest  # noqa: F401; pylint: disable=unused-variable
-# from pytest import approx
 import numpy as np
 from collections import Counter
 import time
@@ -82,7 +80,7 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/xmodel_2025-08-26_13-43-15" # 5 excluded
+        "test/test_data/saved_trees/sgdclassifier_transformers" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
@@ -91,27 +89,38 @@ def main():
     
     filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.initial_labels)
     
-    print(filtered_texts[0])
-    print(filtered_labels[0]) # 25
+    # print(filtered_texts[0])
+    # print(filtered_labels[0]) # 25
     # exit()
     
-    # predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=50, beam_size=10)
-    # predicted_labels, hits, debug_table = trained_xtree.predict_old(filtered_texts, filtered_labels, topk=50, beam_size=1, n_jobs=1, debug=True)
-    # predicted_labels, hits = trained_xtree.predict(filtered_texts, filtered_labels, topk=100, beam_size=1, n_jobs=-1, debug=True, TARGET_LABEL="D058186")
-    score_matrix, return_hits = trained_xtree.predict(filtered_texts, golden_labels=filtered_labels, topk=2, beam_size=1, return_hits=True)
+    print(filtered_texts)
     
-    print(score_matrix)
-    print(return_hits)
+    score_matrix = trained_xtree.predict(filtered_texts)
+    
+    # print(score_matrix[0]["leaf_global_labels"])
+    
+    trained_labels = np.array(trained_xtree.initial_labels)
+    
+    # Get global label ids array from the score_matrix
+    # global_labels = score_matrix.global_labels  # shape (n_labels,)
 
-    exit()
-    found_ratio = []
-    for found, _, _ in hits:
-        if found == 1:
-            found_ratio.append(1)
-        else:
-            found_ratio.append(0)
-            
-    print("Found Ratio", Counter(found_ratio))
+    hit_counts = []
+    for idx in range(len(score_matrix)):
+        
+        # map to global label ids
+        pred_labels = trained_labels[score_matrix[idx]["leaf_global_labels"]]
+
+        # gold labels for this query
+        gold = set(filtered_labels[idx])
+        
+        # print(f"Predicted Labels: {pred_labels}, with lenght: {len(pred_labels)}")
+        # print(f"Golden Label: {gold}")
+        
+        hits = len(set(pred_labels).intersection(gold))
+        hit_counts.append(hits)
+
+    print("Hit counts per query:", Counter(hit_counts))
+    print("Average hits:", np.mean(hit_counts))
 
     end = time.time()
 

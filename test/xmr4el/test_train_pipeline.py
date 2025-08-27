@@ -95,17 +95,20 @@ def main():
             "verbose": 1
             },
     }
-
-    classifier_config = {
+    """
+    
+    """
+    matcher_config = {
         "type": "lightgbmclassifier",
         "kwargs": {
-            "objective": "multiclass",
+            "objective": "binary",
             "boosting_type": "gbdt",
             "learning_rate": 0.05,
             "n_estimators": 300,
             "num_leaves": 64,
             "subsample": 0.8,
             "colsample_bytree": 0.8,
+            "class_weight": "balanced",
             "n_jobs": -1,
             "random_state": 42
         }
@@ -129,7 +132,7 @@ def main():
         "eta0": 0.0,                   # Initial learning rate (ignored if 'optimal')
         }
     }
-
+    
     """
     reranker_config = {
         "type": "sklearnsgdclassifier",
@@ -188,7 +191,7 @@ def main():
     min_leaf_size = 5
     max_leaf_size = 200
     cut_half_cluster=True
-    depth = 2
+    depth = 4
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
@@ -201,7 +204,7 @@ def main():
                     cut_half_cluster=cut_half_cluster,
                     n_workers=8,
                     depth=depth,
-                    emb_flag=1
+                    emb_flag=3
                     )
     
     xmodel.train(X_cross_train, raw_labels)

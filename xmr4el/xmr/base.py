@@ -1,4 +1,3 @@
-from collections import defaultdict
 import os
 import re
 import gc
@@ -8,12 +7,13 @@ import joblib
 
 import numpy as np
 
-from scipy.sparse import csr_matrix, hstack
+from scipy.sparse import csr_matrix, hstack, eye as sp_eye
 from scipy.special import expit
 
 from sklearn.preprocessing import normalize
 
-from typing import Counter, Optional
+from collections import defaultdict
+from typing import Any, Counter, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from joblib import Parallel, delayed
@@ -33,6 +33,8 @@ class MLModel():
                  reranker_config=None,
                  min_leaf_size=20,
                  max_leaf_size=None,
+                 reranker_every_layer=False,
+                 is_last_layer=False,
                  layer=None,
                  n_workers=8,
                  ):
@@ -42,6 +44,8 @@ class MLModel():
         self.reranker_config = reranker_config
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
+        self.reranker_every_layer = reranker_every_layer
+        self.is_last_layer = is_last_layer
         self.layer = layer
         self.n_workers = n_workers
         
@@ -195,7 +199,7 @@ class MLModel():
             if os.path.exists(model_path) and model_class is not None:
                 setattr(model, model_name, model_class.load(model_path))
             else:
-                raise ValueError("Some Model is does not have an load() method")
+                print(f"Model {model_name} is not being loaded")
             
         emb_path = os.path.join(load_dir, f"fused_scores.npy")
         assert os.path.exists(emb_path), f"Expecting fused_scores to be in the path {emb_path}, but path doesnt exist"
@@ -248,6 +252,8 @@ class MLModel():
 
         # --- matcher (local label-level) scores ---
         matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X))
+        
+        print(matcher_scores)
 
         # --- flatten mention-local label pairs ---
         rows_list, cols_list, matcher_flat = [], [], []
@@ -308,7 +314,10 @@ class MLModel():
                         scores_batch[mask] = 1.0
 
                 reranker_score[start:end] = scores_batch
-
+                
+            else:
+                alpha = 0
+                
         self.alpha = alpha
 
         if fusion == "lp_hinge":
@@ -316,7 +325,10 @@ class MLModel():
                      self.alpha * (reranker_score ** p)) ** (1.0 / p)
             fused = np.maximum(fused, 0.0)
         else:
+            print(matcher_flat, reranker_score)
             fused = (matcher_flat ** (1 - self.alpha)) * (reranker_score ** self.alpha)
+
+        print(fused)
 
         # --- build local-label fused matrix ---
         entity_fused = csr_matrix((fused, (rows_list, cols_list)), shape=(N, L_local))
@@ -376,36 +388,53 @@ class MLModel():
         del matcher_model
         gc.collect()
         
-        M_TFN = self.matcher_model.m_node
-        M_MAN = self.matcher_model.model.predict(X_train)
+        train_reranker = self.reranker_every_layer or self.is_last_layer
         
-        print("Reranker")
-        reranker_model = ReRanker(self.reranker_config)
-        reranker_model.train(X_train, 
-                             Y_train, 
-                             Z_train, 
-                             M_TFN, 
-                             M_MAN, 
-                             cluster_labels,
-                             local_to_global_idx=self.local_to_global_idx,
-                             layer=self.layer,
-                             n_label_workers=self.n_workers
-                             )
+        def _topb_sparse(P: np.ndarray, b: int) -> csr_matrix:
+            # P: (n x K_or_L) dense proba; returns (n x K_or_L) CSR 0/1 mask of top-b per row
+            n, K = P.shape
+            b = max(1, min(b, K))
+            idx_part = np.argpartition(P, K - b, axis=1)[:, -b:]
+            rows = np.repeat(np.arange(n, dtype=np.int32), b)
+            cols = idx_part.ravel()
+            data = np.ones(n * b, dtype=np.int8)
+            return csr_matrix((data, (rows, cols)), shape=(n, K))
         
-        self.reranker_model = reranker_model
-        del reranker_model
+        if train_reranker:
+        
+            M_TFN = self.matcher_model.m_node
+            P = self.matcher_model.predict_proba(X_train)
+            M_MAN = _topb_sparse(P, b=5)
+            
+            print("Reranker")
+            reranker_model = ReRanker(self.reranker_config)
+            reranker_model.train(X_train, 
+                                Y_train, 
+                                Z_train, 
+                                M_TFN, 
+                                M_MAN, 
+                                cluster_labels,
+                                local_to_global_idx=self.local_to_global_idx,
+                                layer=self.layer,
+                                n_label_workers=self.n_workers
+                                )
+            
+            self.reranker_model = reranker_model
+            del reranker_model
+        else:
+            self.reranker_model = None
+            
         gc.collect()
-        
-        alpha_dyn = 0.5
         
         print("Fusing Scores")
-        fused_scores = self.fused_predict(X_train, Z_train, C, alpha=alpha_dyn)
-        # print(fused_scores)
-        self.fused_scores = fused_scores
-        del fused_scores
-        gc.collect()
+        if not self.is_last_layer:
+            cluster_scores = self.matcher_model.predict_proba(X_train)
+            self.fused_scores = csr_matrix(np.maximum(cluster_scores, 0.0))
+        else:
+            I_L = sp_eye(self.label_embeddings.shape[0], format="csr", dtype=np.float32)
+            self.fused_scores = self.fused_predict(X_train, Z_train, I_L, alpha=0.5, fusion="lp_hinge", p=3)
         
-    def predict(self, X_query, beam_size: int = 5, topk: Optional[int] = None, return_matrix: bool = False, 
+    def predict(self, X_query, beam_size: int = 5, topk: int | None = None, return_matrix: bool = False, 
             fusion: str = "lp_hinge", eps: float = 1e-6, alpha: float = 0.5, p: int = 2):
         # --- 1) Top-k clusters from matcher (cluster-level proba) ---
         cluster_scores = self.matcher_model.predict_proba(X_query)  # shape (n_queries, K)
@@ -453,9 +482,9 @@ class MLModel():
 
         # detect hinge-style rerankers (like in your earlier code)
         is_hinge = False
-        if len(model_dict):
-            any_model = next(iter(model_dict.values()))
-            cfg = getattr(any_model, "config", {})
+        if self.reranker_model and self.reranker_model.model_dict:
+            first_model = next(iter(self.reranker_model.model_dict.values()))
+            cfg = getattr(first_model, "config", {})
             is_hinge = (cfg.get("type") == "sklearnsgdclassifier" and
                         cfg.get("kwargs", {}).get("loss") == "hinge")
 
@@ -464,7 +493,7 @@ class MLModel():
         for gid, q_indices in queries_per_label.items():
             li = g2l.get(gid)
             mdl = model_dict.get(gid)
-            if li is None or mdl is None or not q_indices:
+            if li is None or not q_indices:
                 continue
 
             # matcher score for (query, label) = cluster score of the label's cluster
@@ -477,15 +506,18 @@ class MLModel():
             Z_tiled = np.tile(zvec, (len(q_idx), 1))
             batch_inp = np.hstack([X_dense[q_idx], Z_tiled])
 
-            try:
-                if hasattr(mdl, "predict_proba") and not is_hinge:
-                    r = mdl.predict_proba(batch_inp)[:, 1]
-                elif hasattr(mdl, "decision_function"):
-                    r = expit(mdl.decision_function(batch_inp))
-                else:
-                    r = np.ones(len(q_idx), dtype=float)
-            except Exception:
+            if mdl is None:
                 r = np.ones(len(q_idx), dtype=float)
+            else:
+                try:
+                    if hasattr(mdl, "predict_proba") and not is_hinge:
+                        r = mdl.predict_proba(batch_inp)[:, 1]
+                    elif hasattr(mdl, "decision_function"):
+                        r = expit(mdl.decision_function(batch_inp))
+                    else:
+                        r = np.ones(len(q_idx), dtype=float)
+                except Exception:
+                    r = np.ones(len(q_idx), dtype=float)
 
             # fuse (no reduction; label uses its single cluster)
             m = np.clip(m, eps, 1.0)
@@ -499,19 +531,30 @@ class MLModel():
             for qi, sc in zip(q_idx, fused):
                 results[qi].append((gid, float(sc)))
 
+        def _sorted_truncate(pairs, top_k):
+            # sort desc by score; tie-break by gid for determinism
+            pairs.sort(key=lambda t: (-t[1], t[0]))
+            if top_k:
+                return pairs[:top_k]
+            return pairs
+
         # --- 5) Pack results ---
         if return_matrix:
             
-            if topk:
-                results = [pairs[:topk] for pairs in results]
-
+            if topk == 0:
+                M = csr_matrix((n, 0))
+                M.global_labels = np.array([], dtype=object)
+                return M
+                        
+            truncated = [ _sorted_truncate(pairs=pairs, top_k=topk) for pairs in results ]
+                    
             # 2) collect the (possibly reduced) set of global ids
-            all_gids = sorted({gid for pairs in results for gid, _ in pairs})
+            all_gids = sorted({gid for pairs in truncated for gid, _ in pairs})
             gid_to_col = {g: i for i, g in enumerate(all_gids)}
 
             # 3) build CSR triplets
             rows, cols, data = [], [], []
-            for qi, pairs in enumerate(results):
+            for qi, pairs in enumerate(truncated):
                 for gid, sc in pairs:
                     rows.append(qi)
                     cols.append(gid_to_col[gid])
@@ -522,15 +565,13 @@ class MLModel():
             return M
         
         scores_per_query, labels_per_query = [], []
+        
         for pairs in results:
-            if topk:
-                pairs = pairs[:topk]
-                
+            pairs = _sorted_truncate(pairs=pairs, top_k=topk)                
             if not pairs:
                 scores_per_query.append(np.array([], dtype=float))
                 labels_per_query.append(np.array([], dtype=object))
             else:
-                pairs.sort(key=lambda t: -t[1])
                 labels_per_query.append(np.array([g for g, _ in pairs], dtype=object))
                 scores_per_query.append(np.array([s for _, s in pairs], dtype=float))
                 
@@ -545,6 +586,7 @@ class HierarchicaMLModel():
                  min_leaf_size=20,
                  max_leaf_size=None,
                  cut_half_cluster=False,
+                 reranker_every_layer=False,
                  n_workers=8,
                  layer=1):
         
@@ -553,11 +595,13 @@ class HierarchicaMLModel():
         self.reranker_config = reranker_config
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
-        self.cut_half_cluster=cut_half_cluster
+        self.cut_half_cluster = cut_half_cluster
+        self.reranker_every_layer = reranker_every_layer
         self.n_workers = n_workers
         
         self._hmodel = []
         self._layer = layer
+        self._child_index_map = None
         
         self.ml_dir = Path(tempfile.mkdtemp(prefix="ml_store_"))
         
@@ -576,6 +620,14 @@ class HierarchicaMLModel():
     @layers.setter
     def layers(self, value):
         self._layer = value
+        
+    @property
+    def child_index_map(self):
+        return self._child_index_map
+    
+    @child_index_map.setter
+    def child_index_map(self, value):
+        self._child_index_map = value
         
     def save(self, save_dir):
         os.makedirs(save_dir, exist_ok=True)
@@ -666,46 +718,33 @@ class HierarchicaMLModel():
             
     def prepare_layer(self, X, Y, Z, C, fused_scores, local_to_global_idx):
         """
-        Simplified prepare_layer that:
-        - selects labels in each cluster
-        - selects mentions relevant to that cluster (by Y)
-        - builds X_aug = [X_node | feat_c, feat_sum, feat_max] (L2-normalized)
-        - builds Z_node_aug = [Z_node_base | label_mean, label_sum, label_max]
-        Returns list of (X_aug, Y_node, Z_node_aug, local_to_global_next, global_to_local_next)
+        Returns a list of tuples, one per (non-empty) cluster c:
+        (X_aug, Y_node, Z_node_aug, local_to_global_next, global_to_local_next, c)
+        where `c` is the *cluster id* in the parent.
         """
         K_next = C.shape[1]
         inputs = []
-
-        # Make fused_scores dense once for indexing (works whether fused_scores is sparse or dense)
         fused_dense = fused_scores.toarray() if hasattr(fused_scores, "toarray") else np.asarray(fused_scores)
 
         for c in range(K_next):
-            # 1. which labels are in cluster c (local indices relative to Z)
             local_idxs = C[:, c].nonzero()[0]
             if len(local_idxs) == 0:
                 continue
 
-            # 2. map them to *global* label IDs and build inverse map
             local_to_global_next = local_to_global_idx[local_idxs]
             global_to_local_next = {g: i for i, g in enumerate(local_to_global_next)}
 
-            # 3. restrict Y to those labels, then find which mentions have any of them
             Y_sub = Y[:, local_idxs]
             mention_mask = (Y_sub.sum(axis=1).A1 > 0)
 
-            # 4. slice X and Y
             X_node = X[mention_mask]
             Y_node = Y_sub[mention_mask, :]
-
-            # if no mentions for this cluster, skip it
             if X_node.shape[0] == 0:
                 continue
 
-            # base label embeddings for this cluster (n_labels_in_cluster, emb_dim)
             Z_node_base = Z[local_idxs, :]
 
-            # 5. Compute fused (per-mention) features and append to X_node
-            fused_c = fused_dense[mention_mask, :]  # shape (n_mentions_node, K_next)
+            fused_c = fused_dense[mention_mask, :]
             feat_c = fused_c[:, c].ravel()
             feat_sum = fused_c.sum(axis=1).ravel()
             feat_max = fused_c.max(axis=1).ravel()
@@ -715,8 +754,6 @@ class HierarchicaMLModel():
             X_aug = hstack([X_node, sparse_feats], format="csr")
             X_aug = normalize(X_aug, norm="l2", axis=1)
 
-            # 6. Compute per-label aggregates (vectorized) and append to Z_node_base
-            #    Scores matrix: (n_mentions_node, n_labels_in_cluster) = X_node_dense @ Z_node_base.T
             try:
                 X_node_dense = X_node.toarray()
             except Exception:
@@ -725,17 +762,16 @@ class HierarchicaMLModel():
             if X_node_dense.size == 0 or Z_node_base.size == 0:
                 label_feats = np.zeros((Z_node_base.shape[0], 3), dtype=Z_node_base.dtype)
             else:
-                # vectorized dot-product
-                scores_mat = X_node_dense.dot(Z_node_base.T)            # (n_mentions, n_labels)
-                mean_per_label = scores_mat.mean(axis=0)               # (n_labels,)
+                scores_mat = X_node_dense.dot(Z_node_base.T)
+                mean_per_label = scores_mat.mean(axis=0)
                 sum_per_label = scores_mat.sum(axis=0)
                 max_per_label = scores_mat.max(axis=0)
-                label_feats = np.vstack([mean_per_label, sum_per_label, max_per_label]).T  # (n_labels,3)
+                label_feats = np.vstack([mean_per_label, sum_per_label, max_per_label]).T
 
-            Z_node_aug = np.hstack([Z_node_base, label_feats])  # (n_labels, emb_dim + 3)
+            Z_node_aug = np.hstack([Z_node_base, label_feats])
             Z_node_aug = normalize(Z_node_aug, norm="l2", axis=1)
-            # 7. append the tuple for this cluster
-            inputs.append((X_aug, Y_node, Z_node_aug, local_to_global_next, global_to_local_next))
+
+            inputs.append((X_aug, Y_node, Z_node_aug, local_to_global_next, global_to_local_next, c))
 
         return inputs
             
@@ -750,11 +786,19 @@ class HierarchicaMLModel():
         with tempfile.TemporaryDirectory(prefix="ml_store_") as temp_dir:
             self.ml_dir = Path(temp_dir)
             self.hmodel = []
+            child_index_map = []
+
+            if self.reranker_every_layer:
+                reranker_flag = True
+            else:
+                reranker_flag = False
 
             for layer in range(self.layers):
                 next_inputs = []
                 ml_list = []
                 layer_failed = False
+                is_last_layer = False
+                cluster_map_for_layer = []
 
                 # Optional: adjust cluster size
                 if self.cut_half_cluster and layer > 0:
@@ -762,17 +806,24 @@ class HierarchicaMLModel():
                         2, self.clustering_config["kwargs"]["n_clusters"] // 2
                     )
 
-                for X_node, Y_node, Z_node, local_to_label_node, global_to_local_node in inputs:
+                
+                for parent_idx, (X_node, Y_node, Z_node, local_to_label_node, global_to_local_node) in enumerate(inputs):
+                    
+                    if layer == self.layers - 1:
+                        reranker_flag = True
+                        is_last_layer = True
+                    
                     ml = MLModel(
                         clustering_config=self.clustering_config,
                         matcher_config=self.matcher_config,
                         reranker_config=self.reranker_config,
                         min_leaf_size=self.min_leaf_size,
                         max_leaf_size=self.max_leaf_size,
+                        reranker_every_layer= reranker_flag,
+                        is_last_layer=is_last_layer,
                         layer=layer,
                         n_workers=self.n_workers,
                     )
-                    ml._local_to_global_idx = local_to_global
 
                     ml.train(
                         X_train=X_node,
@@ -790,7 +841,7 @@ class HierarchicaMLModel():
                     fused_scores = ml.fused_scores
 
                     # Prepare inputs for next layer
-                    child_inputs = self.prepare_layer(
+                    raw_children = self.prepare_layer(
                         X=X_node,
                         Y=Y_node,
                         Z=Z_node,
@@ -798,71 +849,134 @@ class HierarchicaMLModel():
                         fused_scores=fused_scores,
                         local_to_global_idx=local_to_label_node
                     )
-
+                    
+                    cluster_to_child = {}
+                    for child in raw_children:
+                        *payload, c_id = child
+                        child_abs_idx = len(next_inputs)
+                        next_inputs.append(tuple(payload))
+                        cluster_to_child[int(c_id)] = child_abs_idx
+                    
                     # Save model in temporary folder with unique name
                     ml_path = self.save_ml_temp(ml, f"{layer}_{uuid4()}")
                     del ml
                     ml_list.append(ml_path)
-                    next_inputs.extend(child_inputs)
+                    cluster_map_for_layer.append(cluster_to_child)
 
                 if layer_failed:
                     break
 
                 self.hmodel.append(ml_list)
+                child_index_map.append(cluster_map_for_layer)
 
-                # Free memory after the layer
+                inputs = next_inputs
                 del ml_list
                 gc.collect()
-
-                # Prepare inputs for the next iteration
-                inputs = next_inputs
 
             # Reload all models for final hmodel
             new_hmodel_list = []
             for model_list in self.hmodel:
-                ml_list = []
-                for ml_path in model_list:
-                    ml_list.append(MLModel.load(ml_path))
-                new_hmodel_list.append(ml_list)
-
+                loaded = [MLModel.load(p) for p in model_list]
+                new_hmodel_list.append(loaded)
             self.hmodel = new_hmodel_list
 
-            # When this 'with' block ends, self.ml_dir and all temp models are deleted
+            self._child_index_map = child_index_map
+            
             return self.hmodel
         
-    def predict(self, X_query, topk: int = 5, beam_size: int | None = None,
-                golden_labels=None, return_hits: bool = False,
-                fusion: str = "lp_hinge", p: int = 2, debug: bool = False):
-        """Predict label scores using hierarchical beam search.
-
-        Parameters
-        ----------
-        X_query : array-like or sparse matrix
-            Query feature vectors.
-        topk : int, optional
-            Number of labels to consider when computing hit counts.
-        beam_size : int, optional
-            Maximum number of nodes to expand per layer. Defaults to ``topk`` if
-            not specified.
-        golden_labels : Sequence[Sequence[str]], optional
-            Gold standard label IDs per query (strings) for hit counting.
-        return_hits : bool, optional
-            If ``True`` and ``golden_labels`` are provided, also return hit
-            counts per query.
-
-        Returns
-        -------
-        csr_matrix
-            Sparse matrix with global label scores for each query.
-        list, optional
-            Hit counts when ``return_hits`` is ``True`` and ``golden_labels`` is
-            provided.
+    def predict(self, X_query) -> List[Dict[str, Any]]: 
         """
-        
-        beam_size = 1 if beam_size is None else beam_size
-        
-        for layer, mlmodels in enumerate(self.hmodel):
-            for mlmodel in mlmodels:
-                score = mlmodel.predict(X_query, beam_size, topk=10, return_matrix=True)
-                print(f"Layer {layer}: {score}")
-                exit()
+        Greedy routing only (beam=1). For each query:
+        - traverse layer by layer using cluster probabilities from the current node
+        - pick the most-probable child that exists in child_index_map
+        - append +3 routing features and L2-normalize (to match training)
+        Returns a list of dicts: [{query_index, path, leaf_model_idx, leaf_global_labels}]
+        """
+        if not self.hmodel:
+            return [{"query_index": i, "path": [], "leaf_model_idx": None, "leaf_global_labels": np.array([], dtype=int)}
+                    for i in range(X_query.shape[0])]
+
+        n_layers = len(self.hmodel)
+        out: List[Dict[str, Any]] = []
+
+        for qi in range(X_query.shape[0]):
+            x = X_query[qi:qi+1]  # 1×D csr
+            # start with all root models; we'll pick the best route greedily
+            current_states: List[Tuple[int, csr_matrix]] = [(mi, x) for mi in range(len(self.hmodel[0]))]
+            path: List[Dict[str, Any]] = []
+
+            for layer in range(n_layers - 1):  # non-final layers only
+                best = None  # (score, child_idx, x_next, parent_model_idx, chosen_cluster)
+                
+                for parent_model_idx, x_row in current_states:
+                    ml = self.hmodel[layer][parent_model_idx]
+                    # cluster probabilities for this node (shape: (1, K_parent))
+                    cs = np.asarray(ml.matcher_model.predict_proba(x_row)).ravel()
+                    # print(cs)
+                    if cs.size == 0:
+                        continue
+
+                    # sort clusters by descending prob; pick the first that actually has a child
+                    order = np.argsort(-cs)
+                    parent_to_child = self.child_index_map[layer][parent_model_idx]
+
+                    chosen_cluster = None
+                    child_idx = None
+                    for c in order:
+                        child_idx = parent_to_child.get(int(c))
+                        if child_idx is not None:
+                            chosen_cluster = int(c)
+                            break
+                    if child_idx is None:
+                        continue  # no valid child; skip this parent
+
+                    sc = float(cs[chosen_cluster])
+                    # build +3 routing features (as in prepare_layer)
+                    feat_c = sc
+                    feat_sum = float(cs.sum())
+                    feat_max = float(cs.max())
+                    extra = csr_matrix([[feat_c, feat_sum, feat_max]])
+                    x_next = hstack([x_row, extra], format="csr")
+                    x_next = normalize(x_next, norm="l2", axis=1)
+
+                    if (best is None) or (sc > best[0]):
+                        best = (sc, child_idx, x_next, parent_model_idx, chosen_cluster)
+
+                if best is None:
+                    # dead end
+                    break
+
+                sc, child_idx, x, parent_model_idx, chosen_cluster = best
+                
+                debug = {
+                    "layer": layer,
+                    "parent_model_idx": int(parent_model_idx),
+                    "chosen_cluster": int(chosen_cluster),
+                    "score": float(sc),
+                    "child_model_idx": int(child_idx),
+                }
+                
+                print(f"Layer {debug["layer"]}, Scores {debug["score"]}")
+                
+                path.append(debug)
+
+                # advance to single child (greedy)
+                current_states = [(int(child_idx), x)]
+
+            # finalize leaf
+            if current_states:
+                leaf_model_idx = current_states[0][0]
+                leaf_ml = self.hmodel[-1][leaf_model_idx]
+                leaf_labels = leaf_ml.local_to_global_idx
+            else:
+                leaf_model_idx = None
+                leaf_labels = np.array([], dtype=int)
+
+            out.append({
+                "query_index": int(qi),
+                "path": path,
+                "leaf_model_idx": None if leaf_model_idx is None else int(leaf_model_idx),
+                "leaf_global_labels": leaf_labels
+            })
+
+        return out
