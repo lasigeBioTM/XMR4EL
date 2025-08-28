@@ -221,6 +221,7 @@ class XModel():
             max_leaf_size=self.max_leaf_size,
             n_workers=self.n_workers,
             cut_half_cluster=self.cut_half_cluster,
+            ranker_every_layer=self.ranker_every_layer,
             layer=self.depth
         )
 
@@ -259,5 +260,5 @@ class XModel():
             """
 
             X_query = self.text_encoder.predict(X_text)
-            return self.model.predict(X_query)
+            return self.model.predict(X_query, topk=topk, beam_size=beam_size, fusion=fusion)
             

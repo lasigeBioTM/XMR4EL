@@ -61,7 +61,7 @@ class RankerTrainer:
         scores = X_cluster.dot(base_emb).ravel()
 
         # select hard negatives: top k by score
-        max_neg = n_pos # * 15
+        max_neg = n_pos * 15
         k = min(max_neg, n_neg_total)
         if k <= 0:
             print(f"[PID {os.getpid()}] SKIP label {global_idx}: k==0 negatives")
@@ -115,7 +115,11 @@ class RankerTrainer:
         """
         Note: we DO NOT pad Z here. prepare_layer should already have augmented Z for child models.
         """
-        M_bar = ((M_TFN + M_MAN) > 0).astype(int)
+        if M_MAN is None:
+            M_bar = (M_TFN > 0).astype(int)
+        else:
+            M_bar = ((M_TFN + M_MAN) > 0).astype(int)
+            
         ranker_models = {}
 
         # GROUP labels by cluster

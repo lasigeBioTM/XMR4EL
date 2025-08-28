@@ -133,8 +133,7 @@ def main():
         }
     }
     
-    """
-    reranker_config = {
+    ranker_config = {
         "type": "sklearnsgdclassifier",
         "kwargs": {
             "loss": "hinge",               # Margin loss (like SVM; no probabilities)
@@ -151,8 +150,8 @@ def main():
             "eta0": 0.01,                  # Higher initial learning rate for ranking
         }
     }
-    """
     
+    """
     ranker_config = {
         "type": "lightgbmclassifier",
         "kwargs": {
@@ -175,6 +174,7 @@ def main():
             "force_col_wise": True  # Faster for sparse
         }
     }
+    """
     
     training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
@@ -191,7 +191,7 @@ def main():
     min_leaf_size = 5
     max_leaf_size = 200
     cut_half_cluster=True
-    ranker_every_layer=True
+    ranker_every_layer=False
     depth = 2
 
     xmodel = XModel(vectorizer_config=vectorizer_config,

@@ -109,7 +109,7 @@ class Clustering():
         if C_node is None or model is None:
             return
         
-        self.z_node = Z
+        # self.z_node = Z
         self.c_node = C_node
         self.model = model
         

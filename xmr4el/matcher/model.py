@@ -102,8 +102,6 @@ class Matcher():
                                                         config=self.matcher_config, 
                                                         dtype=self.dtype)
         
-        self.x_node = X_node
-        self.y_node = Y_node
         self.m_node = M
         self.model = model
         
