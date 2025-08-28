@@ -13,20 +13,20 @@ from scipy.sparse import hstack, csr_matrix
 
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
-reranker_dir = Path(tempfile.mkdtemp(prefix="rerankers_store_"))
+ranker_dir = Path(tempfile.mkdtemp(prefix="rankers_store_"))
  
-class ReRankerTrainer:
+class RankerTrainer:
     
     @staticmethod
-    def save_reranker_temp(model, label):
-        sub_dir = reranker_dir / str(label)
+    def save_ranker_temp(model, label):
+        sub_dir = ranker_dir / str(label)
         sub_dir.mkdir(parents=True, exist_ok=True)
         model.save(str(sub_dir))
         return str(sub_dir)
 
     @staticmethod
-    def delete_reranker_temp():
-        shutil.rmtree(reranker_dir)
+    def delete_ranker_temp():
+        shutil.rmtree(ranker_dir)
 
     @staticmethod
     def process_label(global_idx, X_cluster, Y_col, label_emb, candidate_indices, config):
@@ -103,7 +103,7 @@ class ReRankerTrainer:
             return (global_idx, None)
         
         model = ClassifierModel.train(X_combined, Y_valid, config, onevsrest=False)
-        path = ReRankerTrainer.save_reranker_temp(model, global_idx)
+        path = RankerTrainer.save_ranker_temp(model, global_idx)
         del model
         
         return (global_idx, path)
@@ -116,7 +116,7 @@ class ReRankerTrainer:
         Note: we DO NOT pad Z here. prepare_layer should already have augmented Z for child models.
         """
         M_bar = ((M_TFN + M_MAN) > 0).astype(int)
-        reranker_models = {}
+        ranker_models = {}
 
         # GROUP labels by cluster
         labels_by_cluster = {}
@@ -142,7 +142,7 @@ class ReRankerTrainer:
                 tasks.append((global_idx, X_cluster, Y_col, label_emb, candidate_indices))
 
         results = Parallel(n_jobs=n_label_workers, backend=parallel_backend, verbose=10)(
-            delayed(ReRankerTrainer.process_label)(
+            delayed(RankerTrainer.process_label)(
                 global_idx, X_cluster, Y_col, label_emb, candidate_indices, config
             )
             for (global_idx, X_cluster, Y_col, label_emb, candidate_indices) in tasks
@@ -150,8 +150,8 @@ class ReRankerTrainer:
 
         for global_idx, path in results:
             if path is not None:
-                reranker_models[global_idx] = ClassifierModel.load(path)
+                ranker_models[global_idx] = ClassifierModel.load(path)
             
-        ReRankerTrainer.delete_reranker_temp()
+        RankerTrainer.delete_ranker_temp()
 
-        return reranker_models
+        return ranker_models

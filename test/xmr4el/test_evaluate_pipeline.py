@@ -80,7 +80,7 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/sgdclassifier_transformers" # 5 excluded
+        "test/test_data/saved_trees/xmodel_2025-08-28_10-10-05" # 5 excluded
     )
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
@@ -95,7 +95,7 @@ def main():
     
     print(filtered_texts)
     
-    score_matrix = trained_xtree.predict(filtered_texts)
+    routes = trained_xtree.predict(filtered_texts)
     
     # print(score_matrix[0]["leaf_global_labels"])
     
@@ -105,22 +105,18 @@ def main():
     # global_labels = score_matrix.global_labels  # shape (n_labels,)
 
     hit_counts = []
-    for idx in range(len(score_matrix)):
+    for r in routes:
+        qi = r["query_index"]
+        # union of all labels reachable by the final surviving leaves
+        cand = set()
+        for p in r.get("paths", []):
+            cand.update(trained_labels[p.get("leaf_global_labels", [])])
+        gold = set(filtered_labels[qi])
+        hit_counts.append(len(cand & gold))
         
-        # map to global label ids
-        pred_labels = trained_labels[score_matrix[idx]["leaf_global_labels"]]
-
-        # gold labels for this query
-        gold = set(filtered_labels[idx])
-        
-        # print(f"Predicted Labels: {pred_labels}, with lenght: {len(pred_labels)}")
-        # print(f"Golden Label: {gold}")
-        
-        hits = len(set(pred_labels).intersection(gold))
-        hit_counts.append(hits)
-
     print("Hit counts per query:", Counter(hit_counts))
     print("Average hits:", np.mean(hit_counts))
+
 
     end = time.time()
 

@@ -153,7 +153,7 @@ def main():
     }
     """
     
-    reranker_config = {
+    ranker_config = {
         "type": "lightgbmclassifier",
         "kwargs": {
             "boosting_type": "gbdt",
@@ -191,17 +191,19 @@ def main():
     min_leaf_size = 5
     max_leaf_size = 200
     cut_half_cluster=True
-    depth = 4
+    ranker_every_layer=True
+    depth = 2
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
                     dimension_config=None,
                     clustering_config=clustering_config,
                     matcher_config=matcher_config,
-                    reranker_config=reranker_config,
+                    ranker_config=ranker_config,
                     min_leaf_size=min_leaf_size,
                     max_leaf_size=max_leaf_size,
                     cut_half_cluster=cut_half_cluster,
+                    ranker_every_layer=ranker_every_layer,
                     n_workers=8,
                     depth=depth,
                     emb_flag=3
