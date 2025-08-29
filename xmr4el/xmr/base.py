@@ -3,6 +3,7 @@ import re
 import gc
 import pickle
 import tempfile
+import joblib
 
 import numpy as np
 
@@ -15,7 +16,7 @@ from collections import defaultdict
 from typing import Any, Counter, Dict, List, Optional, Tuple
 from uuid import uuid4
 
-from joblib import Parallel, delayed, parallel_config
+from joblib import Parallel, delayed
 from pathlib import Path
 
 from xmr4el.clustering.model import Clustering
@@ -886,58 +887,54 @@ class HierarchicaMLModel():
             return self.hmodel
         
     def predict(self, X_query, 
-            topk: int = 5, 
-            beam_size: int = 5, 
-            fusion: str = "lp_fusion", 
-            eps: float = 1e-9, 
-            alpha: float = 0.5,
-            n_workers: Optional[int] = -1) -> List[Dict[str, Any]]:
+                topk: int = 5, 
+                beam_size: int = 5, 
+                fusion: str = "lp_fusion", 
+                eps: float = 1e-9, 
+                alpha: float = 0.5): 
         """
-        Parallel beam-search router with layer-ranker fusion and leaf label scoring.
-        Parallelism: per-query (qi). Set n_workers to control concurrency.
-        """
+        Beam search router with layer-ranker fusion and leaf label scoring.
 
+        - For each query:
+        * expand per parent with top-b children (matcher),
+        * fuse matcher score with (optional) layer ranker score,
+        * keep global top-b paths per depth (your current strategy),
+        * at leaves, score labels with leaf rankers and return global top-k labels.
+
+        fusion:
+        - "lp_fusion": path_score += log(p_matcher + eps) + alpha * ranker_score
+        - "matcher_only": path_score += log(p_matcher + eps)
+        - "ranker_only": path_score += alpha * ranker_score
+        """
+        
         def _select_topk_indices(scores: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
-            if k <= 0 or scores.size == 0:
+            """Return (idx_top_sorted, vals_sorted) of top-k by score (descending)."""
+            if k <= 0:
                 return np.array([], dtype=int), np.array([], dtype=float)
             k = min(k, scores.size)
             idx = np.argpartition(scores, scores.size - k)[-k:]
             vals = scores[idx]
             order = np.argsort(-vals)
             return idx[order], vals[order]
-
+    
         if not self.hmodel:
             return [{"query_index": i, "paths": []} for i in range(X_query.shape[0])]
 
         n_layers = len(self.hmodel)
+        out = []
 
-        # keep local references to shared, read-only structures (slightly faster attribute access)
-        hmodel = self.hmodel
-        child_index_map = self.child_index_map
-
-        def fuse_score(p_matcher, r_score):
-            if fusion == "lp_fusion":
-                return float(np.log(max(p_matcher, eps))) + alpha * float(r_score)
-            elif fusion == "matcher_only":
-                return float(np.log(max(p_matcher, eps)))
-            elif fusion == "ranker_only":
-                return alpha * float(r_score)
-            else:
-                return float(np.log(max(p_matcher, eps))) + alpha * float(r_score)
-
-        def process_one_query(qi: int) -> Dict[str, Any]:
+        for qi in range(X_query.shape[0]):
             x0 = X_query[qi:qi+1]  # 1×D csr
             # state: (parent_model_idx, x_row, logscore, trail)
-            beam = [(mi, x0, 0.0, []) for mi in range(len(hmodel[0]))]
+            beam = [(mi, x0, 0.0, []) for mi in range(len(self.hmodel[0]))]
 
             # Traverse all non-final layers
             for layer in range(n_layers - 1):
-                ml_list = hmodel[layer]
+                ml_list = self.hmodel[layer]
                 candidates = []  # (child_model_idx, x_next, logscore_next, trail_next)
 
                 for parent_model_idx, x_row, logscore, trail in beam:
                     ml = ml_list[parent_model_idx]
-
                     # 1) cluster probabilities from the node's classifier
                     cs = np.asarray(ml.matcher_model.predict_proba(x_row)).ravel()
                     if cs.size == 0 or np.all(cs <= 0):
@@ -947,25 +944,25 @@ class HierarchicaMLModel():
                     idx_top, vals_top = _select_topk_indices(cs, min(beam_size, cs.size))
 
                     # 3) map parent cluster -> child model index
-                    parent_to_child = child_index_map[layer][parent_model_idx]
+                    parent_to_child = self.child_index_map[layer][parent_model_idx]
 
                     # precompute +3 features stats
                     sum_cs = float(cs.sum())
                     max_cs = float(cs.max())
-
+                    
                     for c, p_child in zip(idx_top, vals_top):
                         child_idx = parent_to_child.get(int(c))
                         if child_idx is None:
                             continue
-
-                        # 4) append engineered features and renormalize
+                        
+                        # 4) append 
                         extra = csr_matrix([[float(p_child), sum_cs, max_cs]])
                         x_next = hstack([x_row, extra], format="csr")
                         x_next = normalize(x_next, norm="l2", axis=1)
 
-                        # 5) accumulate path score (log_prob of matcher) (you can fold ranker here if you have it)
+                        # 5) accumulate path score (log_prob of matcher)
                         logscore_next = logscore + float(np.log(max(p_child, eps)))
-
+                        
                         trail_next = trail + [{
                             "layer": layer,
                             "parent_model_idx": int(parent_model_idx),
@@ -977,38 +974,49 @@ class HierarchicaMLModel():
                         candidates.append((int(child_idx), x_next, logscore_next, trail_next))
 
                 if not candidates:
+                    # Dead end for this query
                     beam = []
                     break
 
-                # 6) canonical beam prune: keep global top-b by logscore
+                # 5) canonical beam prune: keep global top-b by logscore
                 candidates.sort(key=lambda t: -t[2])
                 beam = candidates[:beam_size]
 
             # Finalize leaves
             paths = []
             if beam:
-                leaf_layer_models = hmodel[-1]
+                leaf_layer_models = self.hmodel[-1]
                 for child_idx, x_row, logscore, trail in beam:
                     leaf_ml = leaf_layer_models[child_idx]
-                    # If your leaf predict returns (scores, labels), adapt accordingly
+                    # leaf_labels = leaf_ml.local_to_global_idx if leaf_ml is not None else np.array([], dtype=int)
+                    
+                    # print(leaf_labels, type(leaf_labels))
+                    
                     _, labels = leaf_ml.predict(x_row, beam_size=100, alpha=0.5)
+                    
                     q_labels = labels[0][:topk].astype(np.int32)
-
+                    
+                    # 3) build CSR triplets
                     paths.append({
                         "trail": trail,
                         "leaf_model_idx": int(child_idx),
                         "leaf_global_labels": q_labels
+
                     })
 
-            return {"query_index": int(qi), "paths": paths}
+            """
+            rows, cols, data = [], [], []
+            for qi, pairs in enumerate(truncated):
+                for gid, sc in pairs:
+                    rows.append(qi)
+                    cols.append(gid_to_col[gid])
+                    data.append(sc)
 
-        n = X_query.shape[0]
-        if n == 0:
-            return []
+            out_scores = csr_matrix((data, (rows, cols)), shape=(n, len(all_gids)))
+            """
+                    
 
-        # Use threads to avoid copying large models to child processes
-        with parallel_config(backend="threading", n_jobs=n_workers, verbose=0):
-            results = Parallel()(
-                delayed(process_one_query)(qi) for qi in range(n)
-            )
-        return results
+            out.append({"query_index": int(qi), "paths": paths})
+
+        return out
+    
