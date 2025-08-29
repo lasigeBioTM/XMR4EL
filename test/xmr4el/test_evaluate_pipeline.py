@@ -79,9 +79,12 @@ def main():
 
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
-    trained_xtree = XModel.load( # better 5
-        "test/test_data/saved_trees/XModel_transformers_depth2_rel_true" # 5 excluded
-    )
+    
+    load_path = "test/test_data/saved_trees/XModel_transformers_depth4_rel_true_light"
+    
+    print(load_path)
+    
+    trained_xtree = XModel.load(load_path)
     
     # print(trained_xtree.hierarchical_model.hmodel[0])
     
@@ -95,7 +98,7 @@ def main():
     
     # print(filtered_texts)
     
-    routes = trained_xtree.predict(filtered_texts, beam_size=3, topk=10, fusion="lp_fusion")
+    routes = trained_xtree.predict(filtered_texts, beam_size=1, topk=100, fusion="lp_fusion")
     
     # print(score_matrix[0]["leaf_global_labels"])
     
