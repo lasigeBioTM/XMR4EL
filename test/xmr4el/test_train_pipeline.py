@@ -119,7 +119,7 @@ def main():
     "type": "sklearnsgdclassifier",
     "kwargs": {
         "loss": "log_loss",            # Equivalent to LogisticRegression (probabilistic)
-        "penalty": "l2",               # Default for SGDClassifier; use 'l1' for sparsity
+        "penalty": "l1",               # Default for SGDClassifier; use 'l1' for sparsity
         "alpha": 0.0001,               # Inverse of regularization strength (C=1/alpha)
         "max_iter": 1000,              # Ensure convergence
         "tol": 1e-4,                   # Early stopping tolerance
@@ -138,7 +138,7 @@ def main():
         "type": "sklearnsgdclassifier",
         "kwargs": {
             "loss": "hinge",               # Margin loss (like SVM; no probabilities)
-            "penalty": "l2",               # Standard for ranking (use 'l1' for sparsity)
+            "penalty": "l1",               # Standard for ranking (use 'l1' for sparsity)
             "alpha": 0.0001,               # Stronger regularization (C=1/alpha)
             "max_iter": 1000,              # Ensure convergence
             "tol": 1e-4,
