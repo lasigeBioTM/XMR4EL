@@ -1,7 +1,7 @@
 import gc
 import numpy as np
 
-from typing import Counter
+from typing import Any, Dict, Optional, Tuple, Counter
 
 from scipy.sparse import csr_matrix
 
@@ -9,16 +9,18 @@ from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
 
 class ClusteringTrainer:
-
+    """Utility class providing the clustering training routine."""
+    
     @staticmethod
-    def train(Z, config, min_leaf_size=20, max_leaf_size=None, dtype=np.float32):
-        """
-        Train clustering without recursive partitioning.
-        Returns:
-            Z_node: same as Z
-            C_node: csr_matrix (n_samples, n_clusters)
-            clustering_model
-        """
+    def train(
+        Z: np.ndarray,
+        config: Dict[str, Any],
+        min_leaf_size: int = 20,
+        max_leaf_size: Optional[int] = None,
+        dtype: Any = np.float32,
+    ) -> Tuple[Optional[csr_matrix], Optional[ClusteringModel]]:
+        """Train clustering without recursive partitioning."""
+        
         n_points = Z.shape[0]
         n_clusters = config["kwargs"]["n_clusters"]
 

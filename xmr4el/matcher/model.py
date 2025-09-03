@@ -4,58 +4,88 @@ import joblib
 
 import numpy as np
 
+from typing import Any, Dict, List, Optional
+
 from xmr4el.matcher.train import MatcherTrainer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 
-class Matcher():
-    """Matcher pipeline"""
-    
-    def __init__(self, 
-                 matcher_config=None,
-                 dtype=np.float32):
-        
-        self._X_node = None
-        self._Y_node = None
-        self._M_node = None
-        self._model = None
+class Matcher:
+    """Matcher pipeline that encapsulates model training and inference."""
+
+    def __init__(
+        self,
+        matcher_config: Optional[Dict[str, Any]] = None,
+        dtype: Any = np.float32,
+    ) -> None:
+        """Initialize the matcher pipeline.
+
+        Parameters
+        ----------
+        matcher_config:
+            Optional configuration dictionary for the matcher.
+        dtype:
+            Desired data type for internal numpy arrays.
+        """
+
+        self._X_node: Optional[np.ndarray] = None
+        self._Y_node: Optional[np.ndarray] = None
+        self._M_node: Optional[np.ndarray] = None
+        self._model: Optional[ClassifierModel] = None
+
         
         self.matcher_config = matcher_config
         self.dtype = dtype
 
     @property
-    def x_node(self):
+    def x_node(self) -> Optional[np.ndarray]:
+        """Return the feature matrix used during training."""
         return self._X_node
     
     @x_node.setter
-    def x_node(self, value):
+    def x_node(self, value: np.ndarray) -> None:
+        """Set the feature matrix used during training."""
         self._X_node = value
         
     @property
-    def y_node(self):
+    def y_node(self) -> Optional[np.ndarray]:
+        """Return the label matrix used during training."""
         return self._Y_node
     
     @y_node.setter
-    def y_node(self, value):
+    def y_node(self, value: np.ndarray) -> None:
+        """Set the label matrix used during training."""
         self._Y_node = value
         
     @property
-    def m_node(self):
+    def m_node(self) -> Optional[np.ndarray]:
+        """Return the binarized matching matrix."""
         return self._M_node
     
     @m_node.setter
-    def m_node(self, value):
+    def m_node(self, value: np.ndarray) -> None:
+        """Set the binarized matching matrix."""
         self._M_node = value
         
     @property
-    def model(self):
+    def model(self) -> Optional[ClassifierModel]:
+        """Return the trained classification model."""
         return self._model
     
     @model.setter
-    def model(self, value):
+    def model(self, value: ClassifierModel) -> None:
+        """Set the trained classification model."""
         self._model = value
         
-    def save(self, save_dir):
+    def save(self, save_dir: str) -> None:
+        """Persist the matcher object to disk.
+
+        Parameters
+        ----------
+        save_dir:
+            Directory where the model and state will be saved.
+        """
+
         os.makedirs(save_dir, exist_ok=True)
 
         state = self.__dict__.copy()
@@ -64,19 +94,31 @@ class Matcher():
         if model is not None:
             model_path = os.path.join(save_dir, "matcher")
 
-            if hasattr(model, 'save') and callable(model.save):
+            if hasattr(model, "save") and callable(model.save):
                 model.save(model_path)
             else:
                 joblib.dump(model, f"{model_path}.joblib")
 
-            # Correct: remove the _model attribute key
             state.pop("_model", None)
 
         with open(os.path.join(save_dir, "matcher.pkl"), "wb") as fout:
             pickle.dump(state, fout)
             
     @classmethod
-    def load(cls, load_dir):
+    def load(cls, load_dir: str) -> "Matcher":
+        """Load a matcher object from disk.
+
+        Parameters
+        ----------
+        load_dir:
+            Directory containing the saved matcher state.
+
+        Returns
+        -------
+        Matcher
+            Reconstructed matcher instance.
+        """
+        
         matcher_path = os.path.join(load_dir, "matcher.pkl")
         assert os.path.exists(matcher_path), f"Matcher path {matcher_path} does not exist"
 
@@ -93,23 +135,51 @@ class Matcher():
         return model
     
     
-    def train(self, X, Y, local_to_global_idx, global_to_local_idx, C):
-        X_node, Y_node, M, model = MatcherTrainer.train(X=X, 
-                                                        Y=Y, 
-                                                        local_to_global_idx=local_to_global_idx, 
-                                                        global_to_local_idx=global_to_local_idx,
-                                                        C=C, 
-                                                        config=self.matcher_config, 
-                                                        dtype=self.dtype)
+    def train(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray,
+        local_to_global_idx: List[int],
+        global_to_local_idx: Dict[int, int],
+        C: np.ndarray,
+    ) -> None:
+        """Train the matcher model.
+
+        Parameters
+        ----------
+        X:
+            Feature matrix for documents.
+        Y:
+            Label matrix for documents.
+        local_to_global_idx:
+            Mapping of local label indices to global indices.
+        global_to_local_idx:
+            Mapping of global label indices to local indices.
+        C:
+            Matrix used to construct the matching graph.
+        """
+
+        X_node, Y_node, M, model = MatcherTrainer.train(
+            X=X,
+            Y=Y,
+            local_to_global_idx=local_to_global_idx,
+            global_to_local_idx=global_to_local_idx,
+            C=C,
+            config=self.matcher_config,
+            dtype=self.dtype,
+        )
         
         self.m_node = M
         self.model = model
         
-    def predict(self, X):
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Predict labels for the given feature matrix."""
         return self.model.predict(X)
     
-    def predict_proba(self, X):
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Predict label probabilities for the given feature matrix."""
         return self.model.predict_proba(X)
     
-    def classes(self):
+    def classes(self) -> np.ndarray:
+        """Return the classes predicted by the classifier."""
         return self.model.classes()
