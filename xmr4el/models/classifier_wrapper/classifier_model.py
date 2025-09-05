@@ -1,5 +1,4 @@
 import importlib
-import platform
 import os
 import json
 import pickle
@@ -31,10 +30,9 @@ if torch.cuda.is_available():
 
 class ClassifierMeta(ABCMeta):
     """
-    Metaclass for tracking all subclasses of ClusteringModel.
-    Automatically registers each subclass in the cluster_dict.
+    Metaclass for tracking all subclasses of ClassifierModel.
+    Automatically registers each subclass in classifier_dict.
     """
-
     def __new__(cls, name, bases, attr):
         new_cls = super().__new__(cls, name, bases, attr)
         if name != "ClassifierModel":
@@ -44,26 +42,20 @@ class ClassifierMeta(ABCMeta):
     @classmethod
     def load_subclasses(cls, package_name):
         """Dynamically imports all modules in the package to register subclasses."""
-
         package = sys.modules[package_name]
         for _, modname, _ in pkgutil.iter_modules(package.__path__):
             importlib.import_module(f"{package_name}.{modname}")
 
 
 class ClassifierModel(metaclass=ClassifierMeta):
-    """Wrapper to all classifier models"""
+    """Wrapper for all classifier models"""
 
     def __init__(self, config, model):
         self.config = config
         self.model = model
 
     def save(self, classifier_folder):
-        """Save classifier model to disk.
-
-        Args:
-            classifier_folder (str): Folder to save to.
-        """
-
+        """Save classifier model to disk."""
         os.makedirs(classifier_folder, exist_ok=True)
         with open(
             os.path.join(classifier_folder, "classifier_config.json"),
@@ -75,15 +67,7 @@ class ClassifierModel(metaclass=ClassifierMeta):
 
     @classmethod
     def load(cls, classifier_folder):
-        """Load a saved classifier model from disk.
-
-        Args:
-            classifier_folder (str): Folder where `classifierModel` was saved to using `classifierModel.save`.
-
-        Returns:
-            classifierModel: The loaded object.
-        """
-
+        """Load a saved classifier model from disk."""
         config_path = os.path.join(classifier_folder, "classifier_config.json")
 
         if not os.path.exists(config_path):
@@ -93,82 +77,76 @@ class ClassifierModel(metaclass=ClassifierMeta):
                 config = json.loads(fin.read())
 
         classifier_type = config.get("type", None)
-        assert (
-            classifier_type is not None
-        ), f"{classifier_folder} is not a valid classifier folder"
-        assert (
-            classifier_type in classifier_dict
-        ), f"invalid classifier type {config['type']}"
+        assert classifier_type is not None, f"{classifier_folder} is not a valid classifier folder"
+        assert classifier_type in classifier_dict, f"invalid classifier type {config['type']}"
         model = classifier_dict[classifier_type].load(classifier_folder, config)
         return cls(config, model)
 
     @classmethod
-    def train(cls, X_train, y_train=None, config=None, dtype=np.float32, onevsrest=False):
-        """Train on a corpus.
-
-        Args:
-            trn_corpus (list or str): Training corpus in the form of a list of strings or path to text file.
-            config (dict, optional): Dict with key `"type"` and value being the lower-cased name of the specific cluster
-            class to use.
-                Also contains keyword arguments to pass to the specified cluster. Default behavior is to use logistic regression cluster with default arguments.
-            dtype (type, optional): Data type. Default is `numpy.float32`.
-
-        Returns:
-            classifierModel: Trained classifier model.
+    def init_model(cls, config=None, onevsrest=False):
         """
-
-        config = (
-            config
-            if config is not None
-            else {"type": "sklearnlogisticregression", "kwargs": {}}
-        )
+        Initialize (but do not fit) a classifier, returning a ClassifierModel wrapper.
+        """
+        config = config if config is not None else {"type": "sklearnlogisticregression", "kwargs": {}}
         classifier_type = config.get("type", None)
-        assert (
-            classifier_type is not None
-        ), f"config {config} should contain a key 'type' for the classifier type"
+        assert classifier_type is not None, f"config {config} should contain a key 'type' for the classifier type"
 
-        model = classifier_dict[classifier_type].train(
-            X_train, y_train, config=config["kwargs"], dtype=dtype, onevsrest=onevsrest
-        )
+        kwargs = config.get("kwargs", {})
+        # delegate to the subclass's init_model (required for all subclasses)
+        model = classifier_dict[classifier_type].init_model(kwargs, onevsrest=onevsrest)
+        # keep the possibly-updated kwargs from the subclass instance
+        out_cfg = {"type": classifier_type, "kwargs": model.config}
+        return cls(out_cfg, model)
 
-        config["kwargs"] = model.config
-        return cls(config, model)
+    @classmethod
+    def train(cls, X_train, y_train=None, config=None, dtype=np.float32, onevsrest=False):
+        """
+        Train using the already-initialized model from init_model().
+        Works regardless of whether you call ClassifierModel.train(...) or a subclass's train(...).
+        """
+        config = config if config is not None else {"type": "sklearnlogisticregression", "kwargs": {}}
+        classifier_type = config.get("type", None)
+        assert classifier_type is not None, f"config {config} should contain a key 'type' for the classifier type"
 
+        # Initialize via subclass init_model, then fit.
+        wrapper = cls.init_model(config, onevsrest=onevsrest)
+        # dtype is unused here, but retained for API compatibility
+        wrapper.model.model.fit(X_train, y_train)
+        # sync any updated params back
+        wrapper.config["kwargs"] = wrapper.model.config
+        return wrapper
+
+    # Delegations to underlying model object
     def predict(self, predict_input):
         return self.model.predict(predict_input)
-    
+
     def decision_function(self, predict_input):
         return self.model.decision_function(predict_input)
 
     def predict_proba(self, predict_input):
         return self.model.predict_proba(predict_input)
-    
+
     def classes(self):
         return self.model.classes()
-    
+
     def coef(self):
         return self.model.coef()
-    
+
     def intercept(self):
         return self.model.intercept()
-    
+
     def is_linear_model(self):
         return self.model.is_linear_model()
+    
+    def supports_partial_fit(self) -> bool:
+        """Whether this model can be updated incrementally via partial_fit."""
+        return self.model.partial_fit()
 
     @staticmethod
     def load_config_from_args(args):
-        """Parse config from a `argparse.Namespace` object.
-
-        Args:
-            args (argparse.Namespace): Contains either a `classifier_config_path` (path to a json file) or `classifier_config_json` (a json object in string form).
-
-        Returns:
-            dict: The dict resulting from loading the json file or json object.
-
-        Raises:
-            Exception: If json object cannot be loaded.
         """
-
+        Parse config from argparse.Namespace (path or inline JSON).
+        """
         if args.classifier_config_path is not None:
             with open(args.classifier_config_path, "r", encoding="utf-8") as fin:
                 classifier_config_json = fin.read()
@@ -179,10 +157,14 @@ class ClassifierModel(metaclass=ClassifierMeta):
             classifier_config = json.loads(classifier_config_json)
         except json.JSONDecodeError as jex:
             raise Exception(
-                f"Failed to load clustering config json from {classifier_config_json} ({jex})"
+                f"Failed to load classifier config json from {classifier_config_json} ({jex})"
             )
         return classifier_config
+    
 
+# ---------------------------
+# Sklearn Logistic Regression
+# ---------------------------
 class SklearnLogisticRegression(ClassifierModel):
     """Sklearn Logistic Regression"""
 
@@ -191,55 +173,20 @@ class SklearnLogisticRegression(ClassifierModel):
         self.model = model
 
     def save(self, save_dir):
-        """Save trained sklearn Logistic Regression model to disk.
-
-        Args:
-            save_dir (str): Folder to store serialized object in.
-        """
-
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
             pickle.dump(self.model, fout)
 
     @classmethod
     def load(cls, load_dir, config):
-        """Load a saved sklearn Logistic Regression model from disk.
-
-        Args:
-            load_dir (str): Folder inside which the model is loaded.
-
-        Returns:
-            SklearnLogisticRegression: The loaded object.
-        """
-
-        # LOGGER.info(
-        #     f"Loading Sklearn Logistic Regression Classifier Model from {load_dir}"
-        # )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
-        assert os.path.exists(
-            classifier_path
-        ), f"Classifier path {classifier_path} does not exist"
-
+        assert os.path.exists(classifier_path), f"Classifier path {classifier_path} does not exist"
         with open(classifier_path, "rb") as fin:
             model_data = pickle.load(fin)
-        model = cls(config, model_data)
-        return model
+        return cls(config, model_data)
 
     @classmethod
-    def train(cls, X_train, y_train, config={}, dtype=np.float32, onevsrest=False):
-        """Train on a corpus.
-
-        Args:
-            trn_corpus (list): Training corpus in the form of a list of strings.
-            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
-
-        Returns:
-            LogisticRegression: Trained classifier Model.
-
-        Raises:
-            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
-        """
-
+    def init_model(cls, config, onevsrest=False):
         defaults = {
             "penalty": "l2",
             "dual": False,
@@ -256,207 +203,147 @@ class SklearnLogisticRegression(ClassifierModel):
             "n_jobs": -1,
             "l1_ratio": None,
         }
+        cfg = {**defaults, **(config or {})}
+        est = LogisticRegression(**cfg)
+        if onevsrest:
+            est = OneVsRestClassifier(est, n_jobs=multiprocessing.cpu_count())
+        return cls(cfg, est)
 
-        try:
-            config = {**defaults, **config}
-            model = LogisticRegression(**config)
-            if onevsrest:
-                print(f"Using {multiprocessing.cpu_count()} CPUs")
-                model = OneVsRestClassifier(model, n_jobs=multiprocessing.cpu_count())
-                
-        except TypeError:
-            raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
-            )
-        model.fit(X_train, y_train)
-        return cls(config, model)
+    @classmethod
+    def train(cls, X_train, y_train, config=None, dtype=np.float32, onevsrest=False):
+        wrapper = cls.init_model(config or {}, onevsrest=onevsrest)
+        wrapper.model.fit(X_train, y_train)
+        return wrapper
 
     def predict(self, X):
         return self.model.predict(X)
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)
-    
+
+    def decision_function(self, X):
+        return self.model.decision_function(X)
+
     def classes(self):
-        return self.model.classes_
-    
+        return self.model.classes_ if hasattr(self.model, "classes_") else self.model.classes
+
     def coef(self):
-        return self.model.coef_
-    
+        return self.model.coef_ if hasattr(self.model, "coef_") else None
+
     def intercept(self):
-        return self.model.intercept_
-    
+        return self.model.intercept_ if hasattr(self.model, "intercept_") else None
+
     def is_linear_model(self):
         return True
 
+    def supports_partial_fit(self) -> bool:
+        return False
 
+# ---------------------------
+# Sklearn SGDClassifier
+# ---------------------------
 class SklearnSGDClassifier(ClassifierModel):
-    
     def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
 
     def save(self, save_dir):
-        """Save trained sklearn SGDClassifier model to disk.
-
-        Args:
-            save_dir (str): Folder to store serialized object in.
-        """
-
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
             pickle.dump(self.model, fout)
 
     @classmethod
     def load(cls, load_dir, config):
-        """Load a saved sklearn SGDClassifier model from disk.
-
-        Args:
-            load_dir (str): Folder inside which the model is loaded.
-
-        Returns:
-            SklearnLogisticRegression: The loaded object.
-        """
-
-        # LOGGER.info(
-        #     f"Loading Sklearn Logistic Regression Classifier Model from {load_dir}"
-        # )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
-        assert os.path.exists(
-            classifier_path
-        ), f"Classifier path {classifier_path} does not exist"
-
+        assert os.path.exists(classifier_path), f"Classifier path {classifier_path} does not exist"
         with open(classifier_path, "rb") as fin:
             model_data = pickle.load(fin)
-        model = cls(config, model_data)
-        return model
+        return cls(config, model_data)
 
     @classmethod
-    def train(cls, X_train, y_train, config={}, dtype=np.float32, onevsrest=False):
-        """Train on a corpus.
-
-        Args:
-            trn_corpus (list): Training corpus in the form of a list of strings.
-            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
-
-        Returns:
-            LogisticRegression: Trained classifier Model.
-
-        Raises:
-            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
-        """
-
+    def init_model(cls, config, onevsrest=False):
         defaults = {
             "loss": 'hinge',
             "penalty": 'l2',
-            "alpha": 0.0001, 
-            "l1_ratio": 0.15, 
+            "alpha": 0.0001,
+            "l1_ratio": 0.15,
             "fit_intercept": True,
-            "max_iter": 1000, 
-            "tol": 0.001, 
-            "shuffle": True, 
-            "verbose":0, 
-            "epsilon": 0.1, 
-            "n_jobs": None, 
-            "random_state": None, 
-            "learning_rate": 'optimal', 
-            "eta0": 0.0, 
-            "power_t": 0.5, 
-            "early_stopping": False, 
-            "validation_fraction": 0.1, 
-            "n_iter_no_change": 5, 
-            "class_weight": None, 
-            "warm_start": False, 
+            "max_iter": 1000,
+            "tol": 0.001,
+            "shuffle": True,
+            "verbose": 0,
+            "epsilon": 0.1,
+            "n_jobs": None,
+            "random_state": None,
+            "learning_rate": 'optimal',
+            "eta0": 0.0,
+            "power_t": 0.5,
+            "early_stopping": False,
+            "validation_fraction": 0.1,
+            "n_iter_no_change": 5,
+            "class_weight": None,
+            "warm_start": False,
             "average": False
         }
+        cfg = {**defaults, **(config or {})}
+        est = SGDClassifier(**cfg)
+        if onevsrest:
+            est = OneVsRestClassifier(est, n_jobs=cfg.get("n_jobs", None))
+        return cls(cfg, est)
 
-        try:
-            config = {**defaults, **config}
-            model = SGDClassifier(**config)
-            if onevsrest:
-                model = OneVsRestClassifier(model, n_jobs=config["n_jobs"])
-                
-        except TypeError:
-            raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
-            )
-        model.fit(X_train, y_train)
-        return cls(config, model)
+    @classmethod
+    def train(cls, X_train, y_train, config=None, dtype=np.float32, onevsrest=False):
+        wrapper = cls.init_model(config or {}, onevsrest=onevsrest)
+        wrapper.model.fit(X_train, y_train)
+        return wrapper
 
     def predict(self, X):
         return self.model.predict(X)
 
     def decision_function(self, X):
         return self.model.decision_function(X)
-    
+
     def classes(self):
         return self.model.classes_
-    
+
     def coef(self):
         return self.model.coef_
-    
+
     def intercept(self):
         return self.model.intercept_
 
     def is_linear_model(self):
         return True
     
+    def supports_partial_fit(self) -> bool:
+        return True 
 
+
+# ---------------------------
+# Sklearn Random Forest
+# ---------------------------
 class SklearnRandomForestClassifier(ClassifierModel):
-    """SKlearn Random Forest"""
+    """Sklearn Random Forest"""
 
     def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
 
     def save(self, save_dir):
-        """Save trained sklearn Logistic Regression model to disk.
-
-        Args:
-            save_dir (str): Folder to store serialized object in.
-        """
-
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
             pickle.dump(self.model, fout)
 
     @classmethod
     def load(cls, load_dir, config):
-        """Load a saved sklearn Logistic Regression model from disk.
-
-        Args:
-            load_dir (str): Folder inside which the model is loaded.
-
-        Returns:
-            SklearnLogisticRegression: The loaded object.
-        """
-
-        # LOGGER.info(f"Loading Sklearn Random Forest Classifier Model from {load_dir}")
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
-        assert os.path.exists(
-            classifier_path
-        ), f"Classifier path {classifier_path} does not exist"
-
+        assert os.path.exists(classifier_path), f"Classifier path {classifier_path} does not exist"
         with open(classifier_path, "rb") as fin:
             model_data = pickle.load(fin)
-        model = cls(config, model_data)
-        return model
+        return cls(config, model_data)
 
     @classmethod
-    def train(cls, X_train, y_train, config={}, dtype=np.float32):
-        """Train on a corpus.
-
-        Args:
-            trn_corpus (list): Training corpus in the form of a list of strings.
-            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
-
-        Returns:
-            LogisticRegression: Trained classifier Model.
-
-        Raises:
-            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
-        """
-
+    def init_model(cls, config, onevsrest=False):
         defaults = {
             "n_estimators": 100,
             "criterion": "gini",
@@ -478,170 +365,119 @@ class SklearnRandomForestClassifier(ClassifierModel):
             "max_samples": None,
             "monotonic_cst": None,
         }
+        cfg = {**defaults, **(config or {})}
+        est = RandomForestClassifier(**cfg)
+        # onevsrest is usually unnecessary for RF multiclass, but we keep the signature
+        return cls(cfg, est)
 
-        try:
-            config = {**defaults, **config}
-            model = RandomForestClassifier(**config)
-        except TypeError:
-            raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnRandomForest"
-            )
-        model.fit(X_train, y_train)
-        return cls(config, model)
+    @classmethod
+    def train(cls, X_train, y_train, config=None, dtype=np.float32, onevsrest=False):
+        wrapper = cls.init_model(config or {}, onevsrest=onevsrest)
+        wrapper.model.fit(X_train, y_train)
+        return wrapper
 
     def predict(self, predict_input):
         return self.model.predict(predict_input)
 
     def is_linear_model(self):
         return False
+    
+    def supports_partial_fit(self) -> bool:
+        return False
 
 
+# ---------------------------
+# Sklearn SVC
+# ---------------------------
 class SklearnSupportVectorClassification(ClassifierModel):
-    """SKlearn SVC"""
+    """Sklearn SVC"""
 
     def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
 
     def save(self, save_dir):
-        """Save trained sklearn Support Vector Classifier model to disk.
-
-        Args:
-            save_dir (str): Folder to store serialized object in.
-        """
-
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
             pickle.dump(self.model, fout)
 
     @classmethod
     def load(cls, load_dir, config):
-        """Load a saved sklearn Support Vector Classifier from disk.
-
-        Args:
-            load_dir (str): Folder inside which the model is loaded.
-
-        Returns:
-            SklearnLogisticRegression: The loaded object.
-        """
-
-        # LOGGER.info(f"Loading Sklearn Support Vector Classifier Model from {load_dir}")
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
-        assert os.path.exists(
-            classifier_path
-        ), f"Classifier path {classifier_path} does not exist"
-
+        assert os.path.exists(classifier_path), f"Classifier path {classifier_path} does not exist"
         with open(classifier_path, "rb") as fin:
             model_data = pickle.load(fin)
-        model = cls(config, model_data)
-        return model
+        return cls(config, model_data)
 
     @classmethod
-    def train(cls, X_train, y_train, config={}, dtype=np.float32):
-        """Train on a corpus.
-
-        Args:
-            trn_corpus (list): Training corpus in the form of a list of strings.
-            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
-
-        Returns:
-            LogisticRegression: Trained classifier Model.
-
-        Raises:
-            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
-        """
-
+    def init_model(cls, config, onevsrest=False):
         defaults = {
-            "C": 1.0, 
-            "kernel": 'rbf', 
-            "degree": 3, 
-            "gamma": 'scale', 
-            "coef0": 0.0, 
-            "shrinking": True, 
-            "probability": True, 
-            "tol": 0.001, 
+            "C": 1.0,
+            "kernel": 'rbf',
+            "degree": 3,
+            "gamma": 'scale',
+            "coef0": 0.0,
+            "shrinking": True,
+            "probability": True,
+            "tol": 0.001,
             "cache_size": 200,
-            "class_weight": None, 
-            "verbose": False, 
-            "max_iter": -1, 
-            "decision_function_shape": 'ovr', 
-            "break_ties": False, 
+            "class_weight": None,
+            "verbose": False,
+            "max_iter": -1,
+            "decision_function_shape": 'ovr',
+            "break_ties": False,
             "random_state": None
         }
+        cfg = {**defaults, **(config or {})}
+        est = SVC(**cfg)
+        # SVC already does OvR internally for multiclass; external OneVsRest is usually redundant.
+        return cls(cfg, est)
 
-        try:
-            config = {**defaults, **config}
-            model = SVC(**config)
-        except TypeError:
-            raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnSVC"
-            )
-        model.fit(X_train, y_train)
-        return cls(config, model)
+    @classmethod
+    def train(cls, X_train, y_train, config=None, dtype=np.float32, onevsrest=False):
+        wrapper = cls.init_model(config or {}, onevsrest=onevsrest)
+        wrapper.model.fit(X_train, y_train)
+        return wrapper
 
     def predict(self, predict_input):
         return self.model.predict(predict_input)
-    
+
+    def decision_function(self, X):
+        # Available for SVC even with probability=True
+        return self.model.decision_function(X)
+
     def is_linear_model(self):
         return False
+    
+    def supports_partial_fit(self) -> bool:
+        return False
 
+
+# ---------------------------
+# cuML Logistic Regression (GPU)
+# ---------------------------
 class CumlLogisticRegression(ClassifierModel):
-    """Cuml Logistic Regression"""
+    """cuML Logistic Regression"""
 
     def __init__(self, config=None, model=None):
         self.config = config
         self.model = model
 
     def save(self, save_dir):
-        """Save trained sklearn Logistic Regression model to disk.
-
-        Args:
-            save_dir (str): Folder to store serialized object in.
-        """
-
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
             pickle.dump(self.model, fout)
 
     @classmethod
     def load(cls, load_dir, config):
-        """Load a saved sklearn Logistic Regression model from disk.
-
-        Args:
-            load_dir (str): Folder inside which the model is loaded.
-
-        Returns:
-            SklearnLogisticRegression: The loaded object.
-        """
-
-        # LOGGER.info(
-        #     f"Loading Cuml Logistic Regression Classifier Model from {load_dir}"
-        # )
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
-        assert os.path.exists(
-            classifier_path
-        ), f"Classifier path {classifier_path} does not exist"
-
+        assert os.path.exists(classifier_path), f"Classifier path {classifier_path} does not exist"
         with open(classifier_path, "rb") as fin:
             model_data = pickle.load(fin)
-        model = cls(config, model_data)
-        return model
+        return cls(config, model_data)
 
     @classmethod
-    def train(cls, X_train, y_train, config={}):
-        """Train on a corpus.
-
-        Args:
-            trn_corpus (list): Training corpus in the form of a list of strings.
-            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
-
-        Returns:
-            LogisticRegression: Trained classifier Model.
-
-        Raises:
-            Exception: If `config` contains keyword arguments that the CumlLogisticRegression does not accept.
-        """
-
+    def init_model(cls, config, onevsrest=False):
         defaults = {
             "penalty": "l2",
             "tol": 0.0001,
@@ -656,20 +492,26 @@ class CumlLogisticRegression(ClassifierModel):
             "handle": None,
             "output_type": None,
         }
+        cfg = {**defaults, **(config or {})}
+        est = CUMLLogisticRegression(**cfg)
+        return cls(cfg, est)
 
-        try:
-            config = {**defaults, **config}
-            model = CUMLLogisticRegression(**config)
-        except TypeError:
-            raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnAgglomerativeClustering"
-            )
-        model.fit(X_train, y_train)
-        return cls(config, model)
+    @classmethod
+    def train(cls, X_train, y_train, config=None):
+        wrapper = cls.init_model(config or {}, onevsrest=False)
+        wrapper.model.fit(X_train, y_train)
+        return wrapper
 
     def predict(self, predict_input):
         return self.model.predict(predict_input)
+    
+    def supports_partial_fit(self) -> bool:
+        return False
 
+
+# ---------------------------
+# LightGBM Classifier
+# ---------------------------
 class LightGBMClassifier(ClassifierModel):
     """LightGBM Classifier"""
 
@@ -678,97 +520,65 @@ class LightGBMClassifier(ClassifierModel):
         self.model = model
 
     def save(self, save_dir):
-        """Save trained LightGBM Classifier model to disk.
-
-        Args:
-            save_dir (str): Folder to store serialized object in.
-        """
-
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, "classifier_model.pkl"), "wb") as fout:
             pickle.dump(self.model, fout)
 
     @classmethod
     def load(cls, load_dir, config, file_name=None):
-        """Load a saved LightGBM Classifier model from disk.
-
-        Args:
-            load_dir (str): Folder inside which the model is loaded.
-
-        Returns:
-            SklearnLogisticRegression: The loaded object.
-        """
-        
         classifier_path = os.path.join(load_dir, "classifier_model.pkl")
-        assert os.path.exists(
-            classifier_path
-        ), f"Classifier path {classifier_path} does not exist"
-
+        assert os.path.exists(classifier_path), f"Classifier path {classifier_path} does not exist"
         with open(classifier_path, "rb") as fin:
             model_data = pickle.load(fin)
-        model = cls(config, model_data)
-        return model
+        return cls(config, model_data)
 
     @classmethod
-    def train(cls, X_train, y_train, config={}, dtype=np.float32, onevsrest=False):
-        """Train on a corpus.
-
-        Args:
-            trn_corpus (list): Training corpus in the form of a list of strings.
-            config (dict): Dict with keyword arguments to pass to sklearn's Logistic Regression.
-
-        Returns:
-            LogisticRegression: Trained classifier Model.
-
-        Raises:
-            Exception: If `config` contains keyword arguments that the SklearnLogisticRegression does not accept.
-        """
-
+    def init_model(cls, config, onevsrest=False):
         defaults = {
-            "boosting_type": "gbdt",             # 'gbdt', 'dart', 'rf'
+            "boosting_type": "gbdt",      # 'gbdt', 'dart', 'rf'
             "num_leaves": 31,
             "max_depth": -1,
             "learning_rate": 0.1,
             "n_estimators": 100,
             "subsample_for_bin": 200000,
-            "objective": "multiclass",                   # e.g., default = None, 'binary', 'multiclass', 'regression'
-            "class_weight": None,               # dict, 'balanced', or None
+            "objective": "multiclass",    # e.g., None, 'binary', 'multiclass', 'regression'
+            "class_weight": None,
             "min_split_gain": 0.0,
             "min_child_weight": 1e-3,
             "min_child_samples": 20,
             "subsample": 1.0,
             "subsample_freq": 0,
             "colsample_bytree": 1.0,
-            "reg_alpha": 0.0,                   # L1 regularization
-            "reg_lambda": 0.0,                  # L2 regularization
+            "reg_alpha": 0.0,
+            "reg_lambda": 0.0,
             "random_state": None,
-            "n_jobs": -1,                     # or -1 for all cores
-            "importance_type": "split",         # 'split' or 'gain'
+            "n_jobs": -1,
+            "importance_type": "split",
             "verbosity": -1,
-            # **{"num_class": len(np.unique(y_train))}
-            # "**kwargs": {...}                # Additional parameters if needed
         }
+        cfg = {**defaults, **(config or {})}
+        est = LGBMClassifier(**cfg)
+        if onevsrest:
+            est = OneVsRestClassifier(est, n_jobs=cfg.get("n_jobs", -1))
+        return cls(cfg, est)
 
-        try:
-            config = {**defaults, **config}
-            model = LGBMClassifier(**config)
-            if onevsrest:
-                model = OneVsRestClassifier(model, n_jobs=config["n_jobs"])
-        except TypeError:
-            raise Exception(
-                f"clustering config {config} contains unexpected keyword arguments for SklearnLogisticRegression"
-            )
-        model.fit(X_train, y_train)
-        return cls(config, model)
+    @classmethod
+    def train(cls, X_train, y_train, config=None, dtype=np.float32, onevsrest=False):
+        wrapper = cls.init_model(config or {}, onevsrest=onevsrest)
+        wrapper.model.fit(X_train, y_train)
+        return wrapper
 
     def predict(self, X):
         return self.model.predict(X)
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)
-    
+
     def classes(self):
         return self.model.classes_
-    
+
     def is_linear_model(self):
+        return False
+    
+    def supports_partial_fit(self) -> bool:
         return False
