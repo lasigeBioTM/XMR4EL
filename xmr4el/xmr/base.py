@@ -807,7 +807,6 @@ class HierarchicaMLModel():
                     self.clustering_config["kwargs"]["n_clusters"] = max(
                         2, self.clustering_config["kwargs"]["n_clusters"] // 2
                     )
-
                 
                 for parent_idx, (X_node, Y_node, Z_node, local_to_label_node, global_to_local_node) in enumerate(inputs):
                     
@@ -1015,7 +1014,6 @@ class HierarchicaMLModel():
             out_scores = csr_matrix((data, (rows, cols)), shape=(n, len(all_gids)))
             """
                     
-
             out.append({"query_index": int(qi), "paths": paths})
 
         return out

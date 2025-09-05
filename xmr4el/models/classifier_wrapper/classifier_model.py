@@ -116,6 +116,9 @@ class ClassifierModel(metaclass=ClassifierMeta):
         wrapper.config["kwargs"] = wrapper.model.config
         return wrapper
 
+    def partial_fit(self, X, Y, classes, dtype):
+        self.model.partial_fit(X, Y, classes, dtype)
+
     # Delegations to underlying model object
     def predict(self, predict_input):
         return self.model.predict(predict_input)
@@ -140,7 +143,7 @@ class ClassifierModel(metaclass=ClassifierMeta):
     
     def supports_partial_fit(self) -> bool:
         """Whether this model can be updated incrementally via partial_fit."""
-        return self.model.partial_fit()
+        return self.model.supports_partial_fit
 
     @staticmethod
     def load_config_from_args(args):
@@ -296,6 +299,9 @@ class SklearnSGDClassifier(ClassifierModel):
         wrapper = cls.init_model(config or {}, onevsrest=onevsrest)
         wrapper.model.fit(X_train, y_train)
         return wrapper
+    
+    def partial_fit(self, X, Y, classes, dtype):
+        self.model.partial_fit(X, Y, classes)
 
     def predict(self, X):
         return self.model.predict(X)

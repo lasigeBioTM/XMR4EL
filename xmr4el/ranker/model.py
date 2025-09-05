@@ -28,7 +28,7 @@ class Ranker:
         
         # Configure joblib memory caching
         self.memory = Memory(temp_dir, verbose=0)
-        self._cached_process_label = self.memory.cache(RankerTrainer.process_label)
+        self._cached_process_label = self.memory.cache(RankerTrainer.process_label_incremental)
     
     @property
     def model_dict(self) -> Optional[Dict[int, ClassifierModel]]:
@@ -53,6 +53,8 @@ class Ranker:
             model.save(idx_folder)
         
         state.pop("_ranker_models", None)
+        state.pop("memory", None)
+        state.pop("_cached_process_label", None)
         
         with open(os.path.join(save_dir, "ranker.pkl"), "wb") as fout:
             pickle.dump(state, fout)
@@ -93,6 +95,8 @@ class Ranker:
         n_label_workers: int = 8,
     ) -> None:
         """Train ranker models for each label cluster."""
+        n_epochs = (self.ranker_config or {}).get("n_epochs", 3)
+        
         ranker_models = RankerTrainer.train(
             X=X,
             Y=Y,
@@ -104,6 +108,7 @@ class Ranker:
             local_to_global_idx=local_to_global_idx,
             n_label_workers=n_label_workers,
             parallel_backend="threading",
+            n_epochs=n_epochs
         )
 
         self.model_dict = ranker_models

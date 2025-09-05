@@ -133,7 +133,6 @@ def main():
         }
     }
     
-    """
     ranker_config = {
         "type": "sklearnsgdclassifier",
         "kwargs": {
@@ -142,15 +141,16 @@ def main():
             "alpha": 0.0001,               # Stronger regularization (C=1/alpha)
             "max_iter": 1000,              # Ensure convergence
             "tol": 1e-4,
-            "class_weight": "balanced", # Better for some reason # Emphasize positives # "class_weight": "balanced",    # Critical for imbalanced ranking data
+            # "class_weight": "balanced", # Better for some reason # Emphasize positives # "class_weight": "balanced",    # Critical for imbalanced ranking data
             "n_jobs": -1,                  # Parallelize OvR if multi-label
             "random_state": 0,
             "verbose": 0,
-            "early_stopping": True,
+            "early_stopping": False,
             "learning_rate": "adaptive",   # Handles noisy gradients better
             "eta0": 0.01,                  # Higher initial learning rate for ranking
         }
     }
+    
     """
     ranker_config = {
         "type": "lightgbmclassifier",
@@ -174,6 +174,7 @@ def main():
             "force_col_wise": True  # Faster for sparse
         }
     }
+    """
     
     training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
     labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
