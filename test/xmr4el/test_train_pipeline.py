@@ -96,7 +96,6 @@ def main():
             },
     }
     """
-    
     """
     matcher_config = {
         "type": "lightgbmclassifier",
@@ -104,7 +103,7 @@ def main():
             "objective": "binary",
             "boosting_type": "gbdt",
             "learning_rate": 0.05,
-            "n_estimators": 300,
+            "n_estimators": 1000,
             "num_leaves": 64,
             "subsample": 0.8,
             "colsample_bytree": 0.8,
@@ -114,7 +113,6 @@ def main():
         }
     }
     """
-    
     matcher_config = {
     "type": "sklearnsgdclassifier",
     "kwargs": {
@@ -132,7 +130,7 @@ def main():
         "eta0": 0.0,                   # Initial learning rate (ignored if 'optimal')
         }
     }
-    
+
     ranker_config = {
         "type": "sklearnsgdclassifier",
         "kwargs": {
@@ -206,7 +204,7 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=8,
                     depth=depth,
-                    emb_flag=1
+                    emb_flag=3
                     )
     
     xmodel.train(X_cross_train, raw_labels)

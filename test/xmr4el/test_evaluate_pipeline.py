@@ -80,7 +80,7 @@ def main():
     # train_disease_100 # more open cluster better,
     #. 3 flag better than, more depth more score
     
-    load_path = "test/test_data/saved_trees/xmodel_2025-09-05_16-52-35"
+    load_path = "test/test_data/saved_trees/xmodel_2025-09-06_16-43-51_transformers"
     
     print(load_path)
     
@@ -97,8 +97,9 @@ def main():
     # exit()
     
     # print(filtered_texts)
-    
-    routes = trained_xtree.predict(filtered_texts, beam_size=10, topk=10, fusion="lp_fusion")
+    # transformers, Hit counts per query: Counter({0: 80, 1: 11}) top5
+    # fusion, Hit counts per query: Counter({0: 59, 1: 32})
+    routes = trained_xtree.predict(filtered_texts, beam_size=1, topk=10, fusion="lp_fusion")
     
     
     # print(score_matrix[0]["leaf_global_labels"])
