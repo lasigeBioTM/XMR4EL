@@ -262,5 +262,5 @@ class XModel():
             """
 
             X_query = self.text_encoder.predict(X_text)
-            return self.model.predict(X_query, topk=topk, beam_size=beam_size, fusion=fusion)
+            return self.model.predict(X_query, topk=topk, beam_size=beam_size, fusion=fusion, n_jobs=-1)
             

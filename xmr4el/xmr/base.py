@@ -1108,7 +1108,7 @@ class HierarchicaMLModel():
             return recs
 
         with parallel_backend("threading", n_jobs=n_jobs):
-            per_query_recs = Parallel(prefer="threads", require="sharedmem")(
+            per_query_recs = Parallel(prefer="threads")(
                 delayed(_route_one_query)(qi) for qi in range(n_queries)
             )
 
