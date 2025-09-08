@@ -328,6 +328,7 @@ class SklearnSGDClassifier(ClassifierModel):
 # ---------------------------
 # Sklearn Random Forest
 # ---------------------------
+
 class SklearnRandomForestClassifier(ClassifierModel):
     """Sklearn Random Forest"""
 
@@ -395,6 +396,7 @@ class SklearnRandomForestClassifier(ClassifierModel):
 # ---------------------------
 # Sklearn SVC
 # ---------------------------
+
 class SklearnSupportVectorClassification(ClassifierModel):
     """Sklearn SVC"""
 
@@ -462,6 +464,7 @@ class SklearnSupportVectorClassification(ClassifierModel):
 # ---------------------------
 # cuML Logistic Regression (GPU)
 # ---------------------------
+
 class CumlLogisticRegression(ClassifierModel):
     """cuML Logistic Regression"""
 
@@ -518,6 +521,7 @@ class CumlLogisticRegression(ClassifierModel):
 # ---------------------------
 # LightGBM Classifier
 # ---------------------------
+
 class LightGBMClassifier(ClassifierModel):
     """LightGBM Classifier"""
 

@@ -204,6 +204,8 @@ class XModel():
         Y_binazer, _ = LabelEmbeddingFactory.label_binarizer(Y_label_matrix)
         Z = LabelEmbeddingFactory.generate_PIFA(X_emb, Y_binazer)
         
+        
+        
         return X_emb, Y_binazer, Z 
     
     def train(self, X_text, Y_text):
