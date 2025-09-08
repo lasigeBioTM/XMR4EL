@@ -886,12 +886,13 @@ class HierarchicaMLModel():
             return self.hmodel
         
     
-    def _predict(self, X_query, 
+    def predict(self, X_query, 
                     topk: int = 5, 
                     beam_size: int = 5, 
                     fusion: str = "lp_fusion", 
                     eps: float = 1e-9, 
-                    alpha: float = 0.5): 
+                    alpha: float = 0.5,
+                    n_jobs=None): 
         """
         Same beam-search routing as before, but leaf rankers are called in batches:
         we collect all (leaf_idx, x_row, trail, qi) pairs first, then run one
@@ -1012,7 +1013,7 @@ class HierarchicaMLModel():
         out = [{"query_index": int(qi), "paths": paths_per_query[qi]} for qi in range(n_queries)]
         return out
     
-    def predict(self, X_query,
+    def _predict(self, X_query,
             topk: int = 5,
             beam_size: int = 5,
             fusion: str = "lp_fusion",
