@@ -886,7 +886,7 @@ class HierarchicaMLModel():
             return self.hmodel
         
     
-    def _predict(self, X_query, 
+    def predict(self, X_query, 
                     topk: int = 5, 
                     beam_size: int = 5, 
                     fusion: str = "lp_fusion", 
@@ -920,7 +920,11 @@ class HierarchicaMLModel():
         # leaf_idx -> list of (qi, x_row, trail)
         pending_by_leaf: dict[int, list[tuple[int, csr_matrix, list]]] = defaultdict(list)
 
-        for qi in range(X_query.shape[0]):
+        print(f"Shape of the query: {X_query.shape[0]}")
+
+        for qi in range(X_query.shape[0]):    
+            print(f"Query n: {qi}")
+        
             x0 = X_query[qi:qi+1]
             beam = [(mi, x0, 0.0, []) for mi in range(len(self.hmodel[0]))]
 
@@ -1008,7 +1012,7 @@ class HierarchicaMLModel():
         out = [{"query_index": int(qi), "paths": paths_per_query[qi]} for qi in range(n_queries)]
         return out
     
-    def predict(self, X_query,
+    def _predict(self, X_query,
                 topk: int = 5,
                 beam_size: int = 5,
                 fusion: str = "lp_fusion",
