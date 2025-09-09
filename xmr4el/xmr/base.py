@@ -1045,7 +1045,7 @@ class HierarchicaMLModel():
         # ---------- Phase 1: ROUTE in parallel (no leaf predict here) ----------
         def _route_one_query(qi: int):
             """Return list of leaf-beam records for this query (to be bucketed later)."""
-            print(f"Query index: {qi}")
+            # print(f"Query index: {qi}")
             x0 = X_query[qi:qi+1]
             # state: (parent_model_idx, x_row, logscore, trail)
             beam = [(mi, x0, 0.0, []) for mi in range(len(self.hmodel[0]))]
