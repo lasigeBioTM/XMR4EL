@@ -924,7 +924,7 @@ class HierarchicaMLModel():
         print(f"Shape of the query: {X_query.shape[0]}")
 
         for qi in range(X_query.shape[0]):    
-            print(f"Query n: {qi}")
+            # print(f"Query n: {qi}")
         
             x0 = X_query[qi:qi+1]
             beam = [(mi, x0, 0.0, []) for mi in range(len(self.hmodel[0]))]
