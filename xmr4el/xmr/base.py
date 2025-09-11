@@ -4,6 +4,8 @@ import gc
 import pickle
 import tempfile
 import joblib
+import heapq
+import shutil
 
 import numpy as np
 
@@ -23,6 +25,7 @@ from xmr4el.clustering.model import Clustering
 from xmr4el.matcher.model import Matcher
 from xmr4el.ranker.model import Ranker
 
+model_dir = Path(tempfile.mkdtemp(prefix="ml_model_dir"))
 
 
 class MLModel():
@@ -131,6 +134,19 @@ class MLModel():
     @property
     def is_empty(self):
         return True if self.cluster_model is None else False
+    
+    @staticmethod
+    def save_model_temp(model , label: int) -> str:
+        """Persist a temporary model for the given label."""
+        sub_dir = model_dir / str(label)
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        model.save(str(sub_dir))
+        return str(sub_dir)
+
+    @staticmethod
+    def delete_ranker_temp() -> None:
+        """Remove all temporary ranker models from disk."""
+        shutil.rmtree(model_dir)
     
     def save(self, save_dir):
         os.makedirs(save_dir, exist_ok=True)  # Ensure directory exists
@@ -917,6 +933,8 @@ class HierarchicaMLModel():
         
         paths_per_query = [[] for _ in range(n_queries)]
         
+        per_query_scores = [defaultdict(float) for _ in range(n_queries)]
+        
         # Collect all leaf work across all queries first
         # leaf_idx -> list of (qi, x_row, trail)
         pending_by_leaf: dict[int, list[tuple[int, csr_matrix, list]]] = defaultdict(list)
@@ -993,25 +1011,75 @@ class HierarchicaMLModel():
 
             leaf_ml = leaf_layer_models[leaf_idx]
             # This returns per-row lists; we don't change semantics, just batch
-            _, labels_list = leaf_ml.predict(
+            scores_list, labels_list = leaf_ml.predict(
                 X_batch,
                 beam_size=100,
                 fusion=fusion,
                 alpha=alpha
             )
 
-            # Scatter results back to each query/path
-            for (qi, trail), labels in zip(zip(q_indices, trails), labels_list):
-                q_labels = labels[:topk].astype(np.int32) if topk is not None else labels.astype(np.int32)
+            for (qi, trail), labels, scores in zip(zip(q_indices, trails), labels_list, scores_list):
+                
+                if topk is not None:
+                    labels = labels[:topk]
+                    scores = scores[:topk]
+                
                 paths_per_query[qi].append({
                     "trail": trail,
                     "leaf_model_idx": int(leaf_idx),
-                    "leaf_global_labels": q_labels,
+                    "leaf_global_labels": labels.astype(np.int32, copy=False),
+                    "scores": scores.astype(float, copy=False)
                 })
+                
+                acc = per_query_scores[qi]
+                for lid, sc in zip(labels, scores):
+                    lid = int(lid)
+                    sc = float(sc)
+                    if sc > acc.get(lid, 0.0):
+                        acc[lid] = sc
+
+
+        # Build CSR (n_queries x n_labels). If we can't infer n_labels, fall back to max label + 1.
+        try:
+            n_labels_total = int(self.label_embeddings.shape[0])
+        except Exception:
+            max_lid = -1
+            for acc in per_query_scores:
+                if acc:
+                    m = max(acc.keys())
+                    if m > max_lid: max_lid = m
+            n_labels_total = max_lid + 1 if max_lid >= 0 else 0
+
+        indptr = [0]
+        indices = []
+        data = []
+
+        for qi in range(n_queries):
+            acc = per_query_scores[qi]  # dict: label_id -> score
+            if not acc:
+                indptr.append(len(indices)); continue
+
+            items = acc.items()
+            if topk is not None:
+                items = heapq.nlargest(topk, items, key=lambda kv: kv[1])
+
+            lids, scs = zip(*items)
+            # (optional) sort for nicer layout
+            order = np.argsort(-np.asarray(scs))
+            indices.extend(np.asarray(lids)[order].tolist())
+            data.extend(np.asarray(scs)[order].tolist())
+            indptr.append(len(indices))
+
+        scores_csr = csr_matrix((np.asarray(data, dtype=float),
+                                np.asarray(indices, dtype=np.int32),
+                                np.asarray(indptr, dtype=np.int32)),
+                                shape=(n_queries, n_labels_total),
+                                dtype=float)
+
 
         # Pack output to match your original structure
         out = [{"query_index": int(qi), "paths": paths_per_query[qi]} for qi in range(n_queries)]
-        return out
+        return out, scores_csr
     
     def _predict(self, X_query,
             topk: int = 5,

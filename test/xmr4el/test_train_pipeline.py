@@ -190,7 +190,7 @@ def main():
     max_leaf_size = 200
     cut_half_cluster=True
     ranker_every_layer=True
-    depth = 4
+    depth = 2
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
@@ -204,7 +204,7 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=8,
                     depth=depth,
-                    emb_flag=3
+                    emb_flag=1
                     )
     
     xmodel.train(X_cross_train, raw_labels)

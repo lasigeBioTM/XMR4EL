@@ -81,7 +81,7 @@ def main():
     #. 3 flag better than, more depth more score
     
     # test/test_data/saved_trees/xmodel_2025-09-06_15-31-13_trasformers
-    load_path = "test/test_data/saved_trees/xmodel_2025-09-06_15-46-09_fused"
+    load_path = "test/test_data/saved_trees/xmodel_2025-09-11_17-57-07"
     
     print(load_path)
     
@@ -93,6 +93,8 @@ def main():
     
     filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.initial_labels)
     
+    # print(filtered_labels)
+    
     # print(filtered_texts[0])
     # print(filtered_labels[0]) # 25
     # exit()
@@ -100,9 +102,10 @@ def main():
     # print(filtered_texts)
     # transformers, Hit counts per query: Counter({0: 80, 1: 11}) top5
     # fusion, Hit counts per query: Counter({0: 59, 1: 32})
-    routes = trained_xtree.predict(filtered_texts, beam_size=10, topk=10, fusion="lp_fusion")
+    routes, score_csr = trained_xtree.predict(filtered_texts, beam_size=10, topk=10, fusion="lp_fusion")
     
-    print(routes)
+    # print(routes)
+    print(score_csr)
     
     # print(score_matrix[0]["leaf_global_labels"])
     
@@ -114,9 +117,11 @@ def main():
     hit_counts = []
     for r in routes:
         qi = r["query_index"]
+        print(qi)
         # union of all labels reachable by the final surviving leaves
         cand = set()
         for p in r.get("paths", []):
+            print(p.get("leaf_global_labels"))
             cand.update(trained_labels[p.get("leaf_global_labels", [])])
         gold = set(filtered_labels[qi])
         hit_counts.append(len(cand & gold))
