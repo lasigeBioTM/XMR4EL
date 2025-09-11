@@ -114,6 +114,7 @@ def main():
     # Get global label ids array from the score_matrix
     # global_labels = score_matrix.global_labels  # shape (n_labels,)
 
+    """
     hit_counts = []
     for r in routes:
         qi = r["query_index"]
@@ -123,6 +124,21 @@ def main():
         for p in r.get("paths", []):
             print(p.get("leaf_global_labels"))
             cand.update(trained_labels[p.get("leaf_global_labels", [])])
+        gold = set(filtered_labels[qi])
+        hit_counts.append(len(cand & gold))
+        
+    print("Hit counts per query:", Counter(hit_counts))
+    print("Average hits:", np.mean(hit_counts))
+    """
+    
+    hit_counts = []
+    for r in routes:
+        qi = r["query_index"]
+        print(qi)
+        # union of all labels reachable by the final surviving leaves
+        cand = set()
+        print(r.get("final_path").get("leaf_global_labels", []))
+        cand.update(trained_labels[r.get("final_path").get("leaf_global_labels", [])])
         gold = set(filtered_labels[qi])
         hit_counts.append(len(cand & gold))
         
