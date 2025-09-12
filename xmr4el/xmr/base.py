@@ -144,7 +144,7 @@ class MLModel():
         return str(sub_dir)
 
     @staticmethod
-    def delete_ranker_temp() -> None:
+    def delete_model_temp() -> None:
         """Remove all temporary ranker models from disk."""
         shutil.rmtree(model_dir)
     
