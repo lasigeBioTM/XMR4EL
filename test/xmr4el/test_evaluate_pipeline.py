@@ -102,7 +102,7 @@ def main():
     # print(filtered_texts)
     # transformers, Hit counts per query: Counter({0: 80, 1: 11}) top5
     # fusion, Hit counts per query: Counter({0: 59, 1: 32})
-    routes, score_csr = trained_xtree.predict(filtered_texts, beam_size=10, topk=10, fusion="lp_fusion")
+    routes, score_csr = trained_xtree.predict(filtered_texts, beam_size=10, topk=20, fusion="lp_fusion", topk_mode="global")
     
     # print(routes)
     print(score_csr)
@@ -137,7 +137,10 @@ def main():
         print(qi)
         # union of all labels reachable by the final surviving leaves
         cand = set()
-        print(r.get("final_path").get("leaf_global_labels", []))
+        for p in r.get("paths", []):
+            print("Leaf paths", p.get("leaf_global_labels"))
+            print("Leaf Scores", p.get("scores"), "\n")
+        print("Final path", r.get("final_path").get("leaf_global_labels", []), "\n")
         cand.update(trained_labels[r.get("final_path").get("leaf_global_labels", [])])
         gold = set(filtered_labels[qi])
         hit_counts.append(len(cand & gold))
