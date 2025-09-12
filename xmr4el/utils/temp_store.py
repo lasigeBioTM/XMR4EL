@@ -1,11 +1,11 @@
-from pathlib import Path
-import tempfile, shutil, json, uuid
 import numpy as np
+import tempfile, shutil, json, uuid
+
+from pathlib import Path
 from scipy.sparse import csr_matrix
 from scipy.sparse import save_npz, load_npz
 
 class TempVarStore:
-    # one temp root for all saves
     model_dir: Path = Path(tempfile.mkdtemp(prefix="x_model_dir_"))
 
     @classmethod

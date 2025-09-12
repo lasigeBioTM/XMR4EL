@@ -261,6 +261,7 @@ class XModel():
                 beam_size: int | None = None, 
                 fusion: str = "geometric", 
                 topk_mode: str = "per_leaf", 
+                topk_inside_global: int | None = None,
                 n_jobs: int =-1):
             """Predict label scores for given text inputs.
 
@@ -300,11 +301,11 @@ class XModel():
             """   
             out_h, _ = self.model.predict(
                 X_query,
-                topk=None,
+                topk=topk_inside_global,
                 beam_size=beam_size,
                 fusion=fusion,
                 n_jobs=-1,
-                topk_mode="none",  # do not truncate; gather full union from leaves
+                topk_mode="per_leaf",  # do not truncate; gather full union from leaves
             )
             
             n_queries = X_query.shape[0]

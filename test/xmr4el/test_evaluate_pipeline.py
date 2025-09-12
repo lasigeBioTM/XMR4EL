@@ -102,7 +102,12 @@ def main():
     # print(filtered_texts)
     # transformers, Hit counts per query: Counter({0: 80, 1: 11}) top5
     # fusion, Hit counts per query: Counter({0: 59, 1: 32})
-    routes, score_csr = trained_xtree.predict(filtered_texts, beam_size=2, topk=20, fusion="lp_fusion", topk_mode="global")
+    routes, score_csr = trained_xtree.predict(filtered_texts, 
+                                              beam_size=1, 
+                                              topk=20, 
+                                              fusion="lp_fusion", 
+                                              topk_mode="global", 
+                                              topk_inside_global=100)
     
     # print(routes)
     print(score_csr)
