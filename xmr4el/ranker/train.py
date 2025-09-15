@@ -15,13 +15,7 @@ from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 ranker_dir = Path(tempfile.mkdtemp(prefix="rankers_store_"))
 
-_CURR_DEFAULTS = dict(
-    E_warm=3,
-    ratios_warm=(0.70, 0.30),
-    ratios_hard=(0.60, 0.30, 0.10),
-    neg_mult=15,
-    seed=42,
-)
+random_seed = 0
  
 class RankerTrainer:
     """Training routines for per-label rankers."""
@@ -199,9 +193,10 @@ class RankerTrainer:
             "ratios_warm": (0.70, 0.30),
             "ratios_hard": (0.60, 0.30, 0.10),
             "neg_mult": 15,
-            "seed": 42,
+            "seed": config["kwargs"]["random_state"],
             **config.get("curriculum", {}),
         }
+        
         rng = np.random.RandomState(cur["seed"])
 
         # select negatives purely by positions & scores (no X_cluster)
