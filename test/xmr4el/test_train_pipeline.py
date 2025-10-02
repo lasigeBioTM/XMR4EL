@@ -192,7 +192,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=400
+        truncate_data=1000
         )
     
     raw_labels = train_data["labels"]
@@ -202,7 +202,7 @@ def main():
     max_leaf_size = 200
     cut_half_cluster=True
     ranker_every_layer=True
-    depth = 2
+    depth = 4
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
@@ -216,7 +216,7 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=-1,
                     depth=depth,
-                    emb_flag=1
+                    emb_flag=3
                     )
     
     xmodel.train(X_cross_train, raw_labels)

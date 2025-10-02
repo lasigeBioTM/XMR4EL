@@ -6,6 +6,7 @@ import tempfile
 import joblib
 import heapq
 import shutil
+import time
 
 import numpy as np
 
@@ -916,7 +917,9 @@ class HierarchicaMLModel():
         we collect all (leaf_idx, x_row, trail, qi) pairs first, then run one
         batched predict per leaf_idx and map results back per query/path.
         """
-            
+        
+        time_start_routing = time.time()
+        
         def _select_topk_indices(scores: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
             """Return (idx_top_sorted, vals_sorted) of top-k by score (descending)."""
             if k <= 0:
@@ -1007,7 +1010,14 @@ class HierarchicaMLModel():
             if beam:
                 for child_idx, x_row, logscore, trail in beam:
                     pending_by_leaf[int(child_idx)].append((qi, x_row, trail))
-                        
+        
+        
+        time_end_routing = time.time()
+        
+        time_start_ranking = time.time()
+        
+        print("Routing: ", time_end_routing - time_start_routing)
+        
         # --- Batched leaf predictions per leaf model ---
         leaf_layer_models = self.hmodel[-1]
         for leaf_idx, items in pending_by_leaf.items():
@@ -1128,4 +1138,9 @@ class HierarchicaMLModel():
             }
             for qi in range(n_queries)
         ]
+        
+        time_end_ranking = time.time()
+        
+        print("Ranking: ", time_end_ranking - time_start_ranking)
+        
         return out, scores_csr

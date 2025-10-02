@@ -11,11 +11,13 @@ warnings.filterwarnings("ignore", message=".*does not have valid feature names.*
 
 import joblib
 import pickle
-import tempfile
+import time 
 import pandas as pd
 
 
 import numpy as np
+
+from datetime import datetime
 
 from pathlib import Path
 
@@ -23,7 +25,6 @@ from scipy.sparse import csr_matrix, hstack, issparse
 
 from sklearn.preprocessing import normalize
 
-from datetime import datetime
 
 from xmr4el.featurization.label_embedding_factory import LabelEmbeddingFactory
 from xmr4el.featurization.preprocessor import Preprocessor
@@ -285,8 +286,14 @@ class XModel():
             list, optional
                 Hit counts per query when ``return_hits`` is ``True``.
             """
+            
+            time_start_encoding = time.time()
 
             X_query = self.text_encoder.predict(X_text)
+            
+            time_end_encoding = time.time()
+            
+            print("Encoding: ", time_end_encoding - time_start_encoding)
             
             if topk_mode == "per_leaf":
                 return self.model.predict(X_query, 
@@ -307,6 +314,8 @@ class XModel():
                 n_jobs=-1,
                 topk_mode="per_leaf",  # do not truncate; gather full union from leaves
             )
+            
+            time_start_reranking = time.time()
             
             n_queries = X_query.shape[0]
             
@@ -382,6 +391,10 @@ class XModel():
                 shape=(n_queries, n_labels),
                 dtype=np.float32
             )
+            
+            time_end_reranking = time.time()
+            
+            print("Reranking: ", time_end_reranking - time_start_reranking)
 
             # 6) IMPORTANT: return the SAME 'out' from HMLModel, only scores are replaced by cosine
             return out_h, scores_cos
