@@ -81,7 +81,7 @@ def main():
     #. 3 flag better than, more depth more score
     
     # test/test_data/saved_trees/xmodel_2025-09-06_15-31-13_trasformers
-    load_path = "test/test_data/saved_trees/xmodel_2025-09-29_16-54-09"
+    load_path = "test/test_data/saved_trees/xmodel_2025-10-07_15-13-19"
     
     print(load_path)
     

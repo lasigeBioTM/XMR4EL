@@ -62,7 +62,7 @@ def main():
     
     dimension_config = {
         "type": "sklearntruncatedsvd", 
-        "kwargs": {"n_components": 1000, 
+        "kwargs": {"n_components": 1500, 
                "algorithm": "randomized", 
                "n_iter": 5, 
                "n_oversamples": 10, 
@@ -192,7 +192,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=1000
+        truncate_data=600
         )
     
     raw_labels = train_data["labels"]
