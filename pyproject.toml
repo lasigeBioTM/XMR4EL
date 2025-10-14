@@ -27,13 +27,12 @@ dependencies = [
   "python-Levenshtein",
 
   # RAPIDS (CUDA 12.8 compatible):
-  "cuml-cu12==25.03.*",
-  "cudf-cu12==25.03.*",
-  "rmm-cu12==25.03.*",
+  "cuml-cu12==25.*",
+  "cudf-cu12==25.*",
+  "rmm-cu12==25.*",
   "cupy-cuda12x>=13.6",
 
-  # torch is installed from the cu128 index (see step 3), so omit version here or keep a loose marker:
   "torch>=2.8.0",
-  
+
   "kmeans-pytorch @ git+https://github.com/kernelmachine/balanced-kmeans.git@main"
 ]
