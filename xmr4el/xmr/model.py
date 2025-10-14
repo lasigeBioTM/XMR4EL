@@ -41,6 +41,7 @@ class XModel():
                  clustering_config=None,
                  matcher_config=None,
                  ranker_config=None,
+                 cur_config=None,
                  min_leaf_size=20,
                  max_leaf_size=None,
                  cut_half_cluster=False,
@@ -56,6 +57,7 @@ class XModel():
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.ranker_config = ranker_config
+        self.cur_config = cur_config
         
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
@@ -234,6 +236,7 @@ class XModel():
             clustering_config=self.clustering_config,
             matcher_config=self.matcher_config,
             ranker_config=self.ranker_config,
+            cur_config=self.cur_config,
             min_leaf_size=self.min_leaf_size,
             max_leaf_size=self.max_leaf_size,
             n_workers=self.n_workers,

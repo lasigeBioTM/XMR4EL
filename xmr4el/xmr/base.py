@@ -35,6 +35,7 @@ class MLModel():
                  clustering_config=None, 
                  matcher_config=None, 
                  ranker_config=None,
+                 cur_config=None,
                  min_leaf_size=20,
                  max_leaf_size=None,
                  ranker_every_layer=False,
@@ -46,6 +47,7 @@ class MLModel():
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.ranker_config = ranker_config
+        self.cur_config = cur_config
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
         self.ranker_every_layer = ranker_every_layer
@@ -425,7 +427,7 @@ class MLModel():
                 M_MAN = _topb_sparse(P, b=5)
             
             print("Ranker")
-            ranker_model = Ranker(self.ranker_config)
+            ranker_model = Ranker(self.ranker_config, self.cur_config)
             ranker_model.train(X_train, 
                                 Y_train, 
                                 self.label_embeddings, 
@@ -602,6 +604,7 @@ class HierarchicaMLModel():
                  clustering_config=None, 
                  matcher_config=None, 
                  ranker_config=None, 
+                 cur_config=None,
                  min_leaf_size=20,
                  max_leaf_size=None,
                  cut_half_cluster=False,
@@ -612,6 +615,7 @@ class HierarchicaMLModel():
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
         self.ranker_config = ranker_config
+        self.cur_config = cur_config
         self.min_leaf_size = min_leaf_size
         self.max_leaf_size = max_leaf_size
         self.cut_half_cluster = cut_half_cluster
@@ -835,6 +839,7 @@ class HierarchicaMLModel():
                         clustering_config=self.clustering_config,
                         matcher_config=self.matcher_config,
                         ranker_config=self.ranker_config,
+                        cur_config=self.cur_config,
                         min_leaf_size=self.min_leaf_size,
                         max_leaf_size=self.max_leaf_size,
                         ranker_every_layer= ranker_flag,

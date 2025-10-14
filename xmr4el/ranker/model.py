@@ -17,11 +17,13 @@ class Ranker:
     def __init__(
         self,
         ranker_config: Optional[Dict] = None,
+        cur_config: Optional[Dict] = None,
         dtype: np.dtype = np.float32,
         temp_dir: str = "./temp",
     ) -> None:
         
         self.ranker_config = ranker_config
+        self.cur_config = cur_config
         self.dtype = dtype
         
         self._ranker_models: Optional[Dict[int, ClassifierModel]] = None
@@ -105,6 +107,7 @@ class Ranker:
             M_MAN=M_MAN,
             cluster_labels=cluster_labels,
             config=self.ranker_config,
+            cur_config=self.cur_config,
             local_to_global_idx=local_to_global_idx,
             n_label_workers=n_label_workers,
             parallel_backend="threading",

@@ -148,6 +148,7 @@ class RankerTrainer:
     label_emb: np.ndarray,
     candidate_indices: np.ndarray,
     config: Dict,
+    cur_config: Dict,
     epoch: int,
     existing: Optional["ClassifierModel"],
     ) -> Tuple[int, Optional["ClassifierModel"]]:
@@ -187,17 +188,16 @@ class RankerTrainer:
         cos_scores_neg = cos_scores_all[neg_positions_all]
         ip_scores_neg  = dot_scores_all[neg_positions_all]
 
-        # curriculum hyperparams
-        cur = {
-            "E_warm": 3,
-            "ratios_warm": (0.70, 0.30),
-            "ratios_hard": (0.60, 0.30, 0.10),
-            "neg_mult": 15,
-            "seed": config["kwargs"]["random_state"],
-            **config.get("curriculum", {}),
-        }
+        if cur_config is None:
+            cur_config = {
+                "E_warm": 3,
+                "ratios_warm": (0.70, 0.30),
+                "ratios_hard": (0.60, 0.30, 0.10),
+                "neg_mult": 15,
+                "seed": config["kwargs"]["random_state"],
+            }
         
-        rng = np.random.RandomState(cur["seed"])
+        rng = np.random.RandomState(cur_config["seed"])
 
         # select negatives purely by positions & scores (no X_cluster)
         neg_positions = RankerTrainer._select_negatives_curriculum(
@@ -206,10 +206,10 @@ class RankerTrainer:
             neg_positions_all=neg_positions_all,
             cos_scores_neg=cos_scores_neg,
             ip_scores_neg=ip_scores_neg,
-            E_warm=cur["E_warm"],
-            ratios_warm=tuple(cur["ratios_warm"]),
-            ratios_hard=tuple(cur["ratios_hard"]),
-            neg_mult=cur["neg_mult"],
+            E_warm=cur_config["E_warm"],
+            ratios_warm=tuple(cur_config["ratios_warm"]),
+            ratios_hard=tuple(cur_config["ratios_hard"]),
+            neg_mult=cur_config["neg_mult"],
             rng=rng,
             cluster_size=X_cluster.shape[0],
         )
@@ -265,6 +265,7 @@ class RankerTrainer:
         M_MAN: Optional[np.ndarray],
         cluster_labels: np.ndarray,
         config: Dict,
+        cur_config: Dict,
         local_to_global_idx: np.ndarray,
         n_label_workers: int = -1,
         parallel_backend: str = "threading",
@@ -303,7 +304,7 @@ class RankerTrainer:
 
             results = Parallel(n_jobs=n_label_workers, backend=parallel_backend, verbose=10)(
                 delayed(RankerTrainer.process_label_incremental)(
-                    gid, X_c, Y_col, z, cand_idx, config, epoch, existing
+                    gid, X_c, Y_col, z, cand_idx, config, cur_config, epoch, existing
                 )
                 for (gid, X_c, Y_col, z, cand_idx, existing) in tasks
             )

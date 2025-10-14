@@ -161,6 +161,15 @@ def main():
         }
     }
     
+    cur_config = {
+        "E_warm": 3,
+        "ratios_warm": (0.70, 0.30),
+        "ratios_hard": (0.60, 0.30, 0.10),
+        "neg_mult": 1500,
+        "seed": ranker_config["kwargs"]["random_state"],
+    }
+        
+    
     """
     ranker_config = {
         "type": "lightgbmclassifier",
@@ -192,7 +201,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=600
+        truncate_data=200
         )
     
     raw_labels = train_data["labels"]
@@ -210,13 +219,14 @@ def main():
                     clustering_config=clustering_config,
                     matcher_config=matcher_config,
                     ranker_config=ranker_config,
+                    cur_config=cur_config,
                     min_leaf_size=min_leaf_size,
                     max_leaf_size=max_leaf_size,
                     cut_half_cluster=cut_half_cluster,
                     ranker_every_layer=ranker_every_layer,
                     n_workers=-1,
                     depth=depth,
-                    emb_flag=3
+                    emb_flag=1
                     )
     
     xmodel.train(X_cross_train, raw_labels)
