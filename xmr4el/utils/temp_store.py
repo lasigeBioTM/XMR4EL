@@ -1,9 +1,14 @@
+import tempfile
+import shutil
+import json
+import uuid
+
 import numpy as np
-import tempfile, shutil, json, uuid
 
 from pathlib import Path
 from scipy.sparse import csr_matrix
 from scipy.sparse import save_npz, load_npz
+
 
 class TempVarStore:
     model_dir: Path = Path(tempfile.mkdtemp(prefix="x_model_dir_"))
@@ -40,10 +45,14 @@ class TempVarStore:
 
         if not t:
             # fallback: infer by file present
-            if (p / "csr.npz").exists(): t = "csr"
-            elif (p / "array.npy").exists(): t = "ndarray"
-            elif (p / "list.json").exists(): t = "list"
-            elif (p / "dict.json").exists(): t = "dict"
+            if (p / "csr.npz").exists():
+                t = "csr"
+            elif (p / "array.npy").exists(): 
+                t = "ndarray"
+            elif (p / "list.json").exists(): 
+                t = "list"
+            elif (p / "dict.json").exists(): 
+                t = "dict"
             else:
                 raise FileNotFoundError(f"No known artifact in {p}")
 

@@ -12,15 +12,14 @@ import numpy as np
 
 from abc import ABCMeta
 from joblib import parallel_backend
-
 from sklearn.cluster import AgglomerativeClustering, KMeans, MiniBatchKMeans
-
 from kmeans_pytorch import KMeans as PyTorchBalancedKMeans
-
-cluster_dict = {}
 
 if torch.cuda.is_available():
     from cuml.cluster import KMeans as CUMLKMeans
+
+
+cluster_dict = {}
 
 
 class ClusterMeta(ABCMeta):

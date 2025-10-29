@@ -5,10 +5,11 @@ import pickle
 import numpy as np
 
 from abc import ABCMeta
-
 from sklearn.decomposition import TruncatedSVD
 
+
 dimension_dict = {}
+
 
 class DimensionModelMeta(ABCMeta):
     """

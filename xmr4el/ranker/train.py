@@ -1,21 +1,19 @@
-import os
-import gc
 import shutil
 import tempfile
 
 import numpy as np
 
+from numpy import array
 from pathlib import Path
 from joblib import Parallel, delayed
 from scipy.sparse import hstack, csr_matrix, issparse
-
 from typing import Dict, Optional, Tuple
-
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
-ranker_dir = Path(tempfile.mkdtemp(prefix="rankers_store_"))
 
+ranker_dir = Path(tempfile.mkdtemp(prefix="rankers_store_"))
 random_seed = 0
+
  
 class RankerTrainer:
     """Training routines for per-label rankers."""
@@ -85,15 +83,15 @@ class RankerTrainer:
         n_pos = positive_positions.size
         n_neg_avail = neg_positions_all.size
         if n_pos == 0 or n_neg_avail == 0:
-            return np.array([], dtype=int)
+            return array([], dtype=int)
 
         N_neg = min(neg_mult * n_pos, n_neg_avail)
         if N_neg <= 0:
-            return np.array([], dtype=int)
+            return array([], dtype=int)
 
         def topk_from(scores: np.ndarray, pool: np.ndarray, want: int) -> np.ndarray:
             if want <= 0:
-                return np.array([], dtype=int)
+                return array([], dtype=int)
             k_pre = min(max(1, 3 * want), pool.size)
             idx = np.argpartition(-scores, k_pre - 1)[:k_pre]
             idx = idx[np.argsort(-scores[idx])]
@@ -104,7 +102,7 @@ class RankerTrainer:
             n_rand  = int(round(r_rand  * N_neg))
             n_proto = N_neg - n_rand
 
-            rand_pick  = rng.choice(neg_positions_all, size=min(n_rand, n_neg_avail), replace=False) if n_rand > 0 else np.array([], dtype=int)
+            rand_pick  = rng.choice(neg_positions_all, size=min(n_rand, n_neg_avail), replace=False) if n_rand > 0 else array([], dtype=int)
             proto_pick = topk_from(cos_scores_neg, neg_positions_all, n_proto)
             neg_positions = np.unique(np.concatenate([rand_pick, proto_pick]))
             return neg_positions[:N_neg]
@@ -133,9 +131,9 @@ class RankerTrainer:
             # keep order from 'rest'
             in_neg = np.intersect1d(rest, neg_positions_all, assume_unique=False)
         else:
-            in_neg = np.array([], dtype=int)
+            in_neg = array([], dtype=int)
 
-        rand_pick = rng.choice(in_neg, size=min(max(0, n_rand), in_neg.size), replace=False) if (n_rand > 0 and in_neg.size > 0) else np.array([], dtype=int)
+        rand_pick = rng.choice(in_neg, size=min(max(0, n_rand), in_neg.size), replace=False) if (n_rand > 0 and in_neg.size > 0) else array([], dtype=int)
 
         neg_positions = np.unique(np.concatenate([ip_pick, proto_pick, rand_pick]))
         return neg_positions[:N_neg]
@@ -161,13 +159,11 @@ class RankerTrainer:
         positive_positions = np.where(pos_mask)[0]
         n_pos = positive_positions.size
         if n_pos < 2:
-            print(f"[PID {os.getpid()}] SKIP label {global_idx}: only {n_pos} positives in cluster")
             return (global_idx, existing)
 
         neg_mask = ~pos_mask
         neg_positions_all = np.where(neg_mask)[0]
         if neg_positions_all.size == 0:
-            print(f"[PID {os.getpid()}] SKIP label {global_idx}: no negatives in cluster")
             return (global_idx, existing)
 
         # width-match label embedding
@@ -177,7 +173,6 @@ class RankerTrainer:
         # compute scores ONCE over all rows (no copies of X_cluster)
         # inner-product scores:
         dot_scores_all = (X_cluster @ base_emb)
-        # make 1-D np.array
         dot_scores_all = np.asarray(dot_scores_all).ravel()
 
         # cosine scores:
@@ -216,7 +211,6 @@ class RankerTrainer:
 
         n_neg = neg_positions.size
         if n_neg < 2:
-            print(f"[PID {os.getpid()}] SKIP label {global_idx}: only {n_neg} negatives selected")
             return (global_idx, existing)
 
         # build training slice
@@ -249,12 +243,9 @@ class RankerTrainer:
         if not model.supports_partial_fit():
             raise RuntimeError(f"Model {type(model.model).__name__} does not support partial_fit")
 
-        model.partial_fit(X=X_combined, Y=y, classes=np.array([0, 1]), dtype=np.int32)
-
-        # print(f"[PID {os.getpid()}] Epoch {epoch} | label {global_idx} pos={n_pos} neg={n_neg} (cluster_size={X_cluster.shape[0]})")
+        model.partial_fit(X=X_combined, Y=y, classes=array([0, 1]), dtype=np.int32)
 
         return (global_idx, model)
-
 
     @staticmethod
     def train(
@@ -279,9 +270,11 @@ class RankerTrainer:
         else:
             M_bar = ((M_TFN + M_MAN) > 0).astype(int)
 
-        labels_by_cluster: Dict[int, list] = {}
-        for local_idx, cluster_idx in enumerate(cluster_labels):
-            labels_by_cluster.setdefault(cluster_idx, []).append(local_idx)
+        unique_clusters = np.unique(cluster_labels)
+        labels_by_cluster: Dict[int, list] = {
+            int(c): np.where(cluster_labels == c)[0].tolist()
+            for c in unique_clusters
+        }
 
         cluster_mentions = {c: M_bar[:, c].nonzero()[0] for c in labels_by_cluster.keys()}
 
@@ -291,7 +284,7 @@ class RankerTrainer:
         for epoch in range(1, n_epochs + 1):
             tasks = []
             for cluster_idx, label_list in labels_by_cluster.items():
-                candidate_indices = cluster_mentions.get(cluster_idx, np.array([], dtype=int))
+                candidate_indices = cluster_mentions.get(cluster_idx, array([], dtype=int))
                 if candidate_indices.size == 0:
                     continue
                 X_cluster = X[candidate_indices]
@@ -302,15 +295,13 @@ class RankerTrainer:
                     existing = ranker_models.get(gid, None)
                     tasks.append((gid, X_cluster, Y_col, label_emb, candidate_indices, existing))
 
-            results = Parallel(n_jobs=n_label_workers, backend=parallel_backend, verbose=10)(
+            results = Parallel(n_jobs=n_label_workers, backend=parallel_backend, verbose=0)(
                 delayed(RankerTrainer.process_label_incremental)(
                     gid, X_c, Y_col, z, cand_idx, config, cur_config, epoch, existing
                 )
                 for (gid, X_c, Y_col, z, cand_idx, existing) in tasks
             )
 
-            for gid, model in results:
-                if model is not None:
-                    ranker_models[gid] = model
+        ranker_models.update({gid: model for gid, model in results if model is not None})
 
         return ranker_models

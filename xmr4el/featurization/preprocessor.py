@@ -1,8 +1,8 @@
 import os
+
 import pandas as pd
 
 from typing import Dict, List, Sequence, Tuple
-
 from collections import defaultdict
 
 class Preprocessor:
@@ -94,13 +94,5 @@ class Preprocessor:
     @staticmethod
     def prepare_label_matrix(label_to_indices: Dict[str, List[int]]) -> List[List[str]]:
         """Expand a label-to-index mapping into a label matrix."""
-        label_to_matrix: List[List[str]] = []
-        
-        for key in list(label_to_indices.keys()):
-            labels_ids = label_to_indices[key]
-            
-            for _ in labels_ids:
-                label_to_matrix.append([key])
-        
-        return label_to_matrix
+        return [[key] for key, ids in label_to_indices.items() for _ in ids]
             

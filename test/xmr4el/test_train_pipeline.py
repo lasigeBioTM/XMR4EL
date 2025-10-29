@@ -7,7 +7,6 @@ if platform.machine() == 'aarch64':  # ARM only
     os.environ['LD_PRELOAD'] = '/lib/aarch64-linux-gnu/libgomp.so.1'
 
 # LD_PRELOAD=/lib/aarch64-linux-gnu/libgomp.so.1
-import numpy as np
 
 from xmr4el.featurization.preprocessor import Preprocessor
 from xmr4el.xmr.model import XModel
@@ -74,7 +73,7 @@ def main():
     
     clustering_config = {
         "type": "balancedkmeans",
-        "kwargs": {"n_clusters": 4,
+        "kwargs": {"n_clusters": 2,
                    "iter_limit": 400}
     }
     
@@ -201,7 +200,7 @@ def main():
     train_data = Preprocessor().load_data_labels_from_file(
         train_filepath=training_file,
         labels_filepath=labels_file,
-        truncate_data=200
+        truncate_data=400
         )
     
     raw_labels = train_data["labels"]
@@ -226,13 +225,10 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=-1,
                     depth=depth,
-                    emb_flag=1
+                    emb_flag=3
                     )
     
     xmodel.train(X_cross_train, raw_labels)
-
-    # Print the tree structure
-    # print(htree)
 
     # Save the tree
     save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable

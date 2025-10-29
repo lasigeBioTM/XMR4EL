@@ -3,11 +3,8 @@ import pickle
 import joblib
 
 from typing import Any, Dict, Optional, Tuple, Sequence
-
 from scipy.sparse import csr_matrix, hstack
-
 from sklearn.preprocessing import normalize
-
 from xmr4el.models.featurization_wrapper.dimension_model import DimensionModel
 from xmr4el.models.featurization_wrapper.transformers import Transformer
 from xmr4el.models.featurization_wrapper.vectorizers import Vectorizer

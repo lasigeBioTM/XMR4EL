@@ -10,22 +10,21 @@ import multiprocessing
 import numpy as np
 
 from abc import ABCMeta
-
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC as SVC
 from sklearn.multiclass import OneVsRestClassifier
-
 from lightgbm import LGBMClassifier
-
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
 
 classifier_dict = {}
 
 if torch.cuda.is_available():
     from cuml.linear_model import LogisticRegression as CUMLLogisticRegression
+    
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
 
 class ClassifierMeta(ABCMeta):

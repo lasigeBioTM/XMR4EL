@@ -4,9 +4,7 @@ import pickle
 import numpy as np
 
 from joblib import Memory
-
 from typing import Dict, Optional
-
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 from xmr4el.ranker.train import RankerTrainer
 
@@ -16,16 +14,8 @@ class Ranker:
 
     def __init__(
         self,
-        ranker_config: Optional[Dict] = None,
-        cur_config: Optional[Dict] = None,
-        dtype: np.dtype = np.float32,
-        temp_dir: str = "./temp",
-    ) -> None:
-        
-        self.ranker_config = ranker_config
-        self.cur_config = cur_config
-        self.dtype = dtype
-        
+        temp_dir: str = "./tmp",
+    ) -> None:        
         self._ranker_models: Optional[Dict[int, ClassifierModel]] = None
         
         # Configure joblib memory caching
@@ -95,9 +85,12 @@ class Ranker:
         local_to_global_idx: np.ndarray,
         layer: int,
         n_label_workers: int = 8,
+        ranker_config: Optional[Dict] = None,
+        cur_config: Optional[Dict] = None,
+        dtype: np.dtype = np.float32,
     ) -> None:
         """Train ranker models for each label cluster."""
-        n_epochs = (self.ranker_config or {}).get("n_epochs", 3)
+        n_epochs = (ranker_config or {}).get("n_epochs", 3)
         
         ranker_models = RankerTrainer.train(
             X=X,
@@ -106,8 +99,8 @@ class Ranker:
             M_TFN=M_TFN,
             M_MAN=M_MAN,
             cluster_labels=cluster_labels,
-            config=self.ranker_config,
-            cur_config=self.cur_config,
+            config=ranker_config,
+            cur_config=cur_config,
             local_to_global_idx=local_to_global_idx,
             n_label_workers=n_label_workers,
             parallel_backend="threading",

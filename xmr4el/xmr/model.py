@@ -1,35 +1,25 @@
-from collections import defaultdict
 import os
-
-from xmr4el.utils.temp_store import TempVarStore
-
-os.makedirs("/app/joblib_tmp", exist_ok=True)
-os.environ["JOBLIB_TEMP_FOLDER"] = "/app/temp"
-
-import warnings
-warnings.filterwarnings("ignore", message=".*does not have valid feature names.*")
-
 import joblib
 import pickle
 import time 
-import pandas as pd
-
+import warnings
 
 import numpy as np
 
+from numpy import asarray, int32, argpartition, argsort, float32
 from datetime import datetime
-
-from pathlib import Path
-
-from scipy.sparse import csr_matrix, hstack, issparse
-
-from sklearn.preprocessing import normalize
-
-
+from memory_profiler import profile
+from scipy.sparse import csr_matrix
 from xmr4el.featurization.label_embedding_factory import LabelEmbeddingFactory
 from xmr4el.featurization.preprocessor import Preprocessor
 from xmr4el.featurization.text_encoder import TextEncoder
 from xmr4el.xmr.base import HierarchicaMLModel
+from xmr4el.utils.temp_store import TempVarStore
+
+
+os.makedirs("/tmp", exist_ok=True)
+os.environ["JOBLIB_TEMP_FOLDER"] = "/tmp"
+warnings.filterwarnings("ignore", message=".*does not have valid feature names.*")
 
 
 class XModel():
@@ -146,7 +136,7 @@ class XModel():
         state = self.__dict__.copy()
         
         model = self.model
-        model_path = os.path.join(save_dir, f"hml")
+        model_path = os.path.join(save_dir, "hml")
         
         if model is not None:
             if hasattr(model, "save"):
@@ -161,7 +151,7 @@ class XModel():
             state.pop("_hml", None) # Popped _hml from class
         
         text_encoder = self.text_encoder
-        text_encoder_path = os.path.join(save_dir, f"text_encoder")
+        text_encoder_path = os.path.join(save_dir, "text_encoder")
         
         if text_encoder is not None:
             if hasattr(text_encoder, "save"):
@@ -225,6 +215,7 @@ class XModel():
         
         return X_emb, Y_binazer, Z 
     
+    @profile
     def train(self, X_text, Y_text):
         self.X, self.Y, self.Z = self._fit(X_text=X_text, Y_text=Y_text)
 
@@ -353,6 +344,8 @@ class XModel():
             indices = []
             data = []
 
+            use_topk = (topk is not None and topk > 0)
+
             def _row_to_dense_norm(xrow):
                 if hasattr(xrow, "toarray"):  # sparse
                     v = xrow.toarray().ravel().astype(np.float32, copy=False)
@@ -368,20 +361,20 @@ class XModel():
                     continue
 
                 qv = _row_to_dense_norm(X_query[qi])
-                Lsub = Z_norm[np.asarray(cands, dtype=np.int32)]  # (K, D), already L2-normed
+                cands_arr = asarray(cands, dtype=int32)
+                Lsub = Z_norm[asarray(cands, dtype=int32)]  # (K, D), already L2-normed
                 sims = Lsub @ qv                                  # (K,), cosine = dot
 
                 # global top-k (per query)
-                if topk is not None and topk > 0 and sims.size > topk:
-                    idx = np.argpartition(sims, sims.size - topk)[-topk:]
-                    # tidy ordering descending
-                    ord_ = np.argsort(-sims[idx])
+                if use_topk and sims.size > topk:
+                    idx = argpartition(sims, sims.size - topk)[-topk:]
+                    ord_ = argsort(-sims[idx])
                     sel = idx[ord_]
                 else:
-                    sel = np.argsort(-sims)
+                    sel = argsort(-sims)
 
-                chosen_ids = np.asarray(cands, dtype=np.int32)[sel]
-                chosen_scores = sims[sel].astype(np.float32, copy=False)
+                chosen_ids = cands_arr[sel]
+                chosen_scores = sims[sel].astype(float32, copy=False)
 
                 indices.extend(chosen_ids.tolist())
                 data.extend(chosen_scores.tolist())

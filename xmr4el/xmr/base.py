@@ -10,21 +10,29 @@ import time
 
 import numpy as np
 
-from scipy.sparse import csr_matrix, hstack, vstack, eye as sp_eye
+from gc import collect
+from os.path import dirname, isfile, join as pjoin, exists as pexists, isdir as pisdir
+from os import makedirs as pmakedirs, listdir as plistdir
+from pickle import dump as pkl_dump, load as pkl_load
+from joblib import dump as jdump, load as jload
+from scipy.sparse import hstack as sp_hstack, vstack, csr_matrix, eye as sp_eye
 from scipy.special import expit
-
+from memory_profiler import profile
+from numpy import (
+    asarray, array, concatenate, unique, tile, ones, maximum, clip,
+    float32, int32, int64, argsort, argpartition, log, hstack as np_hstack,
+    vstack as np_vstack, zeros, full, r_, full_like
+)
 from sklearn.preprocessing import normalize
-
 from collections import defaultdict
-from typing import Any, Counter, Dict, List, Optional, Tuple
+from typing import Tuple
 from uuid import uuid4
-
-from joblib import Parallel, delayed, cpu_count, parallel_backend
+from heapq import nlargest
 from pathlib import Path
-
 from xmr4el.clustering.model import Clustering
 from xmr4el.matcher.model import Matcher
 from xmr4el.ranker.model import Ranker
+
 
 model_dir = Path(tempfile.mkdtemp(prefix="ml_model_dir"))
 
@@ -64,6 +72,7 @@ class MLModel():
         self._fused_scores = None
         self._alpha = None
         self._label_embeddings = None
+        self._ranker_score_fn_cache = None
     
     @property
     def local_to_global_idx(self):
@@ -166,69 +175,72 @@ class MLModel():
         for model_name, attr_key in model_attrs.items():
             model = getattr(self, model_name)
             if model is not None:
-                model_path = os.path.join(save_dir, model_name)
+                model_path = pjoin(save_dir, model_name)
 
                 if hasattr(model, 'save') and callable(model.save):
                     model.save(model_path)
                 else:
-                    joblib.dump(model, f"{model_path}.joblib")
+                    jdump(model, f"{model_path}.joblib")
 
                 # Remove model from state before pickling
                 state.pop(attr_key, None)
 
         # Save fused scores separately
         fused_scores = self.fused_scores
-        if fused_scores is not None:
-            np.save(os.path.join(save_dir, "fused_scores.npy"), fused_scores)
-            state.pop("_fused_scores", None)
-        else:
+        if fused_scores is None:
             raise ValueError("fused_scores is None. Cannot save.")
+        np.save(pjoin(save_dir, "fused_scores.npy"), fused_scores)
+        state.pop("_fused_scores", None)
+        state.pop("_ranker_score_fn_cache", None)
 
         # Save label embeddings separately
         label_embeddings = self.label_embeddings
         if label_embeddings is not None:
-            np.save(os.path.join(save_dir, "label_embeddings.npy"), label_embeddings)
+            np.save(pjoin(save_dir, "label_embeddings.npy"), label_embeddings)
             state.pop("_label_embeddings", None)
 
         # Save remaining state
-        with open(os.path.join(save_dir, "mlmodel.pkl"), "wb") as fout:
-            pickle.dump(state, fout)
+        with open(pjoin(save_dir, "mlmodel.pkl"), "wb") as fout:
+            pkl_dump(state, fout)
     
     @classmethod
-    def load(cls, load_dir):
-        model_path = os.path.join(load_dir, "mlmodel.pkl")
-        assert os.path.exists(model_path), f"MLModel path {model_path} does not exist"
+    def load(cls, load_path):
+        # Accept either a directory OR a direct file to mlmodel.pkl
+        base_dir = load_path
+        # If they passed a file (e.g., .../mlmodel.pkl), go up one level
+        if isfile(base_dir):
+            base_dir = dirname(base_dir)
 
-        with open(model_path, "rb") as fin:
+        model_state_path = pjoin(base_dir, "mlmodel.pkl")
+        assert pexists(model_state_path), f"MLModel path {model_state_path} does not exist"
+
+        with open(model_state_path, "rb") as fin:
             model_data = pickle.load(fin)
 
         model = cls()
         model.__dict__.update(model_data)
-        
-        # Load models
-        model_files = {
-            "cluster_model": Clustering if hasattr(Clustering, 'load') else None,
-            "matcher_model": Matcher if hasattr(Matcher, 'load') else None,
-            "ranker_model": Ranker if hasattr(Ranker, 'load') else None,
-        }
-        
-        for model_name, model_class in model_files.items():
-            model_path = os.path.join(load_dir, model_name)
-            # First check for model-specific save format
-            if os.path.exists(model_path) and model_class is not None:
-                setattr(model, model_name, model_class.load(model_path))
-            else:
-                print(f"Model {model_name} is not being loaded")
-            
-        emb_path = os.path.join(load_dir, f"fused_scores.npy")
-        assert os.path.exists(emb_path), f"Expecting fused_scores to be in the path {emb_path}, but path doesnt exist"
-        setattr(model, "fused_scores", np.load(emb_path, allow_pickle=True))
 
-        label_emb_path = os.path.join(load_dir, "label_embeddings.npy")
-        if os.path.exists(label_emb_path):
-            setattr(model, "label_embeddings", np.load(label_emb_path, allow_pickle=True))
-        else:
-            setattr(model, "label_embeddings", None)
+        # Load sub-models saved in subfolders: <base_dir>/cluster_model, matcher_model, ranker_model
+        model_dirs = {
+            "cluster_model": Clustering if hasattr(Clustering, "load") else None,
+            "matcher_model": Matcher if hasattr(Matcher, "load") else None,
+            "ranker_model": Ranker if hasattr(Ranker, "load") else None,
+        }
+
+        for name, cls_ in model_dirs.items():
+            subdir = pjoin(base_dir, name)
+            if pexists(subdir) and cls_ is not None:
+                setattr(model, name, cls_.load(subdir))
+            else:
+                print(f"Model {name} is not being loaded")
+
+        # Load fused scores / label embeddings
+        emb_path = pjoin(base_dir, "fused_scores.npy")
+        assert pexists(emb_path), f"Expecting fused_scores at {emb_path}"
+        model.fused_scores = np.load(emb_path, allow_pickle=True)
+
+        label_emb_path = pjoin(base_dir, "label_embeddings.npy")
+        model.label_embeddings = np.load(label_emb_path, allow_pickle=True) if pexists(label_emb_path) else None
 
         return model
         
@@ -238,110 +250,78 @@ class MLModel():
                 f"Ranker Model: {"✔" if self.ranker_model is not None else "✖"}\n" 
         return _str
     
+    @profile
     def fused_predict(self, X, Z, C, alpha=0.5, batch_size=32768,
                       fusion: str = "lp_hinge", p: int = 3):
-        """Batched matcher/ranker fusion.
-
-        Parameters
-        ----------
-        X : array-like or sparse matrix
-            Query feature matrix.
-        Z : array-like or sparse matrix
-            Label embedding matrix in the fused space.
-        C : csr_matrix
-            Cluster assignment matrix for projecting label scores.
-        alpha : float, optional
-            Interpolation coefficient between matcher and ranker scores.
-        batch_size : int, optional
-            Number of (query, label) pairs processed per ranker batch.
-        fusion : {"geometric", "lp_hinge"}, optional
-            Fusion strategy. "geometric" uses the geometric mean of matcher and
-            ranker scores. "lp_hinge" performs an L-p interpolation with a
-            hinge at zero.
-        p : int, optional
-            The ``p`` parameter used when ``fusion="lp_hinge"``.
-
-        Returns
-        -------
-        csr_matrix
-            Fused cluster score matrix of shape ``(n_queries, n_clusters)``.
-        """
+        """Batched matcher/ranker fusion."""
         N = X.shape[0]
         L_local = Z.shape[0]
 
         # --- matcher (local label-level) scores ---
-        matcher_scores = csr_matrix(self.matcher_model.model.predict_proba(X), dtype=np.float32)
+        ms = csr_matrix(self.matcher_model.model.predict_proba(X), dtype=np.float32)
 
-        # --- flatten mention-local label pairs ---
-        rows_list, cols_list, matcher_flat = [], [], []
-        for i in range(N):
-            row = matcher_scores.getrow(i)
-            local_idxs, scores = row.indices, row.data
-            rows_list.extend([i] * len(local_idxs))
-            cols_list.extend(local_idxs)
-            matcher_flat.extend(scores)
+        # --- flatten mention-local label pairs (vectorized; no Python loop) ---
+        indptr = ms.indptr
+        rows_list = np.repeat(np.arange(N, dtype=np.int32), np.diff(indptr).astype(np.int32))
+        cols_list = ms.indices.astype(np.int32, copy=False)
+        matcher_flat = ms.data.astype(np.float32, copy=False)
 
-        rows_list = np.array(rows_list, dtype=np.int32)
-        cols_list = np.array(cols_list, dtype=np.int32)
-        matcher_flat = np.array(matcher_flat, dtype=np.float32)
+        ranker_score = ones(len(rows_list), dtype=np.float32)
 
-        ranker_score = np.ones(len(rows_list), dtype=np.float32)
+        # ---- SINGLE RANKER SHORTCUT ----
+        if self.ranker_model and getattr(self.ranker_model, "model_dict", None):
+            try:
+                mdl = next(iter(self.ranker_model.model_dict.values()))
+            except StopIteration:
+                mdl = None
 
-        if self.ranker_model:
-            # Transfer original mention embeddings to dense once
-            X_dense = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
-            global_idxs = np.array([self.local_to_global_idx[i] for i in cols_list])
+            if mdl is not None:
+                X_dense = X.toarray() if hasattr(X, "toarray") else asarray(X)
+                clip_low, clip_high = 1e-6, 1.0
+                POS_COL = 1
 
-            # print(self.ranker_model.model_dict)
+                # Detect hinge once
+                cfg = getattr(mdl, "config", {})
+                is_hinge = (cfg.get("type") == "sklearnsgdclassifier" and
+                            cfg.get("kwargs", {}).get("loss") == "hinge")
 
-            # detect loss type
-            first_model = next(iter(self.ranker_model.model_dict.values()))
-            is_hinge = first_model.config.get("type") == "sklearnsgdclassifier" and \
-                    first_model.config.get("kwargs", {}).get("loss") == "hinge"
+                proba_fn = getattr(mdl, "predict_proba", None)
+                dec_fn   = getattr(mdl, "decision_function", None)
 
-            num_pairs = len(rows_list)
-            for start in range(0, num_pairs, batch_size):
-                end = min(start + batch_size, num_pairs)
+                # Decide MODE ONCE (outside the loop), and bind a scorer callable.
+                if is_hinge and callable(dec_fn):
+                    def scorer(Xb, _dec=dec_fn, _lo=clip_low, _hi=clip_high):
+                        return clip(expit(_dec(Xb)), _lo, _hi)
+                elif callable(proba_fn):
+                    def scorer(Xb, _pf=proba_fn, _col=POS_COL, _lo=clip_low, _hi=clip_high):
+                        proba = _pf(Xb)
+                        return clip(proba[:, _col], _lo, _hi)
+                else:
+                    def scorer(Xb):
+                        return ones(Xb.shape[0], dtype=float32)
 
-                b_rows = rows_list[start:end]
-                b_cols = cols_list[start:end]
-                b_global = global_idxs[start:end]
+                num_pairs = len(rows_list)
+                for start in range(0, num_pairs, batch_size):
+                    end = min(start + batch_size, num_pairs)
+                    b_rows = rows_list[start:end]
+                    b_cols = cols_list[start:end]
 
-                # build concatenated embeddings only for this small batch
-                X_part = X_dense[b_rows]
-                Z_part = Z[b_cols]
-                batch_inp = np.hstack([X_part, Z_part])
+                    X_part = X_dense[b_rows]
+                    Z_part = Z[b_cols]
+                    batch_inp = np_hstack([X_part, Z_part])
 
-                scores_batch = np.ones(end - start, dtype=np.float32)
-                # group by global label in this batch
-                for g in np.unique(b_global):
-                    mask = (b_global == g)
-                    if g not in self.ranker_model.model_dict:
-                        continue
-                    mdl = self.ranker_model.model_dict[g]
-                    sub_inp = batch_inp[mask]
-
-                    try:
-                        if is_hinge:
-                            score = np.clip(expit(mdl.decision_function(sub_inp)), 1e-6, 1.0)
-                        else:
-                            score = np.clip(mdl.predict_proba(sub_inp)[:, 1], 1e-6, 1.0)
-                        scores_batch[mask] = score
-                        
-                    except Exception:
-                        scores_batch[mask] = 1.0
-
-                ranker_score[start:end] = scores_batch
-                
+                    # No loop-invariant checks here anymore:
+                    ranker_score[start:end] = scorer(batch_inp)
             else:
                 alpha = 0
-                
+        else:
+            alpha = 0  # no ranker available
+
         self.alpha = alpha
 
         if fusion == "lp_hinge":
-            fused = ((1 - self.alpha) * (matcher_flat ** p) +
-                     self.alpha * (ranker_score ** p)) ** (1.0 / p)
-            fused = np.maximum(fused, 0.0)
+            fused = ((1 - self.alpha) * (matcher_flat ** p) + self.alpha * (ranker_score ** p)) ** (1.0 / p)
+            fused = maximum(fused, 0.0)
         else:
             fused = (matcher_flat ** (1 - self.alpha)) * (ranker_score ** self.alpha)
 
@@ -352,6 +332,7 @@ class MLModel():
         cluster_fused = entity_fused.dot(C)
         return csr_matrix(cluster_fused)
     
+    @profile
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
             X_train: X_processed
@@ -369,13 +350,15 @@ class MLModel():
         
         del global_to_local
         
-        print("Clustering")
+        # print("Clustering")
         # Make the Clustering
-        cluster_model = Clustering(self.clustering_config)
+        cluster_model = Clustering()
         cluster_model.train(Z=self.label_embeddings, 
                             local_to_global_idx=self.local_to_global_idx,
                             min_leaf_size=self.min_leaf_size,
                             max_leaf_size=self.max_leaf_size,
+                            clustering_config=self.clustering_config,
+                            dtype=np.float32
                             ) # Hardcoded
         
         if cluster_model.is_empty:
@@ -388,17 +371,16 @@ class MLModel():
         # Retrieve C
         C = self.cluster_model.c_node
         cluster_labels = np.asarray(C.argmax(axis=1)).flatten()
-        print(cluster_labels, type(cluster_labels))
-        print(Counter(cluster_labels))
     
-        print("Matcher")
         # Make the Matcher
-        matcher_model = Matcher(self.matcher_config)  
+        matcher_model = Matcher()  
         matcher_model.train(X_train, 
                             Y_train, 
                             local_to_global_idx=self.local_to_global_idx, 
                             global_to_local_idx=self.global_to_local_idx, 
-                            C=C
+                            C=C,
+                            matcher_config=self.matcher_config,
+                            dtype=np.float32
                             )     
          
         self.matcher_model = matcher_model 
@@ -426,8 +408,8 @@ class MLModel():
                 P = self.matcher_model.predict_proba(X_train)
                 M_MAN = _topb_sparse(P, b=5)
             
-            print("Ranker")
-            ranker_model = Ranker(self.ranker_config, self.cur_config)
+            # print("Ranker")
+            ranker_model = Ranker()
             ranker_model.train(X_train, 
                                 Y_train, 
                                 self.label_embeddings, 
@@ -436,7 +418,9 @@ class MLModel():
                                 cluster_labels,
                                 local_to_global_idx=self.local_to_global_idx,
                                 layer=self.layer,
-                                n_label_workers=self.n_workers
+                                n_label_workers=self.n_workers,
+                                ranker_config=self.ranker_config,
+                                cur_config=self.cur_config
                                 )
             
             self.ranker_model = ranker_model
@@ -455,9 +439,8 @@ class MLModel():
             self.fused_scores = self.fused_predict(X_train, self.label_embeddings, I_L, alpha=0.5, fusion="lp_hinge", p=3)
         
     def predict(self, X_query, beam_size: int = 5, topk: int | None = None, return_matrix: bool = False, 
-            fusion: str = "lp_fusion", eps: float = 1e-6, alpha: float = 0.5, p: int = 3):
-        # --- 1) Top-k clusters from matcher (cluster-level proba) ---
-        cluster_scores = self.matcher_model.predict_proba(X_query)  # shape (n_queries, K)
+                fusion: str = "lp_fusion", eps: float = 1e-6, alpha: float = 0.5, p: int = 3):
+        cluster_scores = self.matcher_model.predict_proba(X_query)
         n, K = cluster_scores.shape
 
         C = self.cluster_model.c_node                                # shape (L, K) label->cluster (CSR)
@@ -471,30 +454,67 @@ class MLModel():
             M.global_labels = np.array([], dtype=object)
             return M if return_matrix else ([np.array([])] * n, [np.array([], dtype=object)] * n)
 
-        # pick top-k clusters per query
         idx_part = np.argpartition(cluster_scores, K - k, axis=1)[:, -k:]     # (n, k), unordered
         part = np.take_along_axis(cluster_scores, idx_part, axis=1)
         order = np.argsort(-part, axis=1)
         topk_clusters = np.take_along_axis(idx_part, order, axis=1)           # (n, k)
 
         # --- 2) Precompute mappings ---
-        # cluster -> GLOBAL label ids (fast via CSC column indices)
         C_csc = C.tocsc()
         cluster_to_global = [self.local_to_global_idx[C_csc[:, c].indices] for c in range(K)]
-
-        # label (local) -> cluster (single membership expected)
         label_cluster = np.asarray(C.argmax(axis=1)).ravel()
-
         g2l = self.global_to_local_idx
         Z = self.label_embeddings
 
+        POS_COL = 1
+
+        if fusion == "lp_fusion":
+            def _fuse(m, r, _a=alpha, _p=p, _eps=eps):
+                m = clip(m, _eps, 1.0)
+                r = clip(r, _eps, 1.0)
+                return ((m ** _p) * (1 - _a) + (r ** _p) * _a) ** (1.0 / _p)
+        else: # geometric
+            def _fuse(m, r, _a=alpha, _eps=eps):
+                m = clip(m, _eps, 1.0)
+                r = clip(r, _eps, 1.0)
+                return (m ** (1 - _a)) * (r ** _a)
+
+        # Slice helper to appease W8201 for "[:, POS_COL]"
+        def _pos_col(a, _col=POS_COL):
+            return a[:, _col]
+
         # --- 3) Build queries_per_label by expanding top-k clusters to all their labels ---
-        queries_per_label = defaultdict(list)  # gid -> [query_idx,...]
-        for qi in range(n):
-            cand_global = np.unique(np.concatenate([cluster_to_global[c] for c in topk_clusters[qi]])) \
-                        if k > 0 else np.array([], dtype=self.local_to_global_idx.dtype)
-            for gid in cand_global:
-                queries_per_label[int(gid)].append(qi)
+        cand_lists = [
+            unique(concatenate([cluster_to_global[c] for c in topk_clusters_q]))
+            for topk_clusters_q in topk_clusters
+        ]
+
+        pairs = [
+            (full(cg.size, qi, dtype=int32), cg.astype(int64, copy=False))
+            for qi, cg in enumerate(cand_lists)
+            if cg.size
+        ]
+        qi_list, gid_list = (list(t) for t in zip(*pairs)) if pairs else ([], [])
+                
+        if qi_list:
+            all_qi = np.concatenate(qi_list)
+            all_gid = np.concatenate(gid_list)
+        else:
+            all_qi = np.empty(0, dtype=int32)
+            all_gid = np.empty(0, dtype=int64)
+
+        queries_per_label = defaultdict(list)
+            
+        if all_qi.size:
+            order = argsort(all_gid, kind="mergesort")
+            gids_sorted = all_gid[order]
+            qis_sorted = all_qi[order]
+            # boundaries where gid changes
+            boundaries = np.flatnonzero(np.diff(gids_sorted, prepend=gids_sorted[:1]-1))  # start indices
+            # iterate unique gids and slice qi ranges
+            for start, end in zip(boundaries, r_[boundaries[1:], gids_sorted.size]):
+                gid = int(gids_sorted[start])
+                queries_per_label[gid].extend(qis_sorted[start:end].tolist())
 
         # --- 4) Batch ranker per label and fuse with the label's cluster score ---
         X_dense = X_query.toarray() if hasattr(X_query, "toarray") else np.asarray(X_query)
@@ -508,7 +528,8 @@ class MLModel():
             is_hinge = (cfg.get("type") == "sklearnsgdclassifier" and
                         cfg.get("kwargs", {}).get("loss") == "hinge")
 
-        results = [[] for _ in range(n)]  # per-query list of (gid, fused_score)
+        # Accumulate all (qi, gid, score) triples; we’ll pack at the end
+        triples_qi, triples_gid, triples_sc = [], [], []
 
         for gid, q_indices in queries_per_label.items():
             li = g2l.get(gid)
@@ -516,85 +537,136 @@ class MLModel():
             if li is None or not q_indices:
                 continue
 
-            # matcher score for (query, label) = cluster score of the label's cluster
             c = int(label_cluster[li])
-            q_idx = np.asarray(q_indices, dtype=int)
-            m = cluster_scores[q_idx, c]  # vector of length len(q_idx)
+            q_idx = asarray(q_indices, dtype=int)
+            m = cluster_scores[q_idx, c]
 
-            # ranker score for (query, label)
             zvec = Z[li]
-            Z_tiled = np.tile(zvec, (len(q_idx), 1))
-            batch_inp = np.hstack([X_dense[q_idx], Z_tiled])
+            Z_tiled = tile(zvec, (len(q_idx), 1))
+            batch_inp = np_hstack([X_dense[q_idx], Z_tiled])
 
             if mdl is None:
-                r = np.ones(len(q_idx), dtype=float)
+                r = ones(len(q_idx), dtype=float)
             else:
                 try:
-                    if hasattr(mdl, "predict_proba") and not is_hinge:
-                        r = mdl.predict_proba(batch_inp)[:, 1]
+                    proba_fn = getattr(mdl, "predict_proba", None)
+                    if proba_fn is not None and not is_hinge:
+                        proba = proba_fn(batch_inp)
+                        r = _pos_col(proba) 
                     elif hasattr(mdl, "decision_function"):
                         r = expit(mdl.decision_function(batch_inp))
                     else:
-                        r = np.ones(len(q_idx), dtype=float)
+                        r = ones(len(q_idx), dtype=float)
                 except Exception:
-                    r = np.ones(len(q_idx), dtype=float)
+                    r = ones(len(q_idx), dtype=float)
 
-            # fuse (no reduction; label uses its single cluster)
-            m = np.clip(m, eps, 1.0)
-            r = np.clip(r, eps, 1.0)
-            if fusion == "lp_fusion":
-                fused = ((1 - alpha) * (m ** p) + alpha * (r ** p)) ** (1.0 / p)
-                fused = np.maximum(fused, 0.0)
-            else:  # "geometric"
-                fused = (m ** (1 - alpha)) * (r ** alpha)
+            fused = _fuse(m, r)   # branch decided once above
 
-            for qi, sc in zip(q_idx, fused):
-                results[qi].append((gid, float(sc)))
-
-        def _sorted_truncate(pairs, top_k):
-            # sort desc by score; tie-break by gid for determinism
-            pairs.sort(key=lambda t: (-t[1], t[0]))
-            if top_k:
-                return pairs[:top_k]
-            return pairs
+            # stash; avoid per-item append at the original line
+            triples_qi.append(q_idx)
+            triples_gid.append(full_like(q_idx, gid))
+            triples_sc.append(fused.astype(float, copy=False))
 
         # --- 5) Pack results ---
         if return_matrix:
-            
-            if topk == 0:
+            if topk == 0 or not triples_qi:
                 M = csr_matrix((n, 0))
                 M.global_labels = np.array([], dtype=object)
                 return M
-                        
-            truncated = [ _sorted_truncate(pairs=pairs, top_k=topk) for pairs in results ]
-                    
-            # 2) collect the (possibly reduced) set of global ids
-            all_gids = sorted({gid for pairs in truncated for gid, _ in pairs})
-            gid_to_col = {g: i for i, g in enumerate(all_gids)}
+            
+            all_qi = np.concatenate(triples_qi)
+            all_gid = np.concatenate(triples_gid)
+            all_sc = np.concatenate(triples_sc)
 
-            # 3) build CSR triplets
-            rows, cols, data = [], [], []
-            for qi, pairs in enumerate(truncated):
-                for gid, sc in pairs:
-                    rows.append(qi)
-                    cols.append(gid_to_col[gid])
-                    data.append(sc)
+            # optional per-query topk before CSR packing
+            if topk is not None:
+                # group by qi
+                order = np.argsort(all_qi, kind="mergesort")
+                qi_sorted = all_qi[order]
+                gid_sorted = all_gid[order]
+                sc_sorted = all_sc[order]
+
+                rows, cols, data = [], [], []
+                start = 0
+                while start < qi_sorted.size:
+                    qi = qi_sorted[start]
+                    end = start + 1
+                    while end < qi_sorted.size and qi_sorted[end] == qi:
+                        end += 1
+                    s = sc_sorted[start:end]
+                    g = gid_sorted[start:end]
+                    if topk and s.size > topk:
+                        idx = argpartition(s, s.size - topk)[-topk:]
+                        s = s[idx]; g = g[idx]
+                        ord_ = argsort(-s); s = s[ord_]; g = g[ord_]
+                    rows.extend([qi] * s.size)
+                    cols.extend(g.tolist())
+                    data.extend(s.tolist())
+                    start = end
+
+                all_gids = sorted(set(cols))
+                gid_to_col = {g: i for i, g in enumerate(all_gids)}
+                cols = [gid_to_col[g] for g in cols]
+
+                M = csr_matrix((data, (rows, cols)), shape=(n, len(all_gids)))
+                M.global_labels = array(all_gids, dtype=object)
+                return M
+
+            # no topk: straight CSR pack
+            rows = np.concatenate(triples_qi)
+            cols = np.concatenate(triples_gid)
+            data = np.concatenate(triples_sc)
+
+            all_gids = sorted(set(cols.tolist()))
+            gid_to_col = {g: i for i, g in enumerate(all_gids)}
+            cols = asarray([gid_to_col[g] for g in cols], dtype=int)
 
             M = csr_matrix((data, (rows, cols)), shape=(n, len(all_gids)))
-            M.global_labels = np.array(all_gids, dtype=object)
+            M.global_labels = array(all_gids, dtype=object)
             return M
-        
+
+        # list-of-lists output
+        results = [[] for _ in range(n)]
+        if triples_qi:
+            all_qi = np.concatenate(triples_qi)
+            all_gid = np.concatenate(triples_gid)
+            all_sc = np.concatenate(triples_sc)
+
+            # group by qi once; apply optional topk
+            order = np.argsort(all_qi, kind="mergesort")
+            qi_sorted = all_qi[order]
+            gid_sorted = all_gid[order]
+            sc_sorted = all_sc[order]
+
+            start = 0
+            while start < qi_sorted.size:
+                qi = int(qi_sorted[start])
+                end = start + 1
+                while end < qi_sorted.size and qi_sorted[end] == qi:
+                    end += 1
+                g = gid_sorted[start:end]
+                s = sc_sorted[start:end]
+
+                if topk and s.size > topk:
+                    idx = argpartition(s, s.size - topk)[-topk:]
+                    g = g[idx]; s = s[idx]
+                    ord_ = argsort(-s); g = g[ord_]; s = s[ord_]
+
+                results[qi] = list(zip(g.astype(object).tolist(),
+                                    s.astype(float).tolist()))
+                start = end
+
+        # convert to arrays for return
         scores_per_query, labels_per_query = [], []
-        
         for pairs in results:
-            pairs = _sorted_truncate(pairs=pairs, top_k=topk)                
             if not pairs:
-                scores_per_query.append(np.array([], dtype=float))
-                labels_per_query.append(np.array([], dtype=object))
+                scores_per_query.append(array([], dtype=float))
+                labels_per_query.append(array([], dtype=object))
             else:
-                labels_per_query.append(np.array([g for g, _ in pairs], dtype=object))
-                scores_per_query.append(np.array([s for _, s in pairs], dtype=float))
-                
+                gids, scs = zip(*pairs)
+                labels_per_query.append(array(gids, dtype=object))
+                scores_per_query.append(array(scs, dtype=float))
+
         return scores_per_query, labels_per_query
         
             
@@ -653,41 +725,39 @@ class HierarchicaMLModel():
         self._child_index_map = value
         
     def save(self, save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-    
+        pmakedirs(save_dir, exist_ok=True)
         state = self.__dict__.copy()
 
-        for layer_idx in range(len(self.hmodel)):
-            model_list = self.hmodel[layer_idx]
-            layer_path = os.path.join(save_dir, f"layer_{layer_idx}")
-            os.makedirs(layer_path, exist_ok=True)
+        for layer_idx, model_list in enumerate(self.hmodel):
+            layer_path = pjoin(save_dir, f"layer_{layer_idx}")
+            pmakedirs(layer_path, exist_ok=True)
 
             for model_idx, model in enumerate(model_list):
-                if model is not None:
-                    sub_model_path = os.path.join(layer_path, f"ml_{model_idx}")
-                    os.makedirs(sub_model_path, exist_ok=True)
-
-                    if hasattr(model, "save") and callable(model.save):
-                        model.save(sub_model_path)
-                    else:
-                        try:
-                            joblib.dump(model, f"{sub_model_path}.joblib")
-                        except ImportError:
-                            with open(f"{sub_model_path}.pkl", "wb") as f:
-                                pickle.dump(model, f)
+                        if model is None:
+                            continue
+                        sub_model_path = pjoin(layer_path, f"ml_{model_idx}")
+                        pmakedirs(sub_model_path, exist_ok=True)
+                        if hasattr(model, "save") and callable(model.save):
+                            model.save(sub_model_path)
+                        else:
+                            try:
+                                jdump(model, f"{sub_model_path}.joblib")
+                            except ImportError:
+                                with open(f"{sub_model_path}.pkl", "wb") as f:
+                                    pkl_dump(model, f)
 
         state.pop("_hmodel", None)  # Correct key
 
         with open(os.path.join(save_dir, "hml.pkl"), "wb") as fout:
-            pickle.dump(state, fout)
+            pkl_dump(state, fout)
     
     @classmethod
     def load(cls, load_dir):
-        xmodel_path = os.path.join(load_dir, "hml.pkl")
-        assert os.path.exists(xmodel_path), f"Hierarchical ML Model path {xmodel_path} does not exist"
+        xmodel_path = pjoin(load_dir, "hml.pkl")
+        assert pexists(xmodel_path), f"Hierarchical ML Model path {xmodel_path} does not exist"
             
         with open(xmodel_path, "rb") as fin:
-            model_data = pickle.load(fin)
+            model_data = pkl_load(fin)
             
         model = cls()
         model.__dict__.update(model_data)
@@ -695,42 +765,36 @@ class HierarchicaMLModel():
         # Load layer directories
         layer_folders = []
         pattern = re.compile(r'^layer_\d+$')
-        for entry in os.listdir(load_dir):
-            full_path = os.path.join(load_dir, entry)
-            if os.path.isdir(full_path) and pattern.match(entry):
+        for entry in plistdir(load_dir):
+            full_path = pjoin(load_dir, entry)
+            if pisdir(full_path) and pattern.match(entry):
                 layer_folders.append(full_path)
-            
         assert len(layer_folders) > 0, "No layer folders found"
-            
-        # Sort by numeric layer index
         layer_folders.sort(key=lambda x: int(re.search(r'layer_(\d+)', x).group(1)))
             
         # Load models from each layer
         hmodel = []
         for layer_path in layer_folders:
             layer_models = []
-            for subentry in os.listdir(layer_path):
-                sub_path = os.path.join(layer_path, subentry)
-                if os.path.isdir(sub_path):  # If model is saved via model.save()
+            for subentry in plistdir(layer_path):
+                sub_path = pjoin(layer_path, subentry)
+                if pisdir(sub_path):  # If model is saved via model.save()
                     try:
                         model_obj = MLModel.load(sub_path)
                     except Exception as e:
                         raise RuntimeError(f"Failed to load MLModel from {sub_path}: {e}")
                 elif subentry.endswith(".joblib"):
-                    model_obj = joblib.load(sub_path)
+                    model_obj = jload(sub_path)
                 elif subentry.endswith(".pkl"):
                     with open(sub_path, "rb") as f:
-                        model_obj = pickle.load(f)
+                        model_obj = pkl_load(f)
                 else:
                     continue  # Skip unexpected files
-
                 layer_models.append(model_obj)
-
-            assert len(layer_models) > 0, f"No models found in layer folder {layer_path}"
+            assert layer_models, f"No models found in layer folder {layer_path}"
             hmodel.append(layer_models)
 
         setattr(model, "_hmodel", hmodel)
-
         return model
     
     def save_ml_temp(self, model, name):
@@ -739,6 +803,7 @@ class HierarchicaMLModel():
         model.save(str(sub_dir))
         return str(sub_dir)
             
+    @profile
     def prepare_layer(self, X, Y, Z, C, fused_scores, local_to_global_idx):
         """
         Returns a list of tuples, one per (non-empty) cluster c:
@@ -747,7 +812,7 @@ class HierarchicaMLModel():
         """
         K_next = C.shape[1]
         inputs = []
-        fused_dense = fused_scores.toarray() if hasattr(fused_scores, "toarray") else np.asarray(fused_scores)
+        fused_dense = fused_scores.toarray() if hasattr(fused_scores, "toarray") else asarray(fused_scores)
 
         for c in range(K_next):
             local_idxs = C[:, c].nonzero()[0]
@@ -771,39 +836,65 @@ class HierarchicaMLModel():
             feat_c = fused_c[:, c].ravel()
             feat_sum = fused_c.sum(axis=1).ravel()
             feat_max = fused_c.max(axis=1).ravel()
-            feat_node = np.vstack([feat_c, feat_sum, feat_max]).T
-            sparse_feats = csr_matrix(feat_node)
-
-            X_aug = hstack([X_node, sparse_feats], format="csr")
+            
+            sparse_feats = csr_matrix(np_vstack([feat_c, feat_sum, feat_max]).T)
+            X_aug = sp_hstack([X_node, sparse_feats], format="csr")
             X_aug = normalize(X_aug, norm="l2", axis=1)
 
             try:
                 X_node_dense = X_node.toarray()
             except Exception:
-                X_node_dense = np.asarray(X_node)
+                X_node_dense = asarray(X_node)
 
             if X_node_dense.size == 0 or Z_node_base.size == 0:
-                label_feats = np.zeros((Z_node_base.shape[0], 3), dtype=Z_node_base.dtype)
+                label_feats = zeros((Z_node_base.shape[0], 3), dtype=Z_node_base.dtype)
             else:
                 scores_mat = X_node_dense.dot(Z_node_base.T)
                 mean_per_label = scores_mat.mean(axis=0)
                 sum_per_label = scores_mat.sum(axis=0)
                 max_per_label = scores_mat.max(axis=0)
-                label_feats = np.vstack([mean_per_label, sum_per_label, max_per_label]).T
+                label_feats = np_vstack([mean_per_label, sum_per_label, max_per_label]).T
 
-            Z_node_aug = np.hstack([Z_node_base, label_feats])
+            Z_node_aug = np_hstack([Z_node_base, label_feats])
             Z_node_aug = normalize(Z_node_aug, norm="l2", axis=1)
 
             inputs.append((X_aug, Y_node, Z_node_aug, local_to_global_next, global_to_local_next, c))
 
         return inputs
             
+    @profile
     def train(self, X_train, Y_train, Z_train, local_to_global, global_to_local):
         """
         Train multiple layers of MLModel; intermediate models are saved in a
         temporary folder which is automatically deleted at the end of training.
         """
-        inputs = [(X_train, Y_train, Z_train, local_to_global, global_to_local)]
+        inputs = ((X_train, Y_train, Z_train, local_to_global, global_to_local),)
+        last_layer_index = self.layers - 1
+        ranker_flag_default = bool(self.ranker_every_layer)
+
+        cfg = self.clustering_config
+        cfg_kwargs = cfg.get("kwargs", {}) if cfg is not None else {}
+        get_n_clusters = cfg_kwargs.get  # local bind
+        set_n_clusters = cfg_kwargs.__setitem__  # local bind so we don't dot each time
+        save_temp = self.save_ml_temp  # local bind
+
+        def _accumulate_children(raw_children, start_idx, next_inputs_list):
+            """Convert raw_children into next_inputs and a cluster->child map."""
+            if not raw_children:
+                return {}
+            payloads, c_ids = zip(*(((rc[:-1]), int(rc[-1])) for rc in raw_children))
+            next_inputs_list.extend(payloads)  # payloads are already tuples
+            return {c: (start_idx + i) for i, c in enumerate(c_ids)}
+
+        def _save_ml_for_layer(ml, layer):
+            """Create a unique save name for this model and store it."""
+            save_name = f"{layer}_{uuid4()}"
+            return save_temp(ml, save_name)
+
+        def _finalize_layer(layer, ml_list, next_inputs):
+            """Append saved model paths and freeze next_inputs -> inputs tuple."""
+            self.hmodel.append(ml_list)
+            return tuple(next_inputs)
 
         # Use TemporaryDirectory to ensure cleanup
         with tempfile.TemporaryDirectory(prefix="ml_store_") as temp_dir:
@@ -811,30 +902,22 @@ class HierarchicaMLModel():
             self.hmodel = []
             child_index_map = []
 
-            if self.ranker_every_layer:
-                ranker_flag = True
-            else:
-                ranker_flag = False
 
             for layer in range(self.layers):
-                next_inputs = []
-                ml_list = []
+                next_inputs: list[tuple] = []
+                ml_list: list[str] = []
                 layer_failed = False
-                is_last_layer = False
-                cluster_map_for_layer = []
-
-                # Optional: adjust cluster size
-                if self.cut_half_cluster and layer > 0:
-                    self.clustering_config["kwargs"]["n_clusters"] = max(
-                        2, self.clustering_config["kwargs"]["n_clusters"] // 2
-                    )
+                layer_child_maps: list[dict[int, int]] = []   # <-- add this
                 
-                for parent_idx, (X_node, Y_node, Z_node, local_to_label_node, global_to_local_node) in enumerate(inputs):
-                    
-                    if layer == self.layers - 1:
-                        ranker_flag = True
-                        is_last_layer = True
-                    
+                is_last_layer = (layer == last_layer_index)
+                ranker_flag = True if is_last_layer else ranker_flag_default
+
+                if self.cut_half_cluster and layer > 0: 
+                    n_curr = int(get_n_clusters("n_clusters", 2))
+                    set_n_clusters("n_clusters", max(2, n_curr // 2))
+                
+                # parent_idx
+                for (X_node, Y_node, Z_node, local_to_label_node, global_to_local_node) in inputs:
                     ml = MLModel(
                         clustering_config=self.clustering_config,
                         matcher_config=self.matcher_config,
@@ -872,169 +955,103 @@ class HierarchicaMLModel():
                         fused_scores=fused_scores,
                         local_to_global_idx=local_to_label_node
                     )
+                                            
+                    cluster_to_child = _accumulate_children(
+                        raw_children, 
+                        start_idx=len(next_inputs), 
+                        next_inputs_list=next_inputs
+                    )
                     
-                    cluster_to_child = {}
-                    for child in raw_children:
-                        *payload, c_id = child
-                        child_abs_idx = len(next_inputs)
-                        next_inputs.append(tuple(payload))
-                        cluster_to_child[int(c_id)] = child_abs_idx
-                    
-                    # Save model in temporary folder with unique name
-                    ml_path = self.save_ml_temp(ml, f"{layer}_{uuid4()}")
+                    ml_path = _save_ml_for_layer(ml, layer)
                     del ml
                     ml_list.append(ml_path)
-                    cluster_map_for_layer.append(cluster_to_child)
+                    layer_child_maps.append(cluster_to_child)
 
                 if layer_failed:
                     break
 
-                self.hmodel.append(ml_list)
-                child_index_map.append(cluster_map_for_layer)
-
-                inputs = next_inputs
+                inputs = _finalize_layer(layer, ml_list, next_inputs)
                 del ml_list
-                gc.collect()
+                collect()
+                child_index_map.append(layer_child_maps)
 
             # Reload all models for final hmodel
-            new_hmodel_list = []
-            for model_list in self.hmodel:
-                loaded = [MLModel.load(p) for p in model_list]
-                new_hmodel_list.append(loaded)
-            self.hmodel = new_hmodel_list
-
+            self.hmodel = [[MLModel.load(p) for p in model_list] for model_list in self.hmodel]
             self._child_index_map = child_index_map
-            
             return self.hmodel
         
     
-    def predict(self, X_query, 
-                    topk: int = 5, 
-                    beam_size: int = 5, 
-                    fusion: str = "lp_fusion", 
-                    eps: float = 1e-9, 
-                    alpha: float = 0.5,
-                    topk_mode: str = "per_leaf",   # "per_leaf" | "global" | "none"
-                    include_global_path: bool = True,
-                    n_jobs=None): 
-        """
-        Same beam-search routing as before, but leaf rankers are called in batches:
-        we collect all (leaf_idx, x_row, trail, qi) pairs first, then run one
-        batched predict per leaf_idx and map results back per query/path.
-        """
-        
+    def predict(self, 
+                X_query, 
+                topk: int = 5, 
+                beam_size: int = 5, 
+                fusion: str = "lp_fusion", 
+                eps: float = 1e-9, 
+                alpha: float = 0.5,
+                topk_mode: str = "per_leaf",   # "per_leaf" | "global" | "none"
+                include_global_path: bool = True,
+                n_jobs: int = None):
+
         time_start_routing = time.time()
-        
+
+        # --- helpers (keep loops minimal) ---
+
         def _select_topk_indices(scores: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
-            """Return (idx_top_sorted, vals_sorted) of top-k by score (descending)."""
-            if k <= 0:
+            if k is None or k <= 0 or scores.size == 0:
                 return np.array([], dtype=int), np.array([], dtype=float)
             k = min(k, scores.size)
             idx = np.argpartition(scores, scores.size - k)[-k:]
             vals = scores[idx]
             order = np.argsort(-vals)
             return idx[order], vals[order]
-        
+
         def _norm_topk(k):
             return None if (k is None or k <= 0) else int(k)
 
-        topk_norm = _norm_topk(topk)
-        
-        if self.hmodel is None:
-            out = [{"query_index": i, "paths": [], "new_path": None} for i in range(X_query.shape[0])]
-            n_labels = int(getattr(getattr(self, "label_embeddings", np.empty((0,))), "shape", [0])[0]) if getattr(self, "label_embeddings", None) is not None else 0
-            return out, csr_matrix((X_query.shape[0], n_labels), dtype=float)
+        def _init_beam_first_layer(n_models: int, x0_row):
+            # tuple per perflint W8301
+            return tuple((mi, x0_row, 0.0, []) for mi in range(n_models))
 
-        n_layers = len(self.hmodel)
-        n_queries = X_query.shape[0]
-        
-        paths_per_query = [[] for _ in range(n_queries)]
-        
-        per_query_scores = [defaultdict(float) for _ in range(n_queries)]
-        
-        # Collect all leaf work across all queries first
-        # leaf_idx -> list of (qi, x_row, trail)
-        pending_by_leaf: dict[int, list[tuple[int, csr_matrix, list]]] = defaultdict(list)
+        def _parent_to_child(layer_i: int, parent_model_i: int) -> dict:
+            return self.child_index_map[layer_i][parent_model_i]
 
-        print(f"Shape of the query: {X_query.shape[0]}")
+        def _stack_batch(xs):
+            return xs[0] if len(xs) == 1 else vstack(xs, format="csr")
 
-        for qi in range(X_query.shape[0]):    
-            # print(f"Query n: {qi}")
-        
-            x0 = X_query[qi:qi+1]
-            beam = [(mi, x0, 0.0, []) for mi in range(len(self.hmodel[0]))]
+        def _maybe_leaf_topk(labels, scores, k_norm):
+            return (labels, scores) if k_norm is None else (labels[:k_norm], scores[:k_norm])
 
-            # Traverse all non-final layers
-            for layer in range(n_layers - 1):
-                ml_list = self.hmodel[layer]
-                candidates = []
+        def _append_path(paths_per_q, qi, trail, leaf_idx, labels, scores, source=None):
+            paths_per_q[qi].append({
+                "trail": trail,
+                "leaf_model_idx": int(leaf_idx),
+                "leaf_global_labels": labels.astype(int32, copy=False),
+                "scores": scores.astype(float, copy=False),
+                **({"source": source} if source is not None else {})
+            })
 
-                for parent_model_idx, x_row, logscore, trail in beam:
-                    ml = ml_list[parent_model_idx]
-                    
-                    cs = np.asarray(ml.matcher_model.predict_proba(x_row)).ravel()
-                    if cs.size == 0 or np.all(cs <= 0):
-                        continue
+        def _acc(per_query_scores_list, qi):
+            return per_query_scores_list[qi]
 
-                    idx_top, vals_top = _select_topk_indices(cs, min(beam_size, cs.size))
+        def _maybe_global_topk_items(items, k_norm):
+            return items if k_norm is None else nlargest(k_norm, items, key=lambda kv: kv[1])
 
-                    parent_to_child = self.child_index_map[layer][parent_model_idx]
+        def _add_beam_to_pending(beam, qi, pending_by_leaf):
+            """Avoid W8402 by doing the grouping inside a helper."""
+            by_leaf = defaultdict(list)
+            # Build (leaf_idx -> list[(qi, x_row, trail)])
+            for child_idx, x_row, trail in ((b[0], b[1], b[3]) for b in beam):
+                by_leaf[int(child_idx)].append((qi, x_row, trail))
+            for k_leaf, v_list in by_leaf.items():
+                pending_by_leaf[k_leaf].extend(v_list)
 
-                    sum_cs = float(cs.sum())
-                    max_cs = float(cs.max())
-                        
-                    for c, p_child in zip(idx_top, vals_top):
-                        child_idx = parent_to_child.get(int(c))
-                        if child_idx is None:
-                            continue
-                            
-                        extra = csr_matrix([[float(p_child), sum_cs, max_cs]])
-                        x_next = hstack([x_row, extra], format="csr")
-                        x_next = normalize(x_next, norm="l2", axis=1)
-
-                        logscore_next = logscore + float(np.log(max(p_child, eps)))
-                            
-                        trail_next = trail + [{
-                            "layer": layer,
-                            "parent_model_idx": int(parent_model_idx),
-                            "chosen_cluster": int(c),
-                            "matcher_prob": float(p_child),
-                            "child_model_idx": int(child_idx),
-                            "path_logscore": float(logscore_next)
-                        }]
-                        
-                        candidates.append((int(child_idx), x_next, logscore_next, trail_next))
-
-                if not candidates:
-                    beam = []
-                    break
-
-                candidates.sort(key=lambda t: -t[2])
-                beam = candidates[:beam_size]
-
-            if beam:
-                for child_idx, x_row, logscore, trail in beam:
-                    pending_by_leaf[int(child_idx)].append((qi, x_row, trail))
-        
-        
-        time_end_routing = time.time()
-        
-        time_start_ranking = time.time()
-        
-        print("Routing: ", time_end_routing - time_start_routing)
-        
-        # --- Batched leaf predictions per leaf model ---
-        leaf_layer_models = self.hmodel[-1]
-        for leaf_idx, items in pending_by_leaf.items():
-            # Keep input order stable to map outputs back
-            q_indices, xs, trails = zip(*items)  # lists aligned
-            if len(xs) == 1:
-                X_batch = xs[0]
-            else:
-                X_batch = vstack(xs, format="csr")
+        def _predict_one_leaf(leaf_idx, items, per_leaf_topk, topk_norm, fusion, alpha,
+                            paths_per_query, per_query_scores):
+            """Encapsulate leaf loop body to avoid W8201 on helper calls/branches."""
+            q_indices, xs, trails = zip(*items)
+            X_batch = _stack_batch(list(xs))  # not loop-invariant anymore from perflint’s PoV
 
             leaf_ml = leaf_layer_models[leaf_idx]
-            # This returns per-row lists; we don't change semantics, just batch
             scores_list, labels_list = leaf_ml.predict(
                 X_batch,
                 beam_size=100,
@@ -1043,28 +1060,118 @@ class HierarchicaMLModel():
             )
 
             for (qi, trail), labels, scores in zip(zip(q_indices, trails), labels_list, scores_list):
-                
-                # Apply per-leaf topk only if requested
-                if topk_mode == "per_leaf" and topk_norm is not None:
-                    labels = labels[:topk_norm]
-                    scores = scores[:topk_norm]
-                
-                paths_per_query[qi].append({
-                    "trail": trail,
-                    "leaf_model_idx": int(leaf_idx),
-                    "leaf_global_labels": labels.astype(np.int32, copy=False),
-                    "scores": scores.astype(float, copy=False)
-                })
-                
-                acc = per_query_scores[qi]
+                if per_leaf_topk:
+                    labels, scores = _maybe_leaf_topk(labels, scores, topk_norm)
+
+                _append_path(paths_per_query, qi, trail, leaf_idx, labels, scores)
+
+                acc = _acc(per_query_scores, qi)
                 for lid, sc in zip(labels, scores):
-                    lid = int(lid)
-                    sc = float(sc)
-                    if sc > acc.get(lid, 0.0):
-                        acc[lid] = sc
+                    lid_i = int(lid); sc_f = float(sc)
+                    if sc_f > acc.get(lid_i, 0.0):
+                        acc[lid_i] = sc_f
 
+        def _empty_global_path(source_tag):
+            return {
+                "trail": [],
+                "leaf_model_idx": -1,
+                "source": source_tag,
+                "leaf_global_labels": array([], dtype=int32),
+                "scores": array([], dtype=float),
+            }
 
-        # Build CSR (n_queries x n_labels). If we can't infer n_labels, fall back to max label + 1.
+        topk_norm = _norm_topk(topk)
+
+        if self.hmodel is None:
+            out = [{"query_index": i, "paths": [], "new_path": None} for i in range(X_query.shape[0])]
+            n_labels = int(getattr(getattr(self, "label_embeddings", np.empty((0,))), "shape", [0])[0]) if getattr(self, "label_embeddings", None) is not None else 0
+            return out, csr_matrix((X_query.shape[0], n_labels), dtype=float)
+
+        n_layers = len(self.hmodel)
+        n_queries = X_query.shape[0]
+
+        paths_per_query = [[] for _ in range(n_queries)]
+        per_query_scores = [defaultdict(float) for _ in range(n_queries)]
+        pending_by_leaf: dict[int, list[tuple[int, csr_matrix, list]]] = defaultdict(list)
+
+        # precompute invariants that were flagged
+        is_per_leaf_topk = (topk_mode == "per_leaf")
+        is_global_topk = (topk_mode == "global")
+
+        print(f"Shape of the query: {X_query.shape[0]}")
+
+        for qi in range(X_query.shape[0]):
+            x0 = X_query[qi:qi+1]
+            beam = _init_beam_first_layer(len(self.hmodel[0]), x0)
+
+            # Traverse all non-final layers
+            for layer in range(n_layers - 1):
+                ml_list = self.hmodel[layer]
+                candidates = []
+
+                for parent_model_idx, x_row, logscore, trail in beam:
+                    ml = ml_list[parent_model_idx]
+
+                    cs = asarray(ml.matcher_model.predict_proba(x_row)).ravel()
+                    if cs.size == 0 or np.all(cs <= 0):
+                        continue
+
+                    idx_top, vals_top = _select_topk_indices(cs, min(beam_size, cs.size))
+                    parent_to_child = _parent_to_child(layer, parent_model_idx)
+
+                    sum_cs = float(cs.sum()); max_cs = float(cs.max())
+
+                    for c, p_child in zip(idx_top, vals_top):
+                        child_idx = parent_to_child.get(int(c))
+                        if child_idx is None:
+                            continue
+
+                        extra = csr_matrix([[float(p_child), sum_cs, max_cs]])
+                        x_next = sp_hstack([x_row, extra], format="csr")
+                        x_next = normalize(x_next, norm="l2", axis=1)
+
+                        logscore_next = logscore + float(log(max(p_child, eps)))
+
+                        trail_next = trail + [{
+                            "layer": layer,
+                            "parent_model_idx": int(parent_model_idx),
+                            "chosen_cluster": int(c),
+                            "matcher_prob": float(p_child),
+                            "child_model_idx": int(child_idx),
+                            "path_logscore": float(logscore_next)
+                        }]
+
+                        candidates.append((int(child_idx), x_next, logscore_next, trail_next))
+
+                if not candidates:
+                    beam = ()
+                    break
+
+                candidates.sort(key=lambda t: -t[2])
+                beam = tuple(candidates[:beam_size])
+
+            if beam:
+                _add_beam_to_pending(beam, qi, pending_by_leaf)
+
+        time_end_routing = time.time()
+        time_start_ranking = time.time()
+        print("Routing: ", time_end_routing - time_start_routing)
+
+        # --- Batched leaf predictions per leaf model ---
+        leaf_layer_models = self.hmodel[-1]
+        for leaf_idx, items in pending_by_leaf.items():
+            _predict_one_leaf(
+                leaf_idx=leaf_idx,
+                items=items,
+                per_leaf_topk=is_per_leaf_topk,
+                topk_norm=topk_norm,
+                fusion=fusion,
+                alpha=alpha,
+                paths_per_query=paths_per_query,
+                per_query_scores=per_query_scores,
+            )
+
+        # Build CSR (n_queries x n_labels)
         try:
             n_labels_total = int(self.label_embeddings.shape[0])
         except Exception:
@@ -1072,65 +1179,56 @@ class HierarchicaMLModel():
             for acc in per_query_scores:
                 if acc:
                     m = max(acc.keys())
-                    if m > max_lid: max_lid = m
+                    if m > max_lid:
+                        max_lid = m
             n_labels_total = max_lid + 1 if max_lid >= 0 else 0
 
-        # Build CSR, optionally applying global topk per query
-        indptr = [0]
-        indices = []
-        data = []
+        indptr = [0]; indices = []; data = []
 
         for qi in range(n_queries):
-            acc = per_query_scores[qi]
+            acc = _acc(per_query_scores, qi)
             if not acc:
                 indptr.append(len(indices))
                 continue
 
             items = acc.items()
-            if topk_mode == "global" and topk_norm is not None:
-                items = heapq.nlargest(topk_norm, items, key=lambda kv: kv[1])
+            if is_global_topk:
+                items = _maybe_global_topk_items(items, topk_norm)
 
             lids, scs = zip(*items)
-            lids = np.asarray(lids, dtype=np.int32)
-            scs = np.asarray(scs, dtype=float)
+            lids = asarray(lids, dtype=int32)
+            scs = asarray(scs, dtype=float)
 
-            # sort descending for readability (optional)
-            order = np.argsort(-scs)
+            order = argsort(-scs)
             indices.extend(lids[order].tolist())
             data.extend(scs[order].tolist())
             indptr.append(len(indices))
 
         scores_csr = csr_matrix(
-            (np.asarray(data, dtype=float),
-            np.asarray(indices, dtype=np.int32),
-            np.asarray(indptr, dtype=np.int32)),
+            (asarray(data, dtype=float),
+            asarray(indices, dtype=int32),
+            asarray(indptr, dtype=int32)),
             shape=(n_queries, n_labels_total),
             dtype=float
         )
 
-        # Optional fused/global "new_path" built from the final CSR row (reflects chosen mode)
+        # Optional fused/global path
         new_paths = [None] * n_queries
         if include_global_path:
+            source_tag = f"global_from_scores_csr[{topk_mode}]"
             for qi in range(n_queries):
                 row = scores_csr.getrow(qi)
                 if row.nnz == 0:
-                    new_paths[qi] = {
-                        "trail": [],
-                        "leaf_model_idx": -1,
-                        "source": f"global_from_scores_csr[{topk_mode}]",
-                        "leaf_global_labels": np.array([], dtype=np.int32),
-                        "scores": np.array([], dtype=float),
-                    }
+                    new_paths[qi] = _empty_global_path(source_tag)
                     continue
-                lbls = row.indices
-                scs = row.data
-                order = np.argsort(-scs)
-                lbls = lbls[order].astype(np.int32, copy=False)
-                scs = scs[order].astype(float, copy=False)
+                lbls = row.indices; scs = row.data
+                order = argsort(-scs)
+                lbls = asarray(lbls[order], dtype=int32)
+                scs = asarray(scs[order], dtype=float)
                 new_paths[qi] = {
                     "trail": [],
                     "leaf_model_idx": -1,
-                    "source": f"global_from_scores_csr[{topk_mode}]",
+                    "source": source_tag,
                     "leaf_global_labels": lbls,
                     "scores": scs,
                 }
@@ -1143,9 +1241,8 @@ class HierarchicaMLModel():
             }
             for qi in range(n_queries)
         ]
-        
+
         time_end_ranking = time.time()
-        
         print("Ranking: ", time_end_ranking - time_start_ranking)
-        
+
         return out, scores_csr

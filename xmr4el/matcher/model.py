@@ -5,7 +5,6 @@ import joblib
 import numpy as np
 
 from typing import Any, Dict, List, Optional
-
 from xmr4el.matcher.train import MatcherTrainer
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
@@ -15,8 +14,6 @@ class Matcher:
 
     def __init__(
         self,
-        matcher_config: Optional[Dict[str, Any]] = None,
-        dtype: Any = np.float32,
     ) -> None:
         """Initialize the matcher pipeline.
 
@@ -28,34 +25,8 @@ class Matcher:
             Desired data type for internal numpy arrays.
         """
 
-        self._X_node: Optional[np.ndarray] = None
-        self._Y_node: Optional[np.ndarray] = None
         self._M_node: Optional[np.ndarray] = None
         self._model: Optional[ClassifierModel] = None
-
-        
-        self.matcher_config = matcher_config
-        self.dtype = dtype
-
-    @property
-    def x_node(self) -> Optional[np.ndarray]:
-        """Return the feature matrix used during training."""
-        return self._X_node
-    
-    @x_node.setter
-    def x_node(self, value: np.ndarray) -> None:
-        """Set the feature matrix used during training."""
-        self._X_node = value
-        
-    @property
-    def y_node(self) -> Optional[np.ndarray]:
-        """Return the label matrix used during training."""
-        return self._Y_node
-    
-    @y_node.setter
-    def y_node(self, value: np.ndarray) -> None:
-        """Set the label matrix used during training."""
-        self._Y_node = value
         
     @property
     def m_node(self) -> Optional[np.ndarray]:
@@ -142,6 +113,8 @@ class Matcher:
         local_to_global_idx: List[int],
         global_to_local_idx: Dict[int, int],
         C: np.ndarray,
+        matcher_config: Optional[Dict[str, Any]] = None,
+        dtype: Any = np.float32,
     ) -> None:
         """Train the matcher model.
 
@@ -159,14 +132,14 @@ class Matcher:
             Matrix used to construct the matching graph.
         """
 
-        X_node, Y_node, M, model = MatcherTrainer.train(
+        _, _, M, model = MatcherTrainer.train(
             X=X,
             Y=Y,
             local_to_global_idx=local_to_global_idx,
             global_to_local_idx=global_to_local_idx,
             C=C,
-            config=self.matcher_config,
-            dtype=self.dtype,
+            config=matcher_config,
+            dtype=dtype,
         )
         
         self.m_node = M

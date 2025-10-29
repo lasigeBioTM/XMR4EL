@@ -1,5 +1,4 @@
 import pandas as pd
-import ast
 
 def extract_codes(input_file, output_file):
     # Load TSV

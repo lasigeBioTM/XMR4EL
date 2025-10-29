@@ -81,7 +81,7 @@ def main():
     #. 3 flag better than, more depth more score
     
     # test/test_data/saved_trees/xmodel_2025-09-06_15-31-13_trasformers
-    load_path = "test/test_data/saved_trees/xmodel_2025-10-07_15-13-19"
+    load_path = "test/test_data/saved_trees/xmodel_2025-10-23_16-34-58"
     
     print(load_path)
     
@@ -109,10 +109,10 @@ def main():
 
     routes, score_csr = trained_xtree.predict(filtered_texts, 
                                               beam_size=5, 
-                                              topk=20, 
+                                              topk=50, 
                                               fusion="lp_fusion", 
                                               topk_mode="global", 
-                                              topk_inside_global=20)
+                                              topk_inside_global=50)
     
     # print(routes)
     print(score_csr)

@@ -1,12 +1,12 @@
-from collections import defaultdict
 import os
 import pickle
 import joblib
 
 import numpy as np
 
+from numpy import ndarray, asarray, argmax
+from collections import defaultdict
 from typing import Dict, List, Optional
-
 from xmr4el.clustering.train import ClusteringTrainer
 from xmr4el.models.cluster_wrapper.clustering_model import ClusteringModel
 
@@ -16,36 +16,19 @@ class Clustering:
 
     def __init__(
         self,
-        clustering_config: Optional[Dict[str, any]] = None,
-        dtype: any = np.float32,
     ) -> None:
         """Initialize the clustering pipeline."""
-        
-        self.clustering_config = clustering_config
-        self.dtype = dtype
-        
-        self._Z_node: Optional[np.ndarray] = None
-        self._C_node: Optional[np.ndarray] = None
+        self._C_node: Optional[ndarray] = None
         self._model: Optional[ClusteringModel] = None
         self._cluster_to_labels: Optional[Dict[int, List[int]]] = None
 
     @property
-    def z_node(self) -> Optional[np.ndarray]:
-        """Dense label embedding matrix."""
-        return self._Z_node
-    
-    @z_node.setter
-    def z_node(self, value: np.ndarray) -> None:
-        """Set the label embedding matrix."""
-        self._Z_node = value
-        
-    @property
-    def c_node(self) -> Optional[np.ndarray]:
+    def c_node(self) -> Optional[ndarray]:
         """Sparse cluster assignment matrix."""
         return self._C_node
     
     @c_node.setter
-    def c_node(self, value: np.ndarray) -> None:
+    def c_node(self, value: ndarray) -> None:
         """Set the cluster assignment matrix."""
         self._C_node = value
         
@@ -119,15 +102,17 @@ class Clustering:
         local_to_global_idx: List[int],
         min_leaf_size: int,
         max_leaf_size: Optional[int],
+        clustering_config: Optional[Dict[str, any]],
+        dtype: float
     ) -> None:
         """Train the clustering model and populate cluster assignments."""
         
         C_node, model = ClusteringTrainer.train(
             Z=Z,
-            config=self.clustering_config,
+            config=clustering_config,
             min_leaf_size=min_leaf_size,
             max_leaf_size=max_leaf_size,
-            dtype=self.dtype,
+            dtype=dtype,
         )
         
         if C_node is None or model is None:
@@ -141,11 +126,10 @@ class Clustering:
             cluster_vector = (
                 C_node[local_idx].toarray().ravel()
                 if hasattr(C_node[local_idx], "toarray")
-                else np.asarray(C_node[local_idx]).ravel()
+                else asarray(C_node[local_idx]).ravel()
             )
-            cid = int(np.argmax(cluster_vector))
-            if local_idx >= len(local_to_global_idx):
-                continue
+            cid = int(argmax(cluster_vector))
+        
             gidx = local_to_global_idx[local_idx]
             self.cluster_to_labels[cid].append(int(gidx))
         

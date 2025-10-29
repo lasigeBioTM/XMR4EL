@@ -1,10 +1,4 @@
 import os
-
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-# os.environ["TRANSFORMERS_OFFLINE"] = "1" # Making impossible to download the model
-# os.environ["TOKENIZERS_PARALLELISM"] = "true" ? 
-# os.environ['TRANSFORMERS_CACHE'] = 
-
 import gc
 import json
 import glob
@@ -13,12 +7,16 @@ import shutil
 import torch
 import numpy as np
 
+from gc import collect
 from pathlib import Path
+from os.path import exists
+from numpy import savez_compressed, array
+from torch import no_grad
+from torch.cuda import OutOfMemoryError, empty_cache
 from abc import ABCMeta
-
 from sentence_transformers import SentenceTransformer
-
 from concurrent.futures import ThreadPoolExecutor
+
 
 transformer_dict = {}
 
@@ -191,13 +189,13 @@ class Transformer(metaclass=TransformersMeta):
             batch_filename = f"{emb_file}_batch{batch_idx}.npz"
             
             # Skip if this batch was already processed (from previous OOM)
-            if os.path.exists(batch_filename):
+            if exists(batch_filename):
                 current_batch_idx += 1
                 processed_indices.add(batch_idx)
                 continue
                 
             try:
-                with torch.no_grad():  # Disable gradient calculation
+                with no_grad():  # Disable gradient calculation
                     # Process batch
                     batch_results = model.encode(
                         batch,
@@ -209,7 +207,7 @@ class Transformer(metaclass=TransformersMeta):
                     )
                     
                     # Save results
-                    np.savez_compressed(batch_filename, embeddings=np.array(batch_results, dtype=dtype))
+                    savez_compressed(batch_filename, embeddings=array(batch_results, dtype=dtype))
                     processed_indices.add(batch_idx)
                     current_batch_idx += 1
                     
@@ -218,12 +216,12 @@ class Transformer(metaclass=TransformersMeta):
                         batch_size = original_batch_size
                         # LOGGER.info(f"Resetting batch size to original: {batch_size}")
                     
-            except torch.cuda.OutOfMemoryError as oom:
+            except OutOfMemoryError as oom:
                 # LOGGER.warning(f"OOM error processing batch {batch_idx} (size: {batch_size})")
                 
                 # Clean up memory
-                torch.cuda.empty_cache()
-                gc.collect()
+                empty_cache()
+                collect()
                 
                 # Reduce batch size more aggressively based on error frequency
                 reduction_factor = min(0.5, max(0.1, 1 - (0.2 * max_oom_retries)))
@@ -240,8 +238,7 @@ class Transformer(metaclass=TransformersMeta):
                     raise RuntimeError("Failed to process batch after multiple OOM retries") from oom
                 max_oom_retries -= 1
 
-            except Exception as e:
-                # LOGGER.error(f"Unexpected error processing batch {batch_idx}: {str(e)}")
+            except Exception as _:
                 cls._del_batch_dir(batch_dir)
                 raise
         
@@ -484,3 +481,56 @@ class SentenceTSapBert(Transformer):
         model.__dict__.update(model_data)
         return model
     
+class KRISSBert(Transformer):
+    """BioBERT-based transformer."""
+
+    model_name = "microsoft/BiomedNLP-KRISSBERT-PubMed-UMLS-EL"
+
+    def __init__(self, config=None, embeddings=None):
+        """Initialization
+
+        Args:
+            config (dict): Dict with key `"type"` and value being the lower-cased name of the specific transformer class to use.
+                Also contains keyword arguments to pass to the specified transformer.
+            embeddings (numpy.ndarray): The Embeddings
+            model_name (str): Transformer name
+        """
+
+        self.config = config
+        self.embeddings = embeddings
+        self.model_name = BioBert.model_name
+
+    def save(self, save_dir):
+        """Save trained tfidf transformer to disk.
+
+        Args:
+            save_dir (str): Folder to save the model.
+        """
+
+        # LOGGER.info(f"Saving BioBERT transformer to {save_dir}")
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "transformer.pkl"), "wb") as fout:
+            pickle.dump(self.__dict__, fout)
+
+    @classmethod
+    def load(cls, load_dir):
+        """Load a BioBert Transformer from disk.
+
+        Args:
+            load_dir (str): Folder inside which the model is loaded.
+
+        Returns:
+            BioBert: The loaded object.
+        """
+
+        # LOGGER.info(f"Loading BioBERT transformer from {load_dir}")
+        transformer_path = os.path.join(load_dir, "transformer.pkl")
+        assert os.path.exists(
+            transformer_path
+        ), f"transformer path {transformer_path} does not exist"
+
+        with open(transformer_path, "rb") as fin:
+            model_data = pickle.load(fin)
+        model = cls()
+        model.__dict__.update(model_data)
+        return model

@@ -1,7 +1,6 @@
 import numpy as np
 
 from typing import Any, Dict, List, Tuple
-
 from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 
 
