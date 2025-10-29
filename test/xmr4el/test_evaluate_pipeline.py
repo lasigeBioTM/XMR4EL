@@ -77,35 +77,15 @@ def main():
     with open(file_test_input, "r") as file:
         input_texts = file.read().splitlines()
 
-    # train_disease_100 # more open cluster better,
-    #. 3 flag better than, more depth more score
-    
-    # test/test_data/saved_trees/xmodel_2025-09-06_15-31-13_trasformers
     load_path = "test/test_data/saved_trees/xmodel_2025-10-23_16-34-58"
     
     print(load_path)
     
     trained_xtree = XModel.load(load_path)
     
-    # print(trained_xtree.hierarchical_model.hmodel[0])
-    
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
     
     filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.initial_labels)
-    
-    # print(filtered_labels)
-    
-    # print(filtered_texts[0])
-    # print(filtered_labels[0]) # 25
-    # exit()
-    
-    # print(filtered_texts)
-    # transformers, Hit counts per query: Counter({0: 80, 1: 11}) top5
-    # fusion, Hit counts per query: Counter({0: 59, 1: 32})
-
-
-    # Hit counts per query: Counter({0: 234, 1: 54})
-    # Hit counts per query: Counter({0: 288})
 
     routes, score_csr = trained_xtree.predict(filtered_texts, 
                                               beam_size=5, 
@@ -117,13 +97,8 @@ def main():
     # print(routes)
     print(score_csr)
     
-    # print(score_matrix[0]["leaf_global_labels"])
-    
     trained_labels = np.array(trained_xtree.initial_labels)
     
-    # Get global label ids array from the score_matrix
-    # global_labels = score_matrix.global_labels  # shape (n_labels,)
-
     """
     hit_counts = []
     for r in routes:

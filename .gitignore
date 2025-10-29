@@ -1,16 +1,19 @@
-/data
-/test/test_data/saved_trees
-/test/test_data
 /_REEL
-/joblib_tmp
-/debug_folder
+/.plot
+/.ruff_cache
+/data
+/datasets
+/mem_prof
+/tmp
+
+/test/scripts
+/test/test_data
 
 .DS_store
 
 # Cache Folders
 __pycache__/
 /.venv
-/.test_venv
 *.pyc
 *.onnx
 
