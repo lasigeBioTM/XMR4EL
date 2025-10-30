@@ -1,6 +1,7 @@
 import os
 import pickle
 import joblib
+import logging
 
 from typing import Any, Dict, Optional, Tuple, Sequence
 from scipy.sparse import csr_matrix, hstack
@@ -20,6 +21,8 @@ class TextEncoder():
         flag: int = 2,
     ) -> None:
         """Create a new :class:`TextEncoder`."""
+        
+        self.logger = logging.getLogger(__name__)
         
         self.vectorizer_config = vectorizer_config
         self.transformer_config = transformer_config
@@ -170,7 +173,20 @@ class TextEncoder():
         use_tfidf = self.flag in [1, 2]
         use_transformer = self.flag in [2, 3]
 
+        using_encod = ""
+        if self.flag == 1:
+            using_encod = "Using only TF-IDF as encoder"
+        elif self.flag == 2:
+            using_encod = "Using TF-IDF and Transformers model to encode"
+        else:
+            using_encod= "Using only Transformers model to encode"            
+
+        self.logger.info(f"{using_encod}")
+
         if use_tfidf:
+            
+            self.logger.info("Encoding now with TF-IDF")
+            
             X_tfidf, vec_model = self._encode_text_using_text_vectorizer(
                 X_test, self.vectorizer_config
             )
@@ -187,6 +203,9 @@ class TextEncoder():
             self.dimension_model = dim_model
 
         if use_transformer:
+            
+            self.logger.info("Encoding now with Transformers model")
+            
             X_transformer = self._encode_text_using_transformer(
                 X_test, self.transformer_config
             )

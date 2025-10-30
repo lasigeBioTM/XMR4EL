@@ -30,7 +30,7 @@ def main():
 
     vectorizer_config = {
         "type": "tfidf", 
-        "kwargs": {'max_features': 30000}
+        "kwargs": {'max_features': 20000}
         }
     
     transformer_config = {
@@ -100,15 +100,17 @@ def main():
         "seed": ranker_config["kwargs"]["random_state"],
     }
         
-    train_data = Preprocessor.load_pubtator_file("datasets/MedMentions/st21pv/data/corpus_pubtator_test.txt")
+    training_file = os.path.join(os.getcwd(), "data/train/disease/train_Disease_100.txt")
+    labels_file = os.path.join(os.getcwd(), "data/raw/mesh_data/medic/labels.txt")
     
-    corpus = train_data["corpus"]
-    labels = train_data["labels"]
+    train_data = Preprocessor().load_data_labels_from_file(
+        train_filepath=training_file,
+        labels_filepath=labels_file,
+        truncate_data=0
+        )
     
-    # print(corpus[0], len(corpus))
-    # print(labels[0], len(labels))
-    
-    del train_data
+    raw_labels = train_data["labels"]
+    X_cross_train = train_data["corpus"] # list of lists
     
     min_leaf_size = 5
     max_leaf_size = 200
@@ -130,10 +132,10 @@ def main():
                     n_workers=-1,
                     depth=depth,
                     emb_flag=1,
-                    verbose=1
+                    verbose=2
                     )
     
-    xmodel.train(corpus, labels)
+    xmodel.train(X_cross_train, raw_labels)
 
     # Save the tree
     save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable

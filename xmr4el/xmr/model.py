@@ -3,11 +3,14 @@ import joblib
 import pickle
 import time 
 import warnings
+import logging
 
 import numpy as np
 
+from xmr4el import get_logger, set_verbosity
 from numpy import asarray, int32, argpartition, argsort, float32
 from datetime import datetime
+from typing import Optional
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
 from xmr4el.featurization.label_embedding_factory import LabelEmbeddingFactory
@@ -25,21 +28,35 @@ warnings.filterwarnings("ignore", message=".*does not have valid feature names.*
 class XModel():
     
     def __init__(self, 
-                 vectorizer_config=None,
-                 transformer_config=None,
-                 dimension_config=None,
-                 clustering_config=None,
-                 matcher_config=None,
-                 ranker_config=None,
-                 cur_config=None,
-                 min_leaf_size=20,
-                 max_leaf_size=None,
-                 cut_half_cluster=False,
-                 ranker_every_layer=True,
-                 n_workers=8,
-                 depth=1,
-                 emb_flag=1,
+                 vectorizer_config: dict = None,
+                 transformer_config: dict = None,
+                 dimension_config: dict = None,
+                 clustering_config: dict = None,
+                 matcher_config: dict = None,
+                 ranker_config: dict = None,
+                 cur_config: dict = None,
+                 min_leaf_size: int = 20,
+                 max_leaf_size: int = None,
+                 cut_half_cluster: bool = False,
+                 ranker_every_layer: bool = True,
+                 n_workers: int = 8,
+                 depth: int = 1,
+                 emb_flag: int = 1,
+                 verbose: Optional[int] = None,
+                 logger: Optional[logging.Logger] = None
                  ):
+        
+        # 0 = WARNING, 1 = INFO, 2 = DEBUG
+        if logger is not None:
+            self.logger = logger
+            self.logger.debug("Using user-supplied logger for XModel")
+        else:
+            if verbose is not None:
+                set_verbosity(verbose)
+            self.logger = get_logger("models.xmodel")
+
+        # rest of initialization
+        self.logger.info("Initializing XModel")
         
         self.vectorizer_config = vectorizer_config
         self.transformer_config = transformer_config
@@ -193,7 +210,11 @@ class XModel():
         self.initial_labels = self.temp_var.save_model_temp(Y_text)
         self.training_set = self.temp_var.save_model_temp(X_text)
         
+        self.logger.info("Preparing Data")
+        
         X_processed, Y_label_to_indices = Preprocessor.prepare_data(X_text, Y_text)
+        
+        self.logger.info("Started Encoding")
         
         # Encode X_processed
         text_encoder = TextEncoder(
@@ -217,11 +238,16 @@ class XModel():
     
     @profile
     def train(self, X_text, Y_text):
+        
+        self.logger.info("Started Training")
+        
         self.X, self.Y, self.Z = self._fit(X_text=X_text, Y_text=Y_text)
 
         n_labels = self.Z.shape[0]
         local_to_global = np.arange(n_labels, dtype=int)
         global_to_local = {g: i for i, g in enumerate(local_to_global)}
+
+        self.logger.info("Hierarchical Model Pipeline")
 
         hml = HierarchicaMLModel(
             clustering_config=self.clustering_config,

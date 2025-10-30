@@ -3,8 +3,7 @@ import re
 import gc
 import pickle
 import tempfile
-import joblib
-import heapq
+import logging
 import shutil
 import time
 
@@ -29,13 +28,13 @@ from typing import Tuple
 from uuid import uuid4
 from heapq import nlargest
 from pathlib import Path
+from xmr4el import get_logger
 from xmr4el.clustering.model import Clustering
 from xmr4el.matcher.model import Matcher
 from xmr4el.ranker.model import Ranker
 
 
 model_dir = Path(tempfile.mkdtemp(prefix="ml_model_dir"))
-
 
 class MLModel():
 
@@ -51,6 +50,8 @@ class MLModel():
                  layer=None,
                  n_workers=8,
                  ):
+        
+        self.logger = logging.getLogger(__name__)
         
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
@@ -339,6 +340,8 @@ class MLModel():
             Y_train, Y_binazier
             Z, Pifa embeddings
         """
+        
+        self.logger.info("Started to train an ML model")
         
         # --- Ensure Z is in fused space ---
         Z_train = normalize(Z_train, norm="l2", axis=1) 
@@ -683,6 +686,8 @@ class HierarchicaMLModel():
                  ranker_every_layer=False,
                  n_workers=8,
                  layer=1):
+        
+        self.logger = logging.getLogger(__name__)
         
         self.clustering_config = clustering_config
         self.matcher_config = matcher_config
