@@ -105,7 +105,7 @@ def main():
     corpus = train_data["corpus"]
     labels = train_data["labels"]
     
-    # print(corpus[0], len(corpus))
+    print(corpus[0], len(corpus))
     # print(labels[0], len(labels))
     
     del train_data
@@ -129,8 +129,8 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=-1,
                     depth=depth,
-                    emb_flag=1,
-                    verbose=1
+                    emb_flag=2,
+                    verbose=2
                     )
     
     xmodel.train(corpus, labels)
