@@ -25,6 +25,7 @@ dependencies = [
   "umap-learn",
   "fuzzywuzzy",
   "python-Levenshtein",
+  "memory_profiler",
 
   # RAPIDS (CUDA 12.8 compatible):
   "cuml-cu12==25.*",
