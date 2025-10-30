@@ -129,11 +129,11 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=-1,
                     depth=depth,
-                    emb_flag=2,
-                    verbose=3
+                    emb_flag=3,
+                    verbose=2
                     )
     
-    xmodel.train(corpus, labels)
+    xmodel.train(corpus[:3000], labels[:3000])
 
     # Save the tree
     save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable
