@@ -130,7 +130,7 @@ def main():
                     n_workers=-1,
                     depth=depth,
                     emb_flag=2,
-                    verbose=2
+                    verbose=3
                     )
     
     xmodel.train(corpus, labels)
