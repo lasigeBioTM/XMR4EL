@@ -3,7 +3,7 @@ numpy
 pandas
 psutil
 scikit_learn
-torch
+torch>=2.8
 transformers
 sentence_transformers
 faiss-cpu
