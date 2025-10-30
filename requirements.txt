@@ -3,7 +3,7 @@ numpy
 pandas
 psutil
 scikit_learn
-torch>=2.8
+torch
 transformers
 sentence_transformers
 faiss-cpu
@@ -12,9 +12,4 @@ umap-learn
 fuzzywuzzy
 python-Levenshtein
 memory_profiler
-# RAPIDS (CUDA 12.8 compatible):
-cuml-cu12==25.*,
-cudf-cu12==25.*,
-rmm-cu12==25.*,
-cupy-cuda12x>=13.6,
 git+https://github.com/kernelmachine/balanced-kmeans.git

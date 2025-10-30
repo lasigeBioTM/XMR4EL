@@ -18,8 +18,8 @@ from lightgbm import LGBMClassifier
 
 classifier_dict = {}
 
-if torch.cuda.is_available():
-    from cuml.linear_model import LogisticRegression as CUMLLogisticRegression
+# if torch.cuda.is_available():
+#     from cuml.linear_model import LogisticRegression as CUMLLogisticRegression
     
 
 os.environ["OMP_NUM_THREADS"] = "1"
