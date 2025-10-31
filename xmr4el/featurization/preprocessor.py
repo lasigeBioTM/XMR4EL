@@ -78,7 +78,7 @@ class Preprocessor:
         }
 
     @staticmethod
-    def prepare_data(
+    def prepare_data_older(
         X_train: Sequence[Sequence[str]],
         Y_train: Sequence[str],
     ) -> Tuple[List[str], Dict[str, List[int]]]:
@@ -92,6 +92,29 @@ class Preprocessor:
                 idx = len(trn_corpus)
                 trn_corpus.append(synonym)
                 label_to_indices[label].append(idx)
+
+        return trn_corpus, label_to_indices
+    
+    @staticmethod
+    def prepare_data(
+        X_train: Sequence[str],
+        Y_train: Sequence[str],
+    ) -> Tuple[List[str], Dict[str, List[int]]]:
+        """
+        Prepare flat training data:
+          - `X_train[i]` = "mention [SEP] context"
+          - `Y_train[i]` = corresponding CUI
+        Returns:
+          - trn_corpus: list of mention-context strings
+          - label_to_indices: mapping from CUI -> list of corpus indices
+        """
+        assert len(X_train) == len(Y_train), "X_train and Y_train must be the same length"
+
+        trn_corpus: List[str] = list(X_train)
+        label_to_indices: Dict[str, List[int]] = defaultdict(list)
+
+        for idx, label in enumerate(Y_train):
+            label_to_indices[label].append(idx)
 
         return trn_corpus, label_to_indices
     
@@ -158,23 +181,22 @@ class Preprocessor:
 
         return examples
 
-    @staticmethod
-    def load_pubtator_file(pubtator_filepath: str) -> Dict[str, List]:
+    def load_pubtator_file(pubtator_filepath: str) -> Dict[str, List[str]]:
         """
-        Load a PubTator file and return corpus and labels lists for EL training.
+        Load a PubTator file and return flattened corpus and labels lists
+        suitable for entity linking training.
 
-        corpus[i] = list of "mention [SEP] context" for all mentions/synonyms of that entry
-        labels[i] = CUI for that entry
+        Each entry:
+            corpus[i] = "mention [SEP] context"
+            labels[i] = CUI
         """
         assert os.path.exists(pubtator_filepath), f"{pubtator_filepath} does not exist"
 
-        corpus: List[List[str]] = []
+        corpus: List[str] = []
         labels: List[str] = []
 
         current_pmid = None
         title, abstract = "", ""
-        mentions_for_current_pmid: List[str] = []
-        cui_for_current_pmid = None
 
         with open(pubtator_filepath, "r", encoding="utf-8") as f:
             for line in f:
@@ -182,44 +204,30 @@ class Preprocessor:
                 if not line:
                     continue
 
-                # Title line
+                # --- Title line ---
                 if "|t|" in line:
                     parts = line.split("|", 2)
                     if len(parts) == 3:
-                        # Save previous pmid info
-                        if current_pmid is not None and mentions_for_current_pmid:
-                            corpus.append(mentions_for_current_pmid)
-                            labels.append(cui_for_current_pmid)
-
                         current_pmid = parts[0]
                         title = parts[2]
                         abstract = ""
-                        mentions_for_current_pmid = []
-                        cui_for_current_pmid = None
 
-                # Abstract line
+                # --- Abstract line ---
                 elif "|a|" in line:
                     parts = line.split("|", 2)
                     if len(parts) == 3:
                         current_pmid = parts[0]
                         abstract = parts[2]
 
-                # Annotation line
+                # --- Annotation line (mentions) ---
                 elif "\t" in line:
                     parts = line.split("\t")
                     if len(parts) >= 6:
                         mention_text = parts[3]
-                        context = " ".join(x for x in [title, abstract] if x)
                         cui = parts[5]
+                        context = " ".join(x for x in [title, abstract] if x)
 
-                        mentions_for_current_pmid.append(f"{mention_text} [SEP] {context}")
-                        # Assign CUI for this pmid; assumes same CUI for all mentions (if multiple CUIs, you may need a strategy)
-                        if cui_for_current_pmid is None:
-                            cui_for_current_pmid = cui
-
-            # Don't forget the last pmid
-            if current_pmid is not None and mentions_for_current_pmid:
-                corpus.append(mentions_for_current_pmid)
-                labels.append(cui_for_current_pmid)
+                        corpus.append(f"{mention_text} [SEP] {context}")
+                        labels.append(cui)
 
         return {"corpus": corpus, "labels": labels}

@@ -89,6 +89,82 @@ class XModel():
         
         self.temp_var = TempVarStore()
     
+    def __str__(self) -> str:
+        """Human-friendly multi-line summary of the model and its config/state."""
+        def _short(obj, max_len=100):
+            """Return a short representation for objects (dicts/lists/others)."""
+            try:
+                if obj is None:
+                    return "None"
+                
+                if isinstance(obj, dict):
+                    # show keys and count
+                    keys = list(obj.keys())
+                    k_display = ", ".join(map(str, keys[:6]))
+                    more = f", ... (+{len(keys)-6})" if len(keys) > 6 else ""
+                    return f"dict(keys=[{k_display}{more}])"
+                    
+                if isinstance(obj, (list, tuple, set)):
+                    n = len(obj)
+                    # preview = ", ".join(repr(x) for x in list(obj)[:6])
+                    # more = f", ... (+{n-6})" if n > 6 else ""
+                    return f"{type(obj).__name__}(len={n})"
+                    
+                # for numpy arrays / pandas objects show shape/len if possible
+                if hasattr(obj, "shape"):
+                    return f"{type(obj).__name__}(shape={getattr(obj, 'shape')})"
+                
+                if hasattr(obj, "__len__") and not isinstance(obj, (str, bytes)):
+                    return f"{type(obj).__name__}(len={len(obj)})"
+                
+                r = repr(obj)
+                return r if len(r) <= max_len else r[:max_len] + "..."
+            
+            except Exception:
+                return f"<unrepr {type(obj).__name__}>"
+
+        logger_name = getattr(self, "logger", None)
+        if logger_name is not None:
+            try:
+                logger_info = f"{self.logger.name} (level={self.logger.level})"
+            except Exception:
+                logger_info = repr(self.logger)
+        else:
+            logger_info = "None"
+
+        parts = [
+            f"XModel summary:",
+            f"  logger: {logger_info}",
+            f"  workers: n_workers={self.n_workers}",
+            f"  depth={self.depth}, emb_flag={self.emb_flag}",
+            f"  cluster: min_leaf_size={self.min_leaf_size}, max_leaf_size={self.max_leaf_size}, cut_half_cluster={self.cut_half_cluster}",
+            f"  ranker_every_layer={self.ranker_every_layer}",
+            f"  configs:",
+            f"    vectorizer: {_short(self.vectorizer_config)}",
+            f"    transformer: {_short(self.transformer_config)}",
+            f"    dimension: {_short(self.dimension_config)}",
+            f"    clustering: {_short(self.clustering_config)}",
+            f"    matcher: {_short(self.matcher_config)}",
+            f"    ranker: {_short(self.ranker_config)}",
+            f"    cur: {_short(self.cur_config)}",
+            f"  internal state:",
+            f"    text_encoder: {_short(self._text_encoder)}",
+            f"    hml: {_short(self._hml)}",
+            f"    training_texts: {_short(self._training_texts)}",
+            f"    original_labels: {_short(self._original_labels)}",
+            f"    X/Y/Z: {_short(self._X)}, {_short(self._Y)}, {_short(self._Z)}",
+            f"  temp_var: {_short(getattr(self, 'temp_var', None))}",
+        ]
+        return "\n".join(parts)
+
+    def __repr__(self) -> str:
+        # concise repr that can be used in containers / REPL
+        try:
+            return f"XModel(depth={self.depth}, n_workers={self.n_workers}, emb_flag={self.emb_flag})"
+        except Exception:
+            return "<XModel (repr error)>"
+
+    
     @property
     def text_encoder(self):
         return self._text_encoder
@@ -236,7 +312,7 @@ class XModel():
         
         return X_emb, Y_binazer, Z 
     
-    @profile
+    # @profile
     def train(self, X_text, Y_text):
         
         self.logger.info("Started Training")
@@ -420,3 +496,4 @@ class XModel():
 
             # 6) IMPORTANT: return the SAME 'out' from HMLModel, only scores are replaced by cosine
             return out_h, scores_cos
+    

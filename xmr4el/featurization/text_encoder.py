@@ -116,6 +116,10 @@ class TextEncoder():
             print("Running on default config of TruncateSVD")
         
         model = DimensionModel.fit(X_emb, dim_config)
+        
+        if model is None:
+            return X_emb, None
+        
         reduced_emb = model.transform(X_emb)
         return reduced_emb, model
     

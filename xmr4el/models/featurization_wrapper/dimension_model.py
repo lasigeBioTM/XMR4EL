@@ -113,6 +113,10 @@ class DimensionModel(metaclass=DimensionModelMeta):
             raise ValueError(
                 "Iterable over raw text expected for vectorizer other than tfidf."
             )
+        
+        if self.model is None:
+            return x_emb
+            
         return self.model.transform(x_emb, **kwargs)
     
 class SklearnTruncatedSVD(DimensionModel):
@@ -192,6 +196,14 @@ class SklearnTruncatedSVD(DimensionModel):
 
         try:
             config = {**defaults, **config}
+            
+            X_n_features = X_emb.shape[1]
+            config_n_components = config["n_components"]
+            
+            if X_n_features < config_n_components:
+                print(f"Value Error: Returning model as None, because n_components({config_n_components}) must be <= n_features({X_n_features}).")
+                return cls(config, None)
+            
             model = TruncatedSVD(**config)
         except TypeError:
             raise Exception(
@@ -209,4 +221,8 @@ class SklearnTruncatedSVD(DimensionModel):
         Returns:
             scipy.sparse.csr.csr_matrix: Matrix of features.
         """
+        
+        if self.model is None:
+            return corpus
+        
         return self.model.transform(corpus)

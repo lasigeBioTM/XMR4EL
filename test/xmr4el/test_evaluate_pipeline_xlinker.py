@@ -77,13 +77,11 @@ def main():
     with open(file_test_input, "r") as file:
         input_texts = file.read().splitlines()
 
-    load_path = "test/test_data/saved_trees/xmodel_2025-10-30_15-29-56"
+    load_path = "test/test_data/saved_trees/xmodel_2025-10-23_16-34-58"
     
     print(load_path)
     
     trained_xtree = XModel.load(load_path)
-    
-    print(trained_xtree)
     
     gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
     

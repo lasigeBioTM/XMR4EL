@@ -1,13 +1,12 @@
 import os
 import time
-
 import platform
 
 if platform.machine() == 'aarch64':  # ARM only
     os.environ['LD_PRELOAD'] = '/lib/aarch64-linux-gnu/libgomp.so.1'
 
 # LD_PRELOAD=/lib/aarch64-linux-gnu/libgomp.so.1
-
+from argparse import ArgumentParser
 from xmr4el.featurization.preprocessor import Preprocessor
 from xmr4el.xmr.model import XModel
 
@@ -25,6 +24,12 @@ from xmr4el.xmr.model import XModel
 """
 
 def main():
+    
+    # Parse arguments
+    parser = ArgumentParser()
+    parser.add_argument("-ds_len", type=int, required=True)
+    
+    args = parser.parse_args()
     
     start = time.time()
 
@@ -105,8 +110,9 @@ def main():
     corpus = train_data["corpus"]
     labels = train_data["labels"]
     
-    print(corpus[0], len(corpus))
+    # print(corpus[0], len(corpus))
     # print(labels[0], len(labels))
+    # exit()
     
     del train_data
     
@@ -129,11 +135,11 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=-1,
                     depth=depth,
-                    emb_flag=3,
+                    emb_flag=1,
                     verbose=2
                     )
     
-    xmodel.train(corpus[:3000], labels[:3000])
+    xmodel.train(corpus[:args.ds_len], labels[:args.ds_len])
 
     # Save the tree
     save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable
