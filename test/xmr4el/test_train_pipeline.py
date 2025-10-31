@@ -27,7 +27,8 @@ def main():
     
     # Parse arguments
     parser = ArgumentParser()
-    parser.add_argument("-ds_len", type=int, required=True)
+    parser.add_argument("-ds_len", type=int, default=10000000)
+    parser.add_argument("-emb_flag", type=int, default=2)
     
     args = parser.parse_args()
     
@@ -135,7 +136,7 @@ def main():
                     ranker_every_layer=ranker_every_layer,
                     n_workers=-1,
                     depth=depth,
-                    emb_flag=1,
+                    emb_flag=args.emb_flag,
                     verbose=2
                     )
     
