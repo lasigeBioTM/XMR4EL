@@ -41,7 +41,7 @@ def main():
     
     transformer_config = {
         "type": "sentencetbiobert",
-        "kwargs": {"batch_size": 200000}
+        "kwargs": {"batch_size": 15000}
     }
     
     dimension_config = {
