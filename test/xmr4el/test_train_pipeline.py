@@ -42,7 +42,7 @@ def main():
     
     transformer_config = {
         "type": "sentencetbiobert",
-        "kwargs": {"batch_size": 15000}
+        "kwargs": {"batch_size": 2000}
     }
     
     dimension_config = {
@@ -112,6 +112,8 @@ def main():
     corpus = train_data["corpus"]
     labels = train_data["labels"]
     
+    print(len(corpus))
+    
     # print(corpus[0], len(corpus))
     # print(labels[0], len(labels))
     # exit()
@@ -135,7 +137,7 @@ def main():
                     max_leaf_size=max_leaf_size,
                     cut_half_cluster=cut_half_cluster,
                     ranker_every_layer=ranker_every_layer,
-                    n_workers=-1,
+                    n_workers=8,
                     depth=depth,
                     emb_flag=args.emb_flag,
                     verbose=2
