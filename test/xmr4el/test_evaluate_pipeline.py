@@ -1,7 +1,9 @@
+from argparse import ArgumentParser
 import numpy as np
 from collections import Counter
 import time
 
+from xmr4el.featurization.preprocessor import Preprocessor
 from xmr4el.xmr.model import XModel
 
 
@@ -48,7 +50,7 @@ def filter_labels_and_inputs(gold_labels, input_texts, allowed_labels):
     filtered_texts = []
 
     for label_list, text in zip(gold_labels, input_texts):
-        if label_list and label_list[0] in allowed_set:
+        if label_list in allowed_set:
             filtered_labels.append(label_list)
             filtered_texts.append(text)
 
@@ -70,6 +72,12 @@ def save_debug_tables(debug_tables, filename_prefix="debug_folder/debug_file"):
 
 def main():
 
+    parser = ArgumentParser()
+    parser.add_argument("-xmodel_path", type=str, required=True)
+    parser.add_argument("-test_path", type=str, required=True)
+    
+    args = parser.parse_args()
+
     start = time.time()
 
     file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
@@ -77,7 +85,7 @@ def main():
     with open(file_test_input, "r") as file:
         input_texts = file.read().splitlines()
 
-    load_path = "test/test_data/saved_trees/xmodel_2025-10-30_15-29-56"
+    load_path = args.xmodel_path
     
     print(load_path)
     
@@ -85,53 +93,43 @@ def main():
     
     print(trained_xtree)
     
-    gold_labels = read_codes_file("test/test_data/labels_bc5cdr_disease_medic.txt") # Need to filter out the ones that werent used.
+    test_set = Preprocessor.load_pubtator_file(args.test_path)
     
-    filtered_labels, filtered_texts = filter_labels_and_inputs(gold_labels, input_texts, trained_xtree.initial_labels)
+    corpus = test_set["corpus"]
+    labels = test_set["labels"]
+    
+    # print(corpus[:1], len(corpus), type(corpus))
+    # print(labels[:1], len(labels))
+    
+    # print(trained_xtree.initial_labels)
+    
+    golden_labels, input_texts = filter_labels_and_inputs(labels, corpus, trained_xtree.initial_labels)
 
-    routes, score_csr = trained_xtree.predict(filtered_texts, 
+    print(golden_labels[0], len(golden_labels))
+    print(np.unique(np.array(golden_labels)).shape)
+    # print(input_texts[0], len(input_texts))
+
+    # exit()
+
+    routes, score_csr = trained_xtree.predict(input_texts, 
                                               beam_size=5, 
-                                              topk=50, 
+                                              topk=10, 
                                               fusion="lp_fusion", 
                                               topk_mode="global", 
-                                              topk_inside_global=50)
+                                              topk_inside_global=10)
     
     # print(routes)
     print(score_csr)
     
     trained_labels = np.array(trained_xtree.initial_labels)
     
-    """
     hit_counts = []
     for r in routes:
         qi = r["query_index"]
-        print(qi)
-        # union of all labels reachable by the final surviving leaves
         cand = set()
-        for p in r.get("paths", []):
-            print(p.get("leaf_global_labels"))
-            cand.update(trained_labels[p.get("leaf_global_labels", [])])
-        gold = set(filtered_labels[qi])
-        hit_counts.append(len(cand & gold))
-        
-    print("Hit counts per query:", Counter(hit_counts))
-    print("Average hits:", np.mean(hit_counts))
-    """
-    
-    hit_counts = []
-    for r in routes:
-        qi = r["query_index"]
-        # print(qi)
-        # union of all labels reachable by the final surviving leaves
-        cand = set()
-        for p in r.get("paths", []):
-            # print("Leaf paths", p.get("leaf_global_labels"))
-            # print("Leaf Scores", p.get("scores"), "\n")
-            pass
-        # print("Final path", r.get("final_path").get("leaf_global_labels", []), "\n")
         cand.update(trained_labels[r.get("final_path").get("leaf_global_labels", [])])
-        gold = set(filtered_labels[qi])
-        hit_counts.append(len(cand & gold))
+        gold = golden_labels[qi]
+        hit_counts.append(1 if gold in cand else 0)
         
     print("Hit counts per query:", Counter(hit_counts))
     print("Average hits:", np.mean(hit_counts))
