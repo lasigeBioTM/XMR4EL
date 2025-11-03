@@ -29,6 +29,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("-ds_len", type=int, default=10000000)
     parser.add_argument("-emb_flag", type=int, default=2)
+    parser.add_argument("-train_path", type=str, required=True)
     
     args = parser.parse_args()
     
@@ -106,7 +107,7 @@ def main():
         "seed": ranker_config["kwargs"]["random_state"],
     }
         
-    train_data = Preprocessor.load_pubtator_file("datasets/MedMentions/st21pv/data/corpus_pubtator_test.txt")
+    train_data = Preprocessor.load_pubtator_file(args.train_path)
     
     corpus = train_data["corpus"]
     labels = train_data["labels"]
