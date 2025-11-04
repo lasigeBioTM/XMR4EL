@@ -108,7 +108,7 @@ def main():
 
     # Counter({0: 18131, 1: 1103})
     routes, score_csr = trained_xtree.predict(input_texts, 
-                                              beam_size=15, 
+                                              beam_size=20, 
                                               topk=100, 
                                               fusion="lp_fusion", 
                                               topk_mode="global", 
