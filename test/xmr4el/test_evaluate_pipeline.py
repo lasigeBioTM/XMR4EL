@@ -80,11 +80,6 @@ def main():
 
     start = time.time()
 
-    file_test_input = "data/raw/mesh_data/bc5cdr/test_input_bc5cdr.txt"
-
-    with open(file_test_input, "r") as file:
-        input_texts = file.read().splitlines()
-
     load_path = args.xmodel_path
     
     print(load_path)
