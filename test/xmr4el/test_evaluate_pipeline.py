@@ -113,11 +113,11 @@ def main():
 
     # Counter({0: 18131, 1: 1103})
     routes, score_csr = trained_xtree.predict(input_texts, 
-                                              beam_size=5, 
-                                              topk=10, 
+                                              beam_size=10, 
+                                              topk=100, 
                                               fusion="lp_fusion", 
                                               topk_mode="global", 
-                                              topk_inside_global=10)
+                                              topk_inside_global=100)
     
     # print(routes)
     print(score_csr)

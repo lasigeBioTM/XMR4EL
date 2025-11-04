@@ -59,7 +59,7 @@ def main():
     
     clustering_config = {
         "type": "balancedkmeans",
-        "kwargs": {"n_clusters": 2,
+        "kwargs": {"n_clusters": 4,
                    "iter_limit": 400}
     }
     
@@ -109,11 +109,14 @@ def main():
         
     train_data = Preprocessor.load_pubtator_file(args.train_path)
     
-    corpus = train_data["corpus"]
-    labels = train_data["labels"]
+    # corpus = train_data["corpus"]
+    # labels = train_data["labels"]
     
-    print(len(corpus))
+    X_train, Y_train = Preprocessor.organize_pubtator_output(train_data)
     
+    # print(out_corpus[0], len(out_corpus))
+    # print(out_labels[0], len(out_labels))
+
     # print(corpus[0], len(corpus))
     # print(labels[0], len(labels))
     # exit()
@@ -137,13 +140,13 @@ def main():
                     max_leaf_size=max_leaf_size,
                     cut_half_cluster=cut_half_cluster,
                     ranker_every_layer=ranker_every_layer,
-                    n_workers=8,
+                    n_workers=-1,
                     depth=depth,
                     emb_flag=args.emb_flag,
                     verbose=2
                     )
     
-    xmodel.train(corpus[:args.ds_len], labels[:args.ds_len])
+    xmodel.train(X_train[:args.ds_len], Y_train[:args.ds_len])
 
     # Save the tree
     save_dir = os.path.join(os.getcwd(), "test/test_data/saved_trees")  # Ensure this path is correct and writable

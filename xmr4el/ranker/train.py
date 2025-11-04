@@ -1,3 +1,5 @@
+import os
+import logging
 import shutil
 import tempfile
 
@@ -14,7 +16,8 @@ from xmr4el.models.classifier_wrapper.classifier_model import ClassifierModel
 ranker_dir = Path(tempfile.mkdtemp(prefix="rankers_store_"))
 random_seed = 0
 
- 
+logger = logging.getLogger(__name__)
+
 class RankerTrainer:
     """Training routines for per-label rankers."""
     
@@ -244,6 +247,8 @@ class RankerTrainer:
             raise RuntimeError(f"Model {type(model.model).__name__} does not support partial_fit")
 
         model.partial_fit(X=X_combined, Y=y, classes=array([0, 1]), dtype=np.int32)
+
+        logger.info(f"[PID {os.getpid()}] Epoch {epoch} | label {global_idx} pos={n_pos} neg={n_neg} (cluster_size={X_cluster.shape[0]})")
 
         return (global_idx, model)
 

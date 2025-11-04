@@ -3,6 +3,7 @@ import logging
 
 import pandas as pd
 
+from collections import OrderedDict
 from typing import Dict, List, Sequence, Tuple
 from collections import defaultdict
 
@@ -87,7 +88,6 @@ class Preprocessor:
         label_to_indices: Dict[str, List[int]] = defaultdict(list)
 
         for label, synonyms in zip(Y_train, X_train):
-            # logger.info(f"{label} -> {synonyms}")
             for synonym in synonyms:
                 idx = len(trn_corpus)
                 trn_corpus.append(synonym)
@@ -231,3 +231,26 @@ class Preprocessor:
                         labels.append(cui)
 
         return {"corpus": corpus, "labels": labels}
+    
+
+    def organize_pubtator_output(pub_output: Dict) -> Tuple[List[List[str]], List[str]]:
+        """
+        Group flat pubtator output by label (CUI) and return:
+        - corpus_grouped: List[List[str]] where each inner list contains mentions for the same label
+        - labels_grouped: List[str] where labels_grouped[i] is the label for corpus_grouped[i]
+
+        The order is deterministic: first-seen label order in the input is preserved.
+        """
+        corpus = pub_output["corpus"]
+        ids = pub_output["labels"]
+
+        groups: "OrderedDict[str, List[str]]" = OrderedDict()
+        for mention, id_ in zip(corpus, ids):
+            if id_ not in groups:
+                groups[id_] = []
+            groups[id_].append(mention)
+
+        corpus_grouped = list(groups.values())
+        labels_grouped = list(groups.keys())
+
+        return corpus_grouped, labels_grouped
