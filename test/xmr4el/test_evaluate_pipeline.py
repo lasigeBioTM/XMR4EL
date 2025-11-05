@@ -75,6 +75,8 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("-xmodel_path", type=str, required=True)
     parser.add_argument("-test_path", type=str, required=True)
+    parser.add_argument("-beam_size", type=int, default=5)
+    parser.add_argument("-topk", type=int, default=20)
     
     args = parser.parse_args()
 
@@ -108,11 +110,11 @@ def main():
 
     # Counter({0: 18131, 1: 1103})
     routes, score_csr = trained_xtree.predict(input_texts, 
-                                              beam_size=20, 
-                                              topk=100, 
+                                              beam_size=args.beam_size, 
+                                              topk=args.topk, 
                                               fusion="lp_fusion", 
                                               topk_mode="global", 
-                                              topk_inside_global=100)
+                                              topk_inside_global=args.topk)
     
     # print(routes)
     print(score_csr)
