@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 transformer_dict = {}
 
+logger = logging.getLogger(__name__)
 
 class TransformersMeta(ABCMeta):
     """Metaclass for keeping track of all 'Transformer' subclasses"""
@@ -48,8 +49,6 @@ class Transformer(metaclass=TransformersMeta):
 
         self.config = config
         self.model = model
-        
-        self.logger = logging.getLogger(__name__)
 
 
     def save(self, transformer_folder):
@@ -163,7 +162,7 @@ class Transformer(metaclass=TransformersMeta):
 
         device = torch.device("cuda" if device == "gpu" and torch.cuda.is_available() else "cpu")
         
-        cls.logger.info(f"Using PyTorch device: {device}")
+        logger.info(f"Using PyTorch device: {device}")
 
         batch_dir = f"{cls._get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}"
