@@ -103,7 +103,7 @@ def main():
         "E_warm": 3,
         "ratios_warm": (0.70, 0.30),
         "ratios_hard": (0.60, 0.30, 0.10),
-        "neg_mult": 30,
+        "neg_mult": 45,
         "seed": ranker_config["kwargs"]["random_state"],
     }
     

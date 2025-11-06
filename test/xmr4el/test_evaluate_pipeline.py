@@ -84,7 +84,7 @@ def main():
 
     load_path = args.xmodel_path
     
-    print(load_path)
+    print(load_path, args.beam_size, args.topk)
     
     trained_xtree = XModel.load(load_path)
     
