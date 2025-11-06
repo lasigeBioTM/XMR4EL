@@ -160,7 +160,9 @@ class Transformer(metaclass=TransformersMeta):
         Optimized function for efficient memory usage during CPU or GPU-based embedding extraction.
         """
 
-        device = torch.device("cuda" if device == "gpu" and torch.cuda.is_available() else "cpu")
+        # device = torch.device("cuda" if device == "gpu" and torch.cuda.is_available() else "cpu")
+        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         logger.info(f"Using PyTorch device: {device}")
 
