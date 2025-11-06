@@ -103,9 +103,11 @@ def main():
         "E_warm": 3,
         "ratios_warm": (0.70, 0.30),
         "ratios_hard": (0.60, 0.30, 0.10),
-        "neg_mult": 1500,
+        "neg_mult": 30,
         "seed": ranker_config["kwargs"]["random_state"],
     }
+    
+    
         
     train_data = Preprocessor.load_pubtator_file(args.train_path)
     
@@ -127,7 +129,7 @@ def main():
     max_leaf_size = 200
     cut_half_cluster=True
     ranker_every_layer=True
-    depth = 4
+    depth = 2
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
