@@ -1,3 +1,4 @@
+import logging
 import os
 import gc
 import json
@@ -47,6 +48,9 @@ class Transformer(metaclass=TransformersMeta):
 
         self.config = config
         self.model = model
+        
+        self.logger = logging.getLogger(__name__)
+
 
     def save(self, transformer_folder):
         """Save trained transformer to disk.
@@ -129,6 +133,8 @@ class Transformer(metaclass=TransformersMeta):
         
         config = {**defaults, **config['kwargs']}
         
+        print(config)
+        
         model = transformer_dict[transformer_type](config)
         embeddings = cls._predict(
             model.model_name, trn_corpus, **config
@@ -156,7 +162,8 @@ class Transformer(metaclass=TransformersMeta):
         """
 
         device = torch.device("cuda" if device == "gpu" and torch.cuda.is_available() else "cpu")
-        # LOGGER.info(f"Using PyTorch device: {device}")
+        
+        cls.logger.info(f"Using PyTorch device: {device}")
 
         batch_dir = f"{cls._get_root_directory()}/{batch_dir}"
         emb_file = f"{batch_dir}/{output_prefix}"
