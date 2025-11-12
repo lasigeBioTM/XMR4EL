@@ -129,7 +129,7 @@ def main():
     max_leaf_size = 200
     cut_half_cluster=True
     ranker_every_layer=True
-    depth = 4
+    depth = 5
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
