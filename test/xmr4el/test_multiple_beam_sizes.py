@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import subprocess
 import sys
 from datetime import datetime
@@ -13,7 +12,7 @@ def log(msg, color="cyan"):
     }
     print(f"{colors.get(color,'')}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {msg}{colors['reset']}")
 
-def run_tests(model_path, beam_start, beam_end, topk=100):
+def run_tests(model_path, beam_start, beam_end, topk=10):
     test_path = "datasets/MedMentions/st21pv/data/corpus_pubtator_test.txt"
     
     for beam in range(beam_start, beam_end + 1, 5):
