@@ -30,6 +30,8 @@ def main():
     parser.add_argument("-ds_len", type=int, default=10000000)
     parser.add_argument("-emb_flag", type=int, default=2)
     parser.add_argument("-train_path", type=str, required=True)
+    parser.add_argument("-depth", type=int, default=2)
+    parser.add_argument("-n_cluster", type=int, default=2)
     
     args = parser.parse_args()
     
@@ -59,7 +61,7 @@ def main():
     
     clustering_config = {
         "type": "balancedkmeans",
-        "kwargs": {"n_clusters": 4,
+        "kwargs": {"n_clusters": args.n_cluster,
                    "iter_limit": 400}
     }
     
@@ -129,7 +131,7 @@ def main():
     max_leaf_size = 200
     cut_half_cluster=True
     ranker_every_layer=True
-    depth = 5
+    depth = args.depth
 
     xmodel = XModel(vectorizer_config=vectorizer_config,
                     transformer_config=transformer_config,
