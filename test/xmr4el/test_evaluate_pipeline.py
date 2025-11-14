@@ -31,7 +31,7 @@ def read_codes_file(filepath):
 
     return code_lists
 
-def filter_labels_and_inputs(gold_labels, input_texts, allowed_labels):
+def filter_labels_and_inputs(input_texts, gold_labels, allowed_labels):
     """
     Filters out gold_labels (list of lists) and corresponding input_texts
     where the first label in each gold label list is not in allowed_labels.
@@ -45,6 +45,9 @@ def filter_labels_and_inputs(gold_labels, input_texts, allowed_labels):
         Tuple[List[List[str]], List[str]]: Filtered gold_labels and input_texts.
     """
     allowed_set = set(allowed_labels)
+
+    # print(allowed_set)
+    # exit()
 
     filtered_labels = []
     filtered_texts = []
@@ -95,14 +98,13 @@ def main():
     corpus = test_set["corpus"]
     labels = test_set["labels"]
     
-    # print(corpus[:1], len(corpus), type(corpus))
-    # print(labels[:1], len(labels))
+    print("Corpus", corpus[:1], len(corpus), type(corpus))
+    print("Labels", labels[:1], len(labels), type(labels))
+    print("Initial Labels", len(trained_xtree.initial_labels))
     
-    # print(trained_xtree.initial_labels)
-    
-    golden_labels, input_texts = filter_labels_and_inputs(labels, corpus, trained_xtree.initial_labels)
+    golden_labels, input_texts = filter_labels_and_inputs(corpus, labels, trained_xtree.initial_labels)
 
-    print(golden_labels[0], len(golden_labels))
+    print(len(golden_labels))
     print(np.unique(np.array(golden_labels)).shape)
     # print(input_texts[0], len(input_texts))
     

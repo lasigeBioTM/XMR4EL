@@ -12,9 +12,7 @@ def log(msg, color="cyan"):
     }
     print(f"{colors.get(color,'')}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {msg}{colors['reset']}")
 
-def run_tests(model_path, beam_start, beam_end, topk=10):
-    test_path = "datasets/MedMentions/st21pv/data/corpus_pubtator_test.txt"
-    
+def run_tests(model_path, test_path, beam_start=5, beam_end=25, topk=10):
     for beam in range(beam_start, beam_end + 1, 5):
         log(f"Running test with beam_size={beam}", "yellow")
         cmd = [
@@ -32,12 +30,14 @@ def run_tests(model_path, beam_start, beam_end, topk=10):
             log(f"Test failed for beam_size={beam}", "red")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: python run_tests.py <model_path> <beam_start> <beam_end>")
+    if len(sys.argv) != 6:
+        print("Usage: python run_tests.py <model_path> <test_path> <beam_start> <beam_end> <topk>")
         sys.exit(1)
 
     model_path = sys.argv[1]
-    beam_start = int(sys.argv[2])
-    beam_end = int(sys.argv[3])
+    test_path = sys.argv[2]
+    beam_start = int(sys.argv[3])
+    beam_end = int(sys.argv[4])
+    topk = int(sys.argv[5])
 
-    run_tests(model_path, beam_start, beam_end)
+    run_tests(model_path, test_path, beam_start, beam_end, topk)
