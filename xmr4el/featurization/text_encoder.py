@@ -173,27 +173,89 @@ class TextEncoder():
         return transformer_embeddings
         
     def encode(self, X_test: Sequence[str]) -> csr_matrix:
-        """Encode input texts into normalized feature vectors."""
+        """
+        Encode input texts into normalized feature vectors.
+        Supports different encoding pipelines based on `self.flag`:
+
+        flag == 1 → TF-IDF
+        flag == 2 → TF-IDF + Transformer
+        flag == 3 → Transformer
+        flag == 4 → [Transformer | TF-IDF] formula with [SEP] splitting
+        """
+
+        # Determine encoding mode
         use_tfidf = self.flag in [1, 2]
         use_transformer = self.flag in [2, 3]
+        use_formula = self.flag == 4
 
-        using_encod = ""
+        # Logging mode
         if self.flag == 1:
-            using_encod = "Using only TF-IDF as encoder"
+            self.logger.info("Using only TF-IDF as encoder")
         elif self.flag == 2:
-            using_encod = "Using TF-IDF and Transformers model to encode"
+            self.logger.info("Using TF-IDF + Transformer to encode")
+        elif self.flag == 3:
+            self.logger.info("Using only Transformer to encode")
+        elif self.flag == 4:
+            self.logger.info("Using formula encoder (Transformer + TF-IDF via [SEP])")
         else:
-            using_encod= "Using only Transformers model to encode"            
+            raise ValueError(f"Invalid flag {self.flag}")
 
-        self.logger.info(f"{using_encod}")
+        # --------------------------------------------------------------------------
+        # FLAG 4: "Formula mode" using [SEP] to split transformer/tfidf inputs
+        # --------------------------------------------------------------------------
+        if use_formula:
+            self.logger.info("Encoding using [SEP] formula pipeline")
 
+            X_transformer_raw, X_tfidf_raw = [], []
+            for item in X_test:
+                if "[SEP]" not in item:
+                    raise ValueError("Input must contain [SEP] when flag == 4")
+                a, b = item.split("[SEP]", 1)
+                X_transformer_raw.append(a)
+                X_tfidf_raw.append(b)
+
+            # Transformer embedding
+            X_trans = self._encode_text_using_transformer(
+                X_transformer_raw, self.transformer_config
+            )
+            X_trans = csr_matrix(X_trans)
+
+            # TF-IDF + dimension reduction
+            X_tfidf, vec_model = self._encode_text_using_text_vectorizer(
+                X_tfidf_raw, self.vectorizer_config
+            )
+            reduced_x_tfidf, dim_model = self._reduce_dimensions(
+                X_tfidf, self.dimension_config
+            )
+
+            reduced_x_tfidf = (
+                csr_matrix(reduced_x_tfidf) if dim_model is not None else X_tfidf
+            )
+
+            # Save models
+            self.vectorizer_model = vec_model
+            self.dimension_model = dim_model
+
+            # Concatenate: [TRANSFORMER | TF-IDF]
+            concat_emb = hstack([X_trans, reduced_x_tfidf])
+
+            # Normalize
+            return normalize(concat_emb, norm="l2", axis=1)
+
+        # --------------------------------------------------------------------------
+        # OTHER FLAGS (1, 2, 3)
+        # --------------------------------------------------------------------------
+
+        concat_emb = None
+
+        # -------- TF-IDF ENCODING --------
         if use_tfidf:
-            
-            self.logger.info("Encoding now with TF-IDF")
-            
+            self.logger.info("Encoding with TF-IDF")
+
             X_tfidf, vec_model = self._encode_text_using_text_vectorizer(
                 X_test, self.vectorizer_config
             )
+
             reduced_x_tfidf, dim_model = self._reduce_dimensions(
                 X_tfidf, self.dimension_config
             )
@@ -206,24 +268,28 @@ class TextEncoder():
             self.vectorizer_model = vec_model
             self.dimension_model = dim_model
 
+            concat_emb = reduced_x_tfidf
+
+        # -------- TRANSFORMER ENCODING --------
         if use_transformer:
-            
-            self.logger.info("Encoding now with Transformers model")
-            
+            self.logger.info("Encoding with Transformer model")
+
             X_transformer = self._encode_text_using_transformer(
                 X_test, self.transformer_config
             )
             sparse_X_transformer = csr_matrix(X_transformer)
 
-            if use_tfidf:
-                concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
-            else:
+            if concat_emb is None:
                 concat_emb = sparse_X_transformer
-        else:
-            concat_emb = reduced_x_tfidf
+            else:
+                concat_emb = hstack([concat_emb, sparse_X_transformer])
 
-        concat_emb = normalize(concat_emb, norm="l2", axis=1)
-        return concat_emb
+        # Sanity check
+        if concat_emb is None:
+            raise RuntimeError("No encoder was executed — check flag logic.")
+
+        # Normalize embeddings
+        return normalize(concat_emb, norm="l2", axis=1)
     
     def predict(self, X_text_query: Sequence[str]) -> csr_matrix:
         """Encode query data for prediction."""
