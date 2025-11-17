@@ -292,13 +292,63 @@ class TextEncoder():
         return normalize(concat_emb, norm="l2", axis=1)
     
     def predict(self, X_text_query: Sequence[str]) -> csr_matrix:
-        """Encode query data for prediction."""
+        """Encode query data for prediction using the SAME logic as `encode`."""
+
         use_tfidf = self.flag in [1, 2]
         use_transformer = self.flag in [2, 3]
+        use_formula = self.flag == 4
 
+        # ------------------------------------------------------------
+        # FLAG 4: "[SEP]" formula mode
+        # ------------------------------------------------------------
+        if use_formula:
+            self.logger.info("Predicting using [SEP] formula pipeline")
+
+            X_transformer_raw, X_tfidf_raw = [], []
+            for item in X_text_query:
+                if "[SEP]" not in item:
+                    raise ValueError("Input must contain [SEP] when flag == 4")
+                a, b = item.split("[SEP]", 1)
+                X_transformer_raw.append(a)
+                X_tfidf_raw.append(b)
+
+            # Transformer prediction
+            X_trans = self._predict_text_using_transformer(
+                X_test=X_transformer_raw,
+                transformer_config=self.transformer_config
+            )
+            X_trans = csr_matrix(X_trans)
+
+            # TF-IDF prediction
+            X_tfidf = self._predict_text_using_text_vectorizer(
+                X_test=X_tfidf_raw,
+                vec_model=self.vectorizer_model
+            )
+
+            # Dimensionality prediction
+            if self.dimension_model is None:
+                reduced_x_tfidf = X_tfidf
+            else:
+                reduced_x_tfidf = csr_matrix(
+                    self._predict_dimension(X_tfidf, self.dimension_model)
+                )
+
+            # Concatenate
+            concat_emb = hstack([X_trans, reduced_x_tfidf])
+
+            return normalize(concat_emb, norm="l2", axis=1)
+
+        # ------------------------------------------------------------
+        # FLAGS 1, 2, 3 (standard modes)
+        # ------------------------------------------------------------
+
+        concat_emb = None
+
+        # -------- TF-IDF --------
         if use_tfidf:
             X_tfidf_query = self._predict_text_using_text_vectorizer(
-                X_test=X_text_query, vec_model=self.vectorizer_model
+                X_test=X_text_query,
+                vec_model=self.vectorizer_model,
             )
 
             if self.dimension_model is None:
@@ -308,18 +358,23 @@ class TextEncoder():
                     self._predict_dimension(X_tfidf_query, self.dimension_model)
                 )
 
+            concat_emb = reduced_x_tfidf
+
+        # -------- Transformer --------
         if use_transformer:
             X_transformer = self._predict_text_using_transformer(
-                X_test=X_text_query, transformer_config=self.transformer_config
+                X_test=X_text_query,
+                transformer_config=self.transformer_config
             )
             sparse_X_transformer = csr_matrix(X_transformer)
 
-            if use_tfidf:
-                concat_emb = hstack([reduced_x_tfidf, sparse_X_transformer])
-            else:
+            if concat_emb is None:
                 concat_emb = sparse_X_transformer
-        else:
-            concat_emb = reduced_x_tfidf
+            else:
+                concat_emb = hstack([concat_emb, sparse_X_transformer])
 
-        concat_emb = normalize(concat_emb, norm="l2", axis=1)
-        return concat_emb
+        # Safety check
+        if concat_emb is None:
+            raise RuntimeError("No encoder was executed — invalid flag or configuration.")
+
+        return normalize(concat_emb, norm="l2", axis=1)
