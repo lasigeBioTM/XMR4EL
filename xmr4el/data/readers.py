@@ -1,0 +1,258 @@
+"""Local readers, label grouping and text preparation."""
+import re
+import os
+import logging
+import pandas as pd
+from collections import OrderedDict, defaultdict
+from typing import Dict, List, Optional, Sequence, Tuple
+
+
+def pubtator_header(line):
+    """(id, "t" | "a", text) for a PubTator header "<id>|t|<title>" / "<id>|a|<abstract>", else None: a mention
+    text containing "|t|" is not one (the id has no tab). `line` without its newline; text keeps its whitespace."""
+    parts = line.split("|", 2)
+    return tuple(parts) if len(parts) == 3 and parts[1] in ("t", "a") and "\t" not in parts[0] else None
+
+
+class Preprocessor:
+    """Preprocess text to numerical values."""
+
+    @staticmethod
+    def load_data_labels_from_file(
+        train_filepath: str,
+        labels_filepath: str,
+        truncate_data: int = 0,
+    ) -> Dict[str, List[List[str]]]:
+        """Load texts and their corresponding labels from file."""
+        
+        train_df = pd.read_csv(
+            train_filepath,
+            header=None,
+            names=["group_id", "text"],
+            delimiter="\t",
+            dtype={"group_id": int, "text": str},
+            keep_default_na=False,  # "NA", "NULL", ... are mention strings here
+        )
+        
+        train_df["text"] = train_df["text"].fillna("")
+
+        grouped_texts = train_df.groupby("group_id")["text"].apply(list).reset_index()
+        
+        with open(labels_filepath, 'r') as f:
+            raw_labels = [line.strip() for line in f if line.strip()]
+
+        if truncate_data > 0:
+            grouped_texts = grouped_texts.head(truncate_data)
+            raw_labels = raw_labels[:truncate_data]
+
+        if len(raw_labels) > len(grouped_texts):
+            logging.getLogger(__name__).warning(
+                "Truncating labels: supplied=%d text_groups=%d", len(raw_labels), len(grouped_texts))
+            raw_labels = raw_labels[:len(grouped_texts)]
+        elif len(raw_labels) < len(grouped_texts):
+            raise Exception(
+                f"Mismatch: Not enough labels ({len(raw_labels)}) for text groups ({len(grouped_texts)})"
+            )
+
+        grouped_texts["concept_id"] = raw_labels
+
+        grouped_texts["original_texts"] = grouped_texts["text"]
+
+        return {
+            "corpus": grouped_texts["original_texts"].tolist(),
+            "labels": grouped_texts["concept_id"].tolist(),
+        }
+
+    @staticmethod
+    def prepare_data(
+        X_train: Sequence[Sequence[str]],
+        Y_train: Sequence[str],
+    ) -> Tuple[List[str], Dict[str, List[int]]]:
+        """Flatten synonyms and build reverse label index mapping."""
+        if len(X_train) != len(Y_train):
+            raise ValueError("Training text groups and labels must have the same length")
+        trn_corpus: List[str] = []
+        label_to_indices: Dict[str, List[int]] = defaultdict(list)
+
+        for label, synonyms in zip(Y_train, X_train, strict=True):
+            for synonym in synonyms:
+                idx = len(trn_corpus)
+                trn_corpus.append(synonym)
+                label_to_indices[label].append(idx)
+
+        return trn_corpus, label_to_indices
+
+    @staticmethod
+    def context_window(document: str, span: Tuple[int, int], window: int) -> str:
+        """Up to `window` words left and right of the mention at `span`, mention excluded."""
+        start, end = span
+        if window <= 0:
+            return ""
+        return " ".join(document[:start].split()[-window:] + document[end:].split()[:window])
+
+    @staticmethod
+    def best_long_form(sf, lf):
+        """Schwartz & Hearst 2003: match the short form's characters right to left inside the candidate
+        long form; its first character must start a word. Returns the long form or None."""
+        s, l = len(sf) - 1, len(lf) - 1
+        while s >= 0:
+            c = sf[s].lower()
+            if not c.isalnum():
+                s -= 1
+                continue
+            while l >= 0 and (lf[l].lower() != c or (s == 0 and l > 0 and lf[l - 1].isalnum())):
+                l -= 1
+            if l < 0:
+                return None
+            l -= 1
+            s -= 1
+        return lf[lf.rfind(" ", 0, l + 1) + 1:]
+
+    @staticmethod
+    def abbreviations(document):
+        """{short form: long form} for every "long form (SF)" in the document; first definition wins."""
+        out = {}
+        for m in re.finditer(r"\(([^()]+)\)", document):
+            sf = re.split(r"[,;]", m.group(1))[0].strip()
+            if not (2 <= len(sf) <= 10 and len(sf.split()) <= 2 and sf[0].isalnum()
+                    and any(ch.isalpha() for ch in sf)) or sf in out:
+                continue
+            words = re.split(r"[.;!?]\s", document[:m.start()])[-1].split()
+            cand = " ".join(words[-min(len(sf) + 5, 2 * len(sf)):])
+            lf = Preprocessor.best_long_form(sf, cand)
+            if lf is None and len(sf) > 2 and sf.endswith("s"):  # plural SF: "excited delirium (EDDs)"
+                lf = Preprocessor.best_long_form(sf[:-1], cand)
+            if lf and len(lf) > len(sf) and sf not in lf.split():
+                out[sf] = lf
+        return out
+
+    @staticmethod
+    def expand_abbreviation(mention, abbrs):
+        """Long form for `mention` from `abbreviations` output, or None: the SF itself, the singular of a plural
+        SF ("MD" for "MDs"), or a multi-word mention with SF tokens expanded ("GI AEs" -> "gastrointestinal
+        adverse events")."""
+        mention = mention.strip()
+        lf = abbrs.get(mention) or abbrs.get(mention + "s")
+        tokens = mention.split()
+        if lf is None and len(tokens) > 1 and any(t in abbrs for t in tokens):
+            lf = " ".join(abbrs.get(t, t) for t in tokens)
+        return lf
+
+    @staticmethod
+    def load_pubtator_file(pubtator_filepath: str, window: Optional[int] = None,
+                           abbrev: Optional[str] = None) -> Dict[str, List[str]]:
+        """
+        Load a PubTator file and return flattened corpus and labels lists
+        suitable for entity linking training.
+
+        Each entry:
+            corpus[i] = "mention [SEP] context"; context = title + " " + abstract, or with
+                        `window`, the words around the mention (`context_window`)
+            labels[i] = CUI
+            spans[i] = (start, end) of the mention in title + " " + abstract (PubTator offsets)
+            docs[i] = document id (PMID) of the row
+        `abbrev` "append" / "replace": a mention with a long form from its document (`abbreviations`,
+        `expand_abbreviation`) becomes "mention long form" / "long form"; None keeps it.
+        BC5CDR: "-1" ids are skipped; composite "D1|D2" mentions are split via column 7.
+        """
+        if abbrev not in (None, "append", "replace"):
+            raise ValueError(f"abbrev must be None, 'append' or 'replace', got {abbrev!r}")
+        if not os.path.exists(pubtator_filepath):
+            raise FileNotFoundError(f"{pubtator_filepath} does not exist")
+
+        corpus: List[str] = []
+        labels: List[str] = []
+        spans: List[Tuple[int, int]] = []  # mention offsets into the context after "[SEP] "
+        docs: List[str] = []
+
+        title, abstract, abbrs, doc_id = "", "", None, ""
+
+        with open(pubtator_filepath, "r", encoding="utf-8") as f:
+            for line_no, raw in enumerate(f, 1):
+                raw = raw.rstrip("\r\n")  # title/abstract keep their whitespace: offsets count it
+                line = raw.strip()
+                if not line:
+                    continue
+
+                parts = header = pubtator_header(raw)
+
+                # --- Title line ---
+                if header and parts[1] == "t":
+                    doc_id, title = parts[0], parts[2]
+                    abstract = ""
+                    abbrs = None
+
+                # --- Abstract line ---
+                elif header:
+                    if parts[0] != doc_id:
+                        raise ValueError(f"{pubtator_filepath}:{line_no}: abstract of {parts[0]!r} "
+                                         f"follows title of {doc_id!r}")
+                    abstract = parts[2]
+
+                # --- Annotation line (mentions) ---
+                elif "\t" in line:
+                    parts = raw.split("\t")  # raw: a trailing empty concept field stays a field
+                    # An annotation ("<id>\t<start>\t<end>\t...") without a concept id is warned and skipped;
+                    # relation lines ("<id>\t<type>\t...") are not annotations.
+                    if len(parts) < 6 or "" in parts[5].split("|"):
+                        if len(parts) >= 6 or (len(parts) >= 3 and parts[1].isdigit() and parts[2].isdigit()):
+                            # file:line and column count only: logs never carry corpus text
+                            logging.getLogger(__name__).warning(
+                                "%s:%d: annotation without concept id skipped (%d columns)",
+                                pubtator_filepath, line_no, len(parts))
+                    else:
+                        # BC5CDR: "-1" = no concept (dropped, also as a composite part); a composite
+                        # mention "D1|D2" becomes one row per part, its text from column 7
+                        # ("t1|t2"); a composite without column 7 has no per-part text and is dropped.
+                        cuis = parts[5].split("|")
+                        texts = parts[6].split("|") if len(cuis) > 1 and len(parts) > 6 else [parts[3]]
+                        if len(texts) != len(cuis):
+                            continue
+                        span = (int(parts[1]), int(parts[2]))
+                        doc = f"{title} {abstract}" if abstract else title  # PubTator offset layout
+                        if parts[0] != doc_id or not 0 <= span[0] <= span[1] <= len(doc):
+                            raise ValueError(f"{pubtator_filepath}:{line_no}: annotation of {parts[0]} at {span} "
+                                             f"does not fit document {doc_id!r} (length {len(doc)})")
+                        if doc[span[0]:span[1]] != parts[3]:  # warned, kept: NCBI train has one (quotes -> spaces)
+                            logging.getLogger(__name__).warning("%s:%d: mention differs from the document text at %s",
+                                                                pubtator_filepath, line_no, span)
+                        if abbrev is not None and abbrs is None:
+                            abbrs = Preprocessor.abbreviations(doc)
+                        context = doc if window is None else Preprocessor.context_window(doc, span, window)
+
+                        for mention_text, cui in zip(texts, cuis):
+                            if cui == "-1":
+                                continue
+                            if abbrev is not None:
+                                lf = Preprocessor.expand_abbreviation(mention_text, abbrs)
+                                if lf is not None:
+                                    mention_text = lf if abbrev == "replace" else f"{mention_text.strip()} {lf}"
+                            corpus.append(f"{mention_text} [SEP] {context}")
+                            labels.append(cui)
+                            spans.append(span)
+                            docs.append(doc_id)
+
+        return {"corpus": corpus, "labels": labels, "spans": spans, "docs": docs}
+
+    @staticmethod
+    def organize_pubtator_output(pub_output: Dict) -> Tuple[List[List[str]], List[str]]:
+        """
+        Group flat pubtator output by label (CUI) and return:
+        - corpus_grouped: List[List[str]] where each inner list contains mentions for the same label
+        - labels_grouped: List[str] where labels_grouped[i] is the label for corpus_grouped[i]
+
+        The order is deterministic: first-seen label order in the input is preserved.
+        """
+        corpus = pub_output["corpus"]
+        ids = pub_output["labels"]
+
+        groups: "OrderedDict[str, List[str]]" = OrderedDict()
+        for mention, id_ in zip(corpus, ids, strict=True):
+            if id_ not in groups:
+                groups[id_] = []
+            groups[id_].append(mention)
+
+        corpus_grouped = list(groups.values())
+        labels_grouped = list(groups.keys())
+
+        return corpus_grouped, labels_grouped

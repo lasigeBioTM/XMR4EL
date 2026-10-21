@@ -1,0 +1,120 @@
+"""JointOvRLogistic solves liblinear's one-vs-rest L2 logistic objective for all labels at once: same probabilities as
+sklearn's liblinear OneVsRest on a 0/1 indicator target, same shapes through the ClassifierModel wrapper. Offline."""
+import tracemalloc
+
+import numpy as np
+import pytest
+from scipy.sparse import csr_matrix, csc_matrix, issparse, random as sp_random
+from sklearn.linear_model import LogisticRegression
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.preprocessing import normalize
+
+import torch
+
+from xmr4el.learning import classifiers
+from xmr4el.learning.classifiers import ClassifierModel, JointOvRLogistic
+
+
+def test_joint_ovr_logistic():
+    rng = np.random.default_rng(0)
+    L, d, per = 7, 20, 25
+    y = np.repeat(np.arange(L), per)
+    X = normalize(rng.normal(size=(L, d))[y] + 0.8 * rng.normal(size=(len(y), d)))
+    Y = np.eye(L)[y]
+
+    for features in (X, X.tolist(), csr_matrix(X), csc_matrix(X.astype(np.float32))):
+        dense = JointOvRLogistic._dense(features)
+        assert dense.dtype == np.float32 and dense.shape == (len(y), d + 1)
+        assert np.array_equal(dense[:, :-1], X.astype(np.float32)) and (dense[:, -1] == 1).all()
+    for cw in ("unsupported", {0: 1, 1: 2}, 1):
+        try:
+            JointOvRLogistic(class_weight=cw)  # refused at construction, before any fit
+        except ValueError as e:
+            assert "class_weight" in str(e) and "None or 'balanced'" in str(e)
+        else:
+            raise AssertionError("unsupported class_weight accepted")
+
+    for cw in ("balanced", None):
+        ref = OneVsRestClassifier(LogisticRegression(solver="liblinear", C=1.0, class_weight=cw, tol=1e-8)).fit(X, Y)
+        joint = JointOvRLogistic(C=1.0, class_weight=cw, tol=1e-8, max_iter=2000).fit(csr_matrix(X), csr_matrix(Y))
+        P, Q = ref.predict_proba(X), joint.predict_proba(X)
+        assert ref.multilabel_ and P.shape == Q.shape == (len(y), L)
+        assert np.abs(P - Q).max() < 1e-3, (cw, np.abs(P - Q).max())
+        assert (P.argmax(1) == Q.argmax(1)).all()
+
+    w = ClassifierModel.train(csr_matrix(X), csr_matrix(Y), {"type": "jointlogisticregression", "kwargs": {}})
+    assert w.predict_proba(X).shape == (len(y), L) and list(w.classes()) == list(range(L))
+    m = JointOvRLogistic().fit(X, y)  # 1-D class labels
+    assert (m.predict(X) == y).mean() > 0.8 and list(m.classes_) == list(range(L))
+    print("ok")
+
+
+
+@pytest.mark.parametrize("accel, oom", [("cuda", torch.cuda.OutOfMemoryError("test")),
+                                         ("mps", RuntimeError("MPS backend out of memory (test)"))])
+def test_joint_ovr_logistic_gpu_oom_falls_back_to_cpu(monkeypatch, accel, oom):
+    """CUDA / MPS out of memory refits on CPU with the same result."""
+    rng = np.random.default_rng(1)
+    X, y = rng.normal(size=(40, 6)), np.arange(40) % 4
+    ref = JointOvRLogistic().fit(X, y)
+    real, devices = JointOvRLogistic._lbfgs, []
+
+    def lbfgs(self, Xb, S, cw, dev):
+        devices.append(dev.type)
+        if dev.type == accel:
+            raise oom
+        return real(self, Xb, S, cw, dev)
+
+    monkeypatch.setattr(classifiers, "torch_device", lambda: torch.device(accel))
+    monkeypatch.setattr(classifiers, "GPU_MIN_ENTRIES", 0)  # 40 x 4 entries: MPS is skipped below it
+    monkeypatch.setattr(JointOvRLogistic, "_lbfgs", lbfgs)
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
+    monkeypatch.setattr(torch.mps, "empty_cache", lambda: None)
+    m = JointOvRLogistic().fit(X, y)
+    assert devices == [accel, "cpu"] and np.array_equal(m.W_, ref.W_)
+
+
+def test_joint_ovr_logistic_label_blocks(monkeypatch):
+    """Label blocks (2 labels each, last one ragged) reach the joint fit's optimum, for indicator and class targets,
+    and bound the numpy (n, labels) temporaries."""
+    rng = np.random.default_rng(0)
+    L, d, per = 7, 20, 25
+    y = np.repeat(np.arange(L), per)
+    X = normalize(rng.normal(size=(L, d))[y] + 0.8 * rng.normal(size=(len(y), d)))
+    Y = csr_matrix(np.eye(L)[y])
+    joint = [JointOvRLogistic(tol=1e-8, max_iter=2000).fit(X, t) for t in (Y, y)]
+    monkeypatch.setattr(classifiers, "LABEL_BLOCK_ENTRIES", 2 * len(y))
+    for ref, t in zip(joint, (Y, y)):
+        m = JointOvRLogistic(tol=1e-8, max_iter=2000).fit(X, t)
+        assert m.W_.shape == ref.W_.shape == (d + 1, L)
+        assert np.abs(m.predict_proba(X) - ref.predict_proba(X)).max() < 1e-3
+        assert (m.predict_proba(X).argmax(1) == ref.predict_proba(X).argmax(1)).all()
+
+    n, L = 4000, 400
+    X, y = rng.normal(size=(n, 3)).astype(np.float32), rng.integers(0, L, n)
+    monkeypatch.setattr(classifiers, "LABEL_BLOCK_ENTRIES", n * 20)
+    tracemalloc.start()
+    JointOvRLogistic(max_iter=2).fit(X, y)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert peak < n * L * 4, peak  # one full float32 (n, L) matrix
+
+
+def test_joint_ovr_logistic_sparse(monkeypatch):
+    """Sparse X below SPARSE_MAX_DENSITY is fit and scored without a dense (n, d) copy and reaches the dense fit's
+    optimum; denser sparse X keeps the dense path."""
+    rng = np.random.default_rng(0)
+    n, d, L = 3000, 2000, 5
+    y = rng.integers(0, L, n)
+    X = sp_random(n, d, density=0.01, format="csr", dtype=np.float32, random_state=0)
+    X = normalize(X + csr_matrix((np.ones(n, np.float32), (np.arange(n), y)), shape=(n, d)))  # col y = signal
+    assert issparse(JointOvRLogistic._features(X)) and not issparse(JointOvRLogistic._features(csr_matrix(np.ones((3, 3)))))
+    tracemalloc.start()
+    m = JointOvRLogistic(tol=1e-6, max_iter=2000).fit(X, y)
+    P = m.predict_proba(X)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert peak < n * d * 4 / 2, peak  # half of one dense float32 (n, d) X
+    monkeypatch.setattr(classifiers, "SPARSE_MAX_DENSITY", 0)
+    ref = JointOvRLogistic(tol=1e-6, max_iter=2000).fit(X, y)
+    assert np.abs(P - ref.predict_proba(X)).max() < 1e-3 and (P.argmax(1) == ref.predict_proba(X).argmax(1)).all()

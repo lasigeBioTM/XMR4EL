@@ -1,0 +1,171 @@
+"""Cross-encoder reranker over the tree's top-K candidates.
+
+One shared model scores every (query text, label text) pair, so logits compare across labels.
+Query text = the PubTator row "mention [SEP] context"; label text = `label_texts`."""
+import inspect
+import json
+import logging
+import os
+import time
+from collections import Counter
+from copy import deepcopy
+
+import numpy as np
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
+
+from xmr4el import torch_device
+from xmr4el.data.readers import Preprocessor
+from xmr4el.eval import mention_key
+from xmr4el.xmodel import XModel
+
+logger = logging.getLogger(__name__)
+
+
+def label_texts(training_set, Y, n_strings=5):
+    """Label text j (column j of Y, `initial_labels[j]`): its `n_strings` most frequent distinct training mention
+    strings, `; `-joined. Ties keep first-seen row order, so on train_plus_ctd the annotators' strings (BC5CDR rows
+    come first) precede the CTD names. training_set = the tree's grouped texts (`XModel.training_set`)."""
+    flat = [t for group in training_set for t in group]  # row i = row i of X and Y (Preprocessor.prepare_data)
+    Y = Y.tocsc()
+    assert Y.shape[0] == len(flat), f"{len(flat)} training texts vs {Y.shape[0]} Y rows"
+    out = []
+    for j in range(Y.shape[1]):
+        rows = np.sort(Y.indices[Y.indptr[j]:Y.indptr[j + 1]])
+        counts = Counter(mention_key(flat[r]) for r in rows)
+        out.append("; ".join(s for s, _ in counts.most_common(n_strings)))
+    return out
+
+
+def top_k(score_csr, k):
+    """Per row: label indices of the k best scores, best first (fewer if the row has fewer candidates), and scores."""
+    idx, val = [], []
+    for i in range(score_csr.shape[0]):
+        s, e = score_csr.indptr[i], score_csr.indptr[i + 1]
+        order = np.argsort(-score_csr.data[s:e], kind="stable")[:k]
+        idx.append(score_csr.indices[s:e][order])
+        val.append(score_csr.data[s:e][order])
+    return idx, val
+
+
+def out_of_fold_top_k(xm, queries, docs, tree_data, folds, k, seed=0):
+    """Per query: the top k label indices (xm's, mapped by name) of a tree trained, with xm's config, on tree_data
+    minus every document of the query's fold. Folds = query documents split at random; tree_data rows of other
+    documents (e.g. CTD names) are in every fold tree. Labels only in the held-out fold are absent from its tree."""
+    if len(queries) != len(docs):
+        raise ValueError(f"{len(queries)} queries vs {len(docs)} docs")
+    ids = sorted(set(docs))
+    if not 2 <= folds <= len(ids):
+        raise ValueError(f"folds must be in [2, {len(ids)}] (query documents), got {folds}")
+    label_to_idx = {lab: i for i, lab in enumerate(xm.initial_labels)}
+    extra = sorted(set(tree_data["labels"]) - set(label_to_idx))
+    if extra:  # fold trees would rank labels the saved tree has no index for
+        raise ValueError(f"{len(extra)} tree_data labels are not in the saved tree (first: {extra[:5]})")
+    fold_of = dict(zip(np.random.default_rng(seed).permutation(ids).tolist(), np.arange(len(ids)) % folds))
+    config = {p: deepcopy(getattr(xm, p)) for p in inspect.signature(XModel).parameters if p not in ("verbose", "logger")}
+    out = [None] * len(queries)
+    for f in range(folds):
+        rows = [i for i, d in enumerate(docs) if fold_of[d] == f]
+        keep = [fold_of.get(d) != f for d in tree_data["docs"]]
+        if all(keep):
+            raise ValueError(f"fold {f}: tree data shares no document with the queries")
+        fold_tree = XModel(**config)
+        fold_tree.train(*Preprocessor.organize_pubtator_output(
+            {key: [v for v, ok in zip(vals, keep, strict=True) if ok] for key, vals in tree_data.items()}))
+        idx, _ = top_k(fold_tree.predict([queries[i] for i in rows]), k)
+        names = fold_tree.initial_labels
+        for i, top in zip(rows, idx):
+            out[i] = np.array([label_to_idx[names[j]] for j in top], dtype=int)
+        logger.info("Fold %d/%d: %d queries, %d of %d tree rows held out", f + 1, folds, len(rows),
+                    len(keep) - sum(keep), len(keep))
+    return out
+
+
+def rerank_order(tree_scores, logits, w):
+    """Top-K positions reordered by log(tree score) + w * logit, best first (w = inf: logit, ties by tree score).
+    Ranks below K are the tree's."""
+    if np.isinf(w):
+        return np.lexsort((-tree_scores, -logits))
+    return np.argsort(-(np.log(tree_scores) + w * logits), kind="stable")
+
+
+class CrossEncoderReranker:
+    """BERT-style encoder + linear head -> one logit per (query, label text) pair."""
+
+    def __init__(self, model, tokenizer, meta, max_length=96):
+        self.model, self.tokenizer, self.meta, self.max_length = model, tokenizer, meta, max_length
+        self.device = torch_device()
+        self.model.to(self.device)
+
+    @classmethod
+    def from_pretrained(cls, name, meta, max_length=96, seed=0):
+        torch.manual_seed(seed)  # before the load: the classification head is initialised randomly
+        model = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1)
+        return cls(model, AutoTokenizer.from_pretrained(name), {**meta, "seed": seed}, max_length)
+
+    def _logits(self, queries, labels):
+        enc = self.tokenizer(queries, labels, padding=True, truncation=True, max_length=self.max_length,
+                             return_tensors="pt").to(self.device)
+        return self.model(**enc).logits.squeeze(-1)
+
+    def fit(self, queries, candidates, label_text, epochs=2, rows_per_batch=4, lr=2e-5, seed=0):
+        """queries[i] with candidates[i] = K label indices, gold first; listwise softmax CE over the K."""
+        if not queries or len(queries) != len(candidates):
+            raise ValueError(f"need >= 1 row and one candidate list per query ({len(queries)} vs {len(candidates)})")
+        k = len(candidates[0])
+        if k < 2 or any(len(c) != k for c in candidates):
+            raise ValueError("every row needs the same K >= 2 candidates (K = 1 gives zero loss)")
+        rng = np.random.default_rng(seed)
+        torch.manual_seed(seed)
+        opt = torch.optim.AdamW(self.model.parameters(), lr=lr)
+        n_steps = epochs * -(-len(queries) // rows_per_batch)
+        sched = get_linear_schedule_with_warmup(opt, int(0.1 * n_steps), n_steps)
+        target = torch.zeros(rows_per_batch, dtype=torch.long, device=self.device)  # gold = position 0
+        self.model.train()
+        for epoch in range(epochs):
+            start, total = time.perf_counter(), 0.0
+            order = rng.permutation(len(queries))
+            for step, b in enumerate(range(0, len(order), rows_per_batch)):
+                rows = order[b:b + rows_per_batch]
+                logits = self._logits([queries[i] for i in rows for _ in range(k)],
+                                      [label_text[j] for i in rows for j in candidates[i]]).view(len(rows), k)
+                loss = torch.nn.functional.cross_entropy(logits, target[:len(rows)])
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                sched.step()
+                total += loss.item()
+                if (step + 1) % 100 == 0:
+                    logger.info("Reranker epoch %d step %d: loss=%.4f pairs/s=%.1f", epoch + 1, step + 1,
+                                total / (step + 1), (b + len(rows)) * k / (time.perf_counter() - start))
+            logger.info("Reranker epoch %d done: loss=%.4f elapsed=%.1fs", epoch + 1, total / (step + 1),
+                        time.perf_counter() - start)
+        self.model.eval()
+
+    @torch.no_grad()
+    def score(self, queries, labels, batch_size=64):
+        """Logit per (queries[i], labels[i]) pair, float64 array."""
+        self.model.eval()
+        out = [self._logits(queries[b:b + batch_size], labels[b:b + batch_size]).float().cpu().numpy()
+               for b in range(0, len(queries), batch_size)]
+        return np.concatenate(out).astype(np.float64) if out else np.zeros(0)
+
+    def save(self, save_dir):
+        os.makedirs(save_dir, exist_ok=False)
+        self.model.save_pretrained(save_dir)
+        self.tokenizer.save_pretrained(save_dir)
+        with open(os.path.join(save_dir, "reranker.json"), "w") as f:
+            json.dump({**self.meta, "max_length": self.max_length}, f, indent=2)
+
+    @classmethod
+    def load(cls, load_dir, tree_id):
+        """tree_id (`XModel.tree_id` of the loaded tree): refuse a reranker trained on another tree's
+        candidates/label texts (directory names can repeat or change)."""
+        with open(os.path.join(load_dir, "reranker.json")) as f:
+            meta = json.load(f)
+        if tree_id is None or meta.get("tree_id") != tree_id:
+            raise ValueError(f"reranker {load_dir} was trained on tree id {meta.get('tree_id')}, not {tree_id} "
+                             "(a tree saved without an id: load and save it again)")
+        max_length = meta.pop("max_length")
+        model = AutoModelForSequenceClassification.from_pretrained(load_dir)
+        return cls(model, AutoTokenizer.from_pretrained(load_dir), meta, max_length)

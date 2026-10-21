@@ -1,0 +1,17 @@
+/data/
+/datasets/
+/tmp/
+/test/test_data/
+/outputs/
+/.venv/
+/.ruff_cache/
+/.pytest_cache/
+/build/
+/dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.prof
+*.onnx
+.DS_Store
+.codemap
