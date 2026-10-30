@@ -21,14 +21,7 @@ files.
 
 ## How it works
 
-```mermaid
-flowchart LR
-    A["PubTator / TSV<br/>mention + context"] --> B["Encode<br/>SapBERT · char TF-IDF · context TF-IDF"]
-    B --> C["PIFA<br/>label embeddings"]
-    C --> D["Balanced k-means<br/>label tree"]
-    D --> E["Matcher per node<br/>logistic regression"]
-    E --> F["Beam search<br/>ranked concept IDs"]
-```
+![XMR4EL pipeline: read a mention with its context, encode it, embed the labels, cluster them into a tree with a matcher per node, predict by beam search](docs/images/pipeline.svg)
 
 1. **Read** PubTator annotations (or grouped TSV texts). Each annotation becomes `mention [SEP] context`
    with its concept ID as the label.
@@ -192,7 +185,8 @@ uv sync --locked --extra tui && .venv/bin/python -m xmr4el_tui    # or xmr4el-tu
 | New Experiment | `n` | Pick a dataset, build one or more model configs, review and launch a batch. `c` resumes an unfinished one. |
 | Batch Monitor | opens at launch; `b` lists batches | Execution queue, the selected tree's live log, Stop Batch. |
 
-`?` lists the keys. The TUI reads run files and starts the existing runner; it contains no training or
+`?` lists the keys; on the Dashboard, `ctrl+p` -> `Palette: …` switches colours (Notebook, the default; Notebook
+light; Classic). The TUI reads run files and starts the existing runner; it contains no training or
 evaluation code. Design: [`docs/design/tui.md`](docs/design/tui.md).
 
 ## Docker
