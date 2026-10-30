@@ -23,8 +23,7 @@ def train(X, Y, Z, cfg, min_leaf_size=2, n_clusters=3, layer=2, cut_half=False, 
     caller_config = hml.clustering_config
     original = deepcopy(caller_config)
     with patch.object(hml, "prepare_layer", wraps=hml.prepare_layer) as prepare:
-        hml.train(X_train=X, Y_train=Y, Z_train=Z, local_to_global=np.arange(L),
-                  global_to_local={i: i for i in range(L)})
+        hml.train(X_train=X, Y_train=Y, Z_train=Z, local_to_global=np.arange(L))
     assert caller_config == original == hml.clustering_config, "training mutated clustering settings"
     assert prepare.call_count == sum(len(nodes) for nodes in hml.hmodel[:-1]), "prepared children of leaves"
     assert all(m.fused_scores is None for m in hml.hmodel[-1])
@@ -106,6 +105,27 @@ def test_tree():
     # cut_half_cluster halves n_clusters below the root: 4 root clusters of 6 labels, then 2 per node
     deep = train(X, Y, Z, cfg, n_clusters=4, layer=3, cut_half=True)
     assert [m.cluster_model.c_node.shape[1] for m in deep.hmodel[1]] == [2] * 4
+
+    # omitted kwargs / {} / explicit default n_clusters (8) train the same hierarchy; caller config untouched
+    L8 = 64  # 8 root clusters of 8 labels, then 4 clusters of 2 (min_leaf_size 2)
+    c8 = rng.normal(size=(L8, d))
+    y8 = np.repeat(np.arange(L8), 4)
+    X8 = csr_matrix(normalize(c8[y8] + 0.3 * rng.normal(size=(len(y8), d))))
+    Y8 = csr_matrix((np.ones(len(y8)), (np.arange(len(y8)), y8)), shape=(len(y8), L8))
+    Z8 = LabelEmbeddingFactory.generate_PIFA(X8, Y8)
+
+    def shape(kwargs):
+        cc = {"type": "balancedkmeans"} if kwargs is None else {"type": "balancedkmeans", "kwargs": kwargs}
+        m = HierarchicalMLModel(clustering_config=cc, matcher_config=cfg["matcher_config"], min_leaf_size=2,
+                                cut_half_cluster=True, layer=3)
+        before = deepcopy(cc)
+        m.train(X_train=X8, Y_train=Y8, Z_train=Z8, local_to_global=np.arange(L8))
+        assert cc == before == m.clustering_config
+        return [[n.cluster_model.c_node.shape[1] for n in layer] for layer in m.hmodel[:-1]]
+    ref = shape({"n_clusters": 8})
+    assert ref[0] == [8] and ref[1] == [4] * 8
+    assert shape(None) == shape({}) == ref
+
     with TemporaryDirectory() as d:
         deep.save(d)
         restored = HierarchicalMLModel.load(d)
@@ -114,4 +134,3 @@ def test_tree():
     assert np.allclose(deep.predict(Xq, **kw).toarray(), restored.predict(Xq, **kw).toarray())
 
     print("ok")
-

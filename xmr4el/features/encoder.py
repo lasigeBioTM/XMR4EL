@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Tuple, Sequence
 import numpy as np
 from scipy.sparse import csr_matrix, hstack, issparse
 from sklearn.preprocessing import normalize
+from xmr4el import progress
 from xmr4el.features.vectorizers import Vectorizer
 from xmr4el.features.reduction import DimensionModel
 from xmr4el.features.transformers import Transformer, resolve_revision
@@ -76,21 +77,20 @@ class TextEncoder():
         
         # Load models
         model_files = {
-            "vectorizer_model": Vectorizer if hasattr(Vectorizer, "load") else None,
-            "dimension_model": DimensionModel if hasattr(DimensionModel, "load") else None,
+            "vectorizer_model": Vectorizer,
+            "dimension_model": DimensionModel,
             "context_vectorizer_model": Vectorizer,
             "context_dimension_model": DimensionModel,
         }
         
         for model_name, model_class in model_files.items():
             model_path = os.path.join(load_dir, model_name)
-            if os.path.exists(model_path) and model_class is not None:
+            if model_name.startswith("context_") and model.features != "sapbert_char_context":
+                continue
+            if os.path.exists(model_path):
                 setattr(model, model_name, model_class.load(model_path))
             else:
-                if model_name.startswith("context_") and model.features != "sapbert_char_context":
-                    setattr(model, model_name, None)
-                else:
-                    raise Exception("Something with the loading the models is not right")
+                raise FileNotFoundError(f"Missing fitted encoder component: {model_path}")
             
         return model
     
@@ -104,18 +104,8 @@ class TextEncoder():
         
         model = DimensionModel.fit(X_emb, dim_config)
         
-        if model is None:
-            return X_emb, None
-        
         reduced_emb = model.transform(X_emb)
         return reduced_emb, model
-    
-    @staticmethod 
-    def _predict_dimension(X_emb: csr_matrix, dim_model: DimensionModel) -> csr_matrix:
-        """Project embeddings using an existing dimensionality reduction model."""
-        if dim_model is None:
-            raise AttributeError("No model found in dim_model")
-        return dim_model.transform(X_emb)
     
     @staticmethod
     def _encode_text_using_text_vectorizer(
@@ -130,22 +120,13 @@ class TextEncoder():
         return sparse_emb, model
     
     @staticmethod
-    def _predict_text_using_text_vectorizer(
-        X_test: Sequence[str], vec_model: Vectorizer
-    ) -> csr_matrix:
-        """Transform texts using an existing vectorizer."""
-        if vec_model is None:
-            raise AttributeError("No model found in vec_model")
-        return vec_model.transform(X_test)
-    
-    @staticmethod
     def _encode_text_using_transformer(
-        X_test: Sequence[str], transformer_config: Optional[Dict[str, Any]]
+        X_test: Sequence[str], transformer_config: Optional[Dict[str, Any]], events: bool = False
     ) -> Any:
         """Embed texts with the configured transformer (no fitting: same call for train and query)."""
         if transformer_config is None:
             raise AttributeError("features 'sapbert_char_context' needs a transformer_config")
-        _, transformer_embeddings = Transformer.transform(X_test, transformer_config)
+        _, transformer_embeddings = Transformer.transform(X_test, transformer_config, events=events)
         return transformer_embeddings
 
     def _tfidf_block(self, texts: Sequence[str], prefix: str, fit: bool):
@@ -157,9 +138,19 @@ class TextEncoder():
             setattr(self, f"{prefix}vectorizer_model", vec)
             setattr(self, f"{prefix}dimension_model", dim)
             return X
-        X = self._predict_text_using_text_vectorizer(texts, getattr(self, f"{prefix}vectorizer_model"))
+        X = getattr(self, f"{prefix}vectorizer_model").transform(texts)
         dim = getattr(self, f"{prefix}dimension_model")
-        return X if dim is None else self._predict_dimension(X, dim)
+        return dim.transform(X)
+
+    @staticmethod
+    def _part(fit, name, step):
+        """step() as encode part `name`: start/complete progress events when fitting (prediction emits none)."""
+        if fit:
+            progress(stage="encode", part=name, phase="start")
+        out = step()
+        if fit:
+            progress(stage="encode", part=name, phase="complete")
+        return out
 
     def _validate_features(self):
         if self.features not in FEATURES:
@@ -176,17 +167,23 @@ class TextEncoder():
         """
         self._validate_features()
         if self.features == "tfidf":
-            return normalize(self._tfidf_block(X_text, "", fit))
+            return self._part(fit, "mention_tfidf", lambda: normalize(self._tfidf_block(X_text, "", fit)))
         if any("[SEP]" not in t for t in X_text):
             raise ValueError("features 'sapbert_char_context' needs 'mention [SEP] context' input")
         mentions, contexts = zip(*(t.split("[SEP]", 1) for t in X_text)) if X_text else ((), ())
         if fit:  # the saved encoder keeps the commit it was fitted with
             self.transformer_config = resolve_revision(self.transformer_config)
         # TF-IDF first: an empty vocabulary (e.g. every context empty) fails before the transformer encodes
-        char, context = self._tfidf_block(list(mentions), "", fit), self._tfidf_block(list(contexts), "context_", fit)
-        blocks = [self._encode_text_using_transformer(list(mentions), self.transformer_config), char, context]
+        char = self._part(fit, "mention_tfidf", lambda: self._tfidf_block(list(mentions), "", fit))
+        context = self._part(fit, "context_tfidf", lambda: self._tfidf_block(list(contexts), "context_", fit))
+        blocks = [self._part(fit, "transformer", lambda: self._encode_text_using_transformer(
+            list(mentions), self.transformer_config, events=fit)), char, context]
         if fit:  # an SVD can be skipped or give fewer columns than its n_components
             self.block_widths = [b.shape[1] for b in blocks]
+        return self._part(fit, "assemble", lambda: self._assemble(blocks))
+
+    @staticmethod
+    def _assemble(blocks):
         blocks = [normalize(b) for b in blocks]
         X = hstack(blocks, format="csr") if any(issparse(b) for b in blocks) else np.hstack(blocks)
         return normalize(X, copy=False)

@@ -1,39 +1,47 @@
 # XMR4EL
 
-Extreme multi-label ranking (XMR) for biomedical entity linking. XMR4EL links a mention, given with its
-document context, to a concept ID from a large label space (MeSH, OMIM, UMLS CUIs, ...). It clusters the
-labels into a tree, trains a matcher per tree node, and searches the tree with a beam at prediction time.
+Extreme multi-label ranking (XMR) for biomedical entity linking. Given a mention and its document context,
+XMR4EL ranks concept IDs from a large label space (MeSH, OMIM, UMLS CUIs, ...). It clusters the labels into a
+tree, trains a matcher per tree node, and searches the tree with a beam at prediction time.
 
-It is a research codebase: training and evaluation run from scripts on local files. It does not detect
-mentions; prediction takes mentions you supply.
+XMR4EL links mentions you supply; it does not detect them. Training and evaluation run from scripts on local
+files.
+
+| Part | Contents |
+|---|---|
+| `xmr4el/` | Library: read data, encode, cluster, train the tree, predict, evaluate. |
+| `scripts/` | `train.py`, `evaluate.py`, `run_experiment.py`, data conversion, diagnostics, 1-NN baselines ([guide](scripts/README.md)). |
+| `xmr4el_tui/` | Optional terminal UI to browse, compare and launch runs. |
+| `configs/` | Model configs and experiment specs (JSON). |
+| `docs/` | [Pipeline behavior, future work, TUI design](docs/README.md). |
 
 ## How it works
 
 1. **Read** PubTator annotations (or grouped TSV texts). Each annotation becomes `mention [SEP] context`
    with its concept ID as the label.
 2. **Encode** each row. The default (`"sapbert_char_context"`) joins three L2-normalised blocks:
-   SapBERT([CLS]) of the mention, character TF-IDF -> SVD of the mention, and TF-IDF -> SVD of the
-   context window.
+   SapBERT [CLS] of the mention, character TF-IDF -> SVD of the mention, and TF-IDF -> SVD of the context
+   window.
 3. **Embed labels** with PIFA: the normalised sum of each label's training rows.
-4. **Cluster** the label embeddings into a hierarchy with balanced k-means.
-5. **Train** one-vs-rest L2 logistic matchers: per internal node over its child clusters, per leaf over
-   its labels.
-6. **Predict** by beam search from the root; each visited leaf contributes its best labels, scored by leaf
+4. **Cluster** the label embeddings into a tree with balanced k-means.
+5. **Train** one-vs-rest L2 logistic matchers: per internal node over its child clusters, per leaf over its
+   labels.
+6. **Predict** by beam search from the root. Each visited leaf contributes its best labels, scored by leaf
    probability x routing-path probability, optionally reweighted by mention similarity to the label's
    training rows (`knn_beta`).
 
 ## Installation
 
-Python 3.12 or later and [uv](https://docs.astral.sh/uv/) (macOS: `brew install uv`):
+Python 3.12+ and [uv](https://docs.astral.sh/uv/):
 
 ```bash
 git clone https://github.com/lasigeBioTM/XMR4EL.git xmr4el && cd xmr4el
-uv sync --locked
+uv sync --locked                 # add --extra tui for the terminal UI
 ```
 
-`uv.lock` pins every dependency. On Linux, torch comes from the PyTorch CUDA 12.6 index (the PyPI Linux
-build needs CUDA 13, NVIDIA driver >= 580). Encoding and matcher training use CUDA when available, then Apple
-MPS, otherwise CPU. The first transformer use downloads the model from the Hugging Face Hub.
+`uv.lock` pins every dependency. On Linux, torch comes from the PyTorch CUDA 12.6 index. Encoding and matcher
+training use CUDA when available, then Apple MPS, otherwise CPU. The first transformer use downloads the
+model from the Hugging Face Hub.
 
 Commands below use `.venv/bin/python`; inside the Docker image use `python3`.
 
@@ -50,10 +58,10 @@ Train on a PubTator corpus, then evaluate the saved tree on a held-out split:
   -test_path datasets/ncbi_disease/dev.pubtator
 ```
 
-`-ds_len N` trains on the first `N` label groups only (a fast smoke run); it counts labels, not documents
-or mentions. Trees are saved to `outputs/saved_trees/xmodel_<timestamp>/`.
+Trees are saved to `outputs/saved_trees/xmodel_<timestamp>/`. `-ds_len N` trains on the first `N` labels only
+(a fast smoke run).
 
-Predict from Python:
+From Python:
 
 ```python
 from xmr4el.xmodel import XModel
@@ -64,12 +72,14 @@ best = model.initial_labels[scores[0].toarray().argmax()]
 ```
 
 `scores` is a sparse (queries x labels) matrix; column `j` is `model.initial_labels[j]` (sorted label IDs).
-Search settings default to the tree's `predict_config`; `beam_size`, `topk` and `knn_beta` keyword
-arguments override them.
+Search settings default to the tree's `predict_config`; the `beam_size`, `topk`, `knn_beta` and
+`leaf_candidates` keyword arguments override them.
 
 ## Input formats
 
-Datasets are not part of the repository: put them under `datasets/` or `data/`.
+Datasets are not part of the repository; put them under `datasets/` or `data/`. Download and conversion
+recipes for NCBI-disease, BC5CDR, BioRED, NLM-Chem, MedMentions and CTD dictionaries are in
+[`scripts/README.md`](scripts/README.md).
 
 ### PubTator
 
@@ -80,16 +90,15 @@ Datasets are not part of the repository: put them under `datasets/` or `data/`.
 12345	12	18	stroke	Disease	D020521
 ```
 
-Title and abstract lines, then one tab-separated annotation per line: document ID, start, end, mention,
-type, concept ID. Offsets index `title + " " + abstract`. The context is that text, or the
-`context_window` words on each side of the mention (10 in both provided configs).
+Title and abstract lines, then one tab-separated annotation per line: document ID, start, end, mention, type,
+concept ID. Offsets index `title + " " + abstract`. The context is the `context_window` words on each side of
+the mention (10 in the provided configs).
 
-- ID `-1` is skipped. A composite ID `D1|D2` becomes one example per ID, with texts from column 7; a
-  composite without column 7 is skipped (BC5CDR conventions).
-- An annotation without a concept ID is skipped with a warning (`file:line`). Relation lines are ignored.
+- ID `-1` is skipped. A composite ID `D1|D2` becomes one example per ID, with texts from column 7; a composite
+  without column 7 is skipped (BC5CDR conventions).
+- An annotation without a concept ID is skipped with a warning. Relation lines are ignored.
 - A mention that differs from the text at its offsets is kept, with a warning.
-- An abstract or annotation that does not belong to the current document, or offsets outside it, stop
-  the load with `file:line`.
+- Annotations outside their document, or offsets outside the text, stop the load with `file:line`.
 
 ### Grouped TSV
 
@@ -104,12 +113,8 @@ Plain text has no `[SEP]`, so it needs `"features": "tfidf"`:
   -model_config configs/local_tfidf_config.json
 ```
 
-The loader rejects too few labels and drops labels beyond the number of groups: check that the two files
-are aligned.
-
-Conversion tools: `scripts/split_pubtator.py` (train/dev/test splits), `scripts/to_pubtator.py` (filter
-PubTator, convert BioC XML), `scripts/dict_to_pubtator.py` (CTD dictionaries as PubTator training rows).
-Dataset sources and conversion commands are in `docs/results.md`.
+The loader rejects too few labels and drops labels beyond the number of groups: check that the two files are
+aligned.
 
 ## Evaluation
 
@@ -118,18 +123,24 @@ Dataset sources and conversion commands are in `docs/results.md`.
 ```
 
 Reports acc@1, MRR, recall@k, candidate recall (`R@cand`) and vocabulary coverage. Metrics are computed on
-mentions whose gold label has training text (coverage is reported); `acc@1_all` counts the others as misses.
-`-beam_size`, `-topk` and `-knn_beta` override the saved search settings. `topk 0` keeps every candidate
-(at most 100 per visited leaf); with `topk > 0`, `R@cand` also counts ranking losses.
+mentions whose gold label has training text; `acc@1_all` counts the others as misses. `-beam_size`, `-topk`,
+`-knn_beta` and `-leaf_candidates` override the saved search settings; `-train_path` adds a seen/unseen
+mention-string breakdown.
 
-`scripts/run_experiment.py -spec configs/experiments/<name>.json` trains and evaluates one spec and records
-the run (spec, metrics, git state, input hashes, package versions) under `outputs/runs/`. Recorded results
-are in `docs/results.md`.
+### Tracked experiments
+
+```bash
+.venv/bin/python scripts/run_experiment.py -spec configs/experiments/ncbi_disease.json
+```
+
+Trains and evaluates one spec and records the run under `outputs/runs/<timestamp>_<name>/`: spec, config, git
+state, input hashes, package versions, log and `metrics_<split>.json`. `-xmodel_path <tree>` reuses a saved
+tree (e.g. the `*_test.json` specs). An input file that changes during the run fails it.
 
 ## Configuration
 
-Model configs are JSON: `configs/xmr4el_base_config.json` (MedMentions) and
-`configs/xmr4el_bc5cdr_config.json` (BC5CDR, also used for NCBI-disease, BioRED and NLM-Chem).
+`configs/xmr4el_base_config.json` (MedMentions) and `configs/xmr4el_bc5cdr_config.json` (BC5CDR, also used for
+NCBI-disease, BioRED and NLM-Chem).
 
 | Key | Meaning |
 |---|---|
@@ -138,30 +149,39 @@ Model configs are JSON: `configs/xmr4el_base_config.json` (MedMentions) and
 | `abbrev_expansion` | `"append"` / `"replace"`: expand in-document abbreviations in mentions |
 | `context_window` | words on each side of the mention used as context |
 | `vectorizer_config`, `context_vectorizer_config` | TF-IDF of the mention / context |
-| `dimension_config`, `context_dimension_config` | SVD of those blocks (768 columns each in both configs) |
-| `clustering_config` | `balancedkmeans`: `n_clusters` per node, `iter_limit`, `seed` |
-| `depth`, `min_leaf_size` | fixed tree depth: every internal node is split; clusters below `min_leaf_size` labels are merged into the nearest larger one, and training fails if a node cannot form two clusters of that size (small datasets: lower `depth`, `min_leaf_size` or `n_clusters`) |
+| `dimension_config`, `context_dimension_config` | SVD of those blocks |
+| `clustering_config` | `balancedkmeans`: `n_clusters` per node, `iter_limit`, `refine_iter`, `seed` |
+| `depth`, `min_leaf_size` | fixed tree depth; clusters below `min_leaf_size` labels merge into the nearest larger one (small datasets: lower `depth`, `min_leaf_size` or `n_clusters`) |
 | `matcher_config` | `jointlogisticregression`: `C`, `class_weight`, `tol`, `max_iter` |
+| `cut_half_cluster` | `true`: below the root, each layer halves `n_clusters` (minimum 2) |
 | `predict_config` | default search: `beam_size`, `topk`, `knn_beta`; saved with the tree |
 
-Training resolves the transformer `revision` (default `main`) to its commit hash, offline to the locally
-cached one; the saved tree keeps the hash, so queries are encoded by the trained checkpoint. Embeddings are
-cached in `outputs/cache/transformers/` keyed by model, revision, pooling, length, dtype and texts;
-`XMR4EL_TRANSFORMER_CACHE=0` turns the cache off.
+The transformer `revision` (default `main`) is resolved to a commit hash at training and saved with the tree.
+Embeddings are cached in `outputs/cache/transformers/`; `XMR4EL_TRANSFORMER_CACHE=0` turns the cache off.
+
+## Terminal UI
+
+```bash
+uv sync --locked --extra tui && .venv/bin/python -m xmr4el_tui    # or xmr4el-tui; --root <repo> elsewhere
+```
+
+| Screen | Key | Purpose |
+|---|---|---|
+| Dashboard | start | Saved trees by dataset, their evaluations and runs; active runs. |
+| Run Monitor | `enter` on a run | Pipeline stages, resources, live logs; cancel runs this TUI launched. |
+| Results | `r` on an evaluation | Compare up to four evaluations of the same test file (VERIFIED / CAUTION / INCOMPATIBLE). |
+| New Experiment | `n` | Pick a dataset, build one or more model configs, review and launch a batch. |
+
+`?` lists the keys. The TUI reads run files and starts the existing runner; it contains no training or
+evaluation code. Design: [`docs/design/tui.md`](docs/design/tui.md).
 
 ## Docker
 
-For a remote server with an NVIDIA GPU (NVIDIA Container Toolkit), build the dependency image once:
+For a server with an NVIDIA GPU (NVIDIA Container Toolkit), build the dependency image once (rebuild after
+`pyproject.toml`, `uv.lock` or the Dockerfile change); the code is mounted from the checkout at `/app`:
 
 ```bash
-docker build -f xmr4el.dockerfile -t xmr4el .
-```
-
-It installs the locked dependencies in `/opt/venv`; the code is mounted from the checkout at `/app`.
-Rebuild only after `pyproject.toml`, `uv.lock` or the Dockerfile changes. Run training detached (drop
-`--gpus all` for CPU):
-
-```bash
+docker build -f xmr4el.dockerfile -t xmr4el . && \
 mkdir -p "$HOME/.cache/huggingface" && \
 docker run -d --name xmr4el-train --init --gpus all --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$PWD,dst=/app" \
@@ -170,51 +190,38 @@ docker run -d --name xmr4el-train --init --gpus all --user "$(id -u):$(id -g)" \
 docker logs -f xmr4el-train
 ```
 
-The Hugging Face mount keeps downloaded models between runs; `--user` keeps outputs owned by you.
-`docker wait xmr4el-train` prints the exit code (0 = success); `docker rm xmr4el-train` before the next run.
-For an interactive shell, replace `-d` with `-it` and the command with `/bin/bash`.
+`docker wait xmr4el-train` prints the exit code; `docker rm xmr4el-train` before the next run. Drop
+`--gpus all` for CPU.
 
 ## Limitations
 
 - **Mentions must be given.** There is no mention detection.
-- **Labels need training text.** A label without a training row has no PIFA embedding and is never predicted;
-  add dictionary names (`scripts/dict_to_pubtator.py`) to cover more labels.
-- **Dense memory.** Features, PIFA label embeddings and matcher weights are dense float32. With the provided
-  configs the features have at most 2304 columns (SVD). A TF-IDF block without SVD (its `n_components` above
-  the vocabulary size) keeps the features, matchers and kNN index sparse, but the label embeddings stay labels x features and each node's weights features x
-  children, so reduce the feature dimension for large vocabularies.
+- **Labels need training text.** A label without training rows is never predicted; add dictionary names
+  (`scripts/dict_to_pubtator.py`) to cover more labels.
+- **Dense memory.** Features, label embeddings and matcher weights are dense float32; reduce the feature
+  dimension (SVD) for large vocabularies.
 - **GPU runs are not bit-reproducible.** Seeds are fixed, but retraining on GPU moves a few predictions.
-- **Old saved trees are not migrated.** A tree saved by an older layout does not load; retrain it.
+- **Saved trees are not migrated.** A tree saved by an older version does not load; retrain it.
 
 ## Security
 
 Saved trees are Python pickles: `XModel.load` can run arbitrary code from the files it loads. Load only trees
-you created or trust. XMR4EL itself never calls `torch.load`, `torch.jit` or `torch.export`; transformer
-weights load through Hugging Face `transformers`. Model downloads come from the Hugging Face Hub; pin
-`revision` in the config to fix the checkpoint.
+you created or trust. Pin `revision` in the config to fix the downloaded transformer checkpoint.
 
 ## Development
 
 Checks on synthetic data (no corpus needed):
 
 ```bash
+uv sync --locked --extra tui && \
 .venv/bin/python -m pytest -q && \
-uvx ruff check xmr4el scripts tests && \
+uvx ruff check xmr4el xmr4el_tui scripts tests && \
 .venv/bin/python scripts/evaluate.py -selfcheck
 ```
 
-CI (`.github/workflows/ci.yml`) runs ruff, pytest and an installed-wheel smoke test on CPU.
-
-Layout:
-
-- `xmr4el/data/`: PubTator / TSV readers, splits and export.
-- `xmr4el/features/`: text encoder, TF-IDF, SVD, transformer embeddings, PIFA.
-- `xmr4el/hierarchy/`: clustering, tree training, beam search, persistence.
-- `xmr4el/learning/`: one-vs-rest logistic matchers, mention-kNN scoring.
-- `xmr4el/xmodel.py`: public API (`XModel.train`, `predict`, `save`, `load`); `xmr4el/eval.py`: metrics.
-- `scripts/`: train, evaluate, experiment runner, data conversion, 1-NN baselines.
-- `configs/`: model configs and experiment specs. `docs/`: pipeline notes (`pipeline.md`), results (`results.md`), future work (`future_work.md`).
+CI (`.github/workflows/ci.yml`) runs ruff, pytest and an installed-wheel smoke test on CPU. Test layout:
+[`tests/README.md`](tests/README.md).
 
 ## License
 
-MIT; see `LICENSE`.
+MIT; see [`LICENSE`](LICENSE).

@@ -1,6 +1,6 @@
 # Future work and where to pick up
 
-State at release (2026-10-20). Numbers are from the five benchmark trees in `docs/results.md`
+State at release (2026-10-20). Numbers are from the five benchmark trees
 (`configs/xmr4el_bc5cdr_config.json`, train + CTD dictionary, beam 10, leaf candidates 100, knn beta 10).
 A "row" is one eval mention with a gold ID in the tree's vocabulary; "+N rows" = N more top-1 hits.
 Same-code GPU retrains move 10-20 rows, so smaller gaps are noise.
@@ -54,8 +54,7 @@ uv sync --locked
 .venv/bin/python -m pytest -q && uvx ruff check xmr4el scripts tests && .venv/bin/python scripts/evaluate.py -selfcheck
 ```
 
-- Data: corpora and CTD are not in the repo; `docs/results.md` lists the sources and the conversion commands into
-  `datasets/`.
+- Data: corpora and CTD are not in the repo; `scripts/README.md` has the conversion commands into `datasets/`.
 - One set, train + dev: `python scripts/run_experiment.py -spec configs/experiments/bc5cdr_chemical.json`.
   Test on the same tree, eval-only: `-spec configs/experiments/bc5cdr_chemical_test.json -xmodel_path <tree>`.
   Run dirs record the spec, config, git state, input hashes and metrics (`outputs/runs/`).
