@@ -1,6 +1,8 @@
 # Pipeline reference
 
-What is implemented, synthetic checks and pipeline observations.
+What is implemented, synthetic checks, pipeline observations and the external-baseline notes.
+Backend selection is explicit; internal adapter layouts changed in the 2026-10-23 cleanup, so older saved
+trees need retraining.
 
 ## What is implemented
 
@@ -18,11 +20,14 @@ What is implemented, synthetic checks and pipeline observations.
 Implemented does not mean validated on dev. Saved trees retain their trained classifiers and leaf
 structure; loading them with current code does not apply training changes retroactively.
 
-Synthetic checks:
+Synthetic checks (all pass, 2026-10-07):
 
 ```bash
 .venv/bin/python -m pytest tests/
 .venv/bin/python scripts/evaluate.py -selfcheck
+.venv/bin/python scripts/diagnose_routing.py -selfcheck
+.venv/bin/python scripts/diagnose_unseen.py -selfcheck
+.venv/bin/python scripts/experiments/screen_features.py -selfcheck
 ```
 
 `tests/integration/test_label_mapping.py` covers the mapping through the real `XModel.train/save/load` paths
@@ -44,3 +49,18 @@ Observations and hypotheses, not a mandatory sequence of fixes.
 
 The path score is a fixed route-score rule. A learned weight needs separate justification and dev
 tuning. Neither route weighting nor `log_loss` alone establishes calibration across leaves.
+
+## Scale and external baseline
+
+- PECOS baseline: run it on the same split, label mapping and instance features. Record hierarchy,
+  negative sampling, scoring, search budget, runtime and memory differences. Similar parameter names
+  do not establish equivalent algorithms.
+- Custom layer feature augmentation remains in `prepare_layer`; the proposed scoring/matcher changes
+  do not make XMR4EL differ from PECOS only by its ranker. Treat this as a system comparison unless
+  other differences are explicitly controlled.
+- Use PECOS `-threshold 0`: its default weight pruning (0.1) cost it 0.075 acc@1 on BC5CDR dev.
+- MedMentions st21pv is the main dataset; BC5CDR is also evaluated (2026-10-06). Report actual training-label count and dev/test coverage;
+  the dataset's advertised label count is not automatically the model vocabulary. Reserve test
+  evaluation for the selected configuration. Consider MedMentions/full only if scaling is needed.
+
+No broad rewrite, learned score calibration, or additional encoder dependency is scheduled.

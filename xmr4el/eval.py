@@ -1,13 +1,17 @@
 """Evaluation metrics shared by the evaluate, run_experiment and diagnostic scripts."""
+import hashlib
+import json
 import time
 from collections import Counter, defaultdict
 
 import numpy as np
 from scipy.sparse import csr_matrix
 
+from xmr4el import progress
 from xmr4el.data.readers import Preprocessor
 
 RECALL_KS = (5, 10, 20, 50, 100)
+EVAL_PROTOCOL = 1  # metric definitions of evaluate_tree: bump when one changes (the TUI gives deltas only between equal ones)
 
 
 def mention_key(text):
@@ -81,25 +85,40 @@ def string_breakdown(test_texts, gold, tree_top1, train_pairs):
 
 
 def evaluate_tree(xm, tree, test_path, train_path=None, beam_size=None, topk=None, knn_beta=None,
-                  leaf_candidates=None):
+                  leaf_candidates=None, events=None):
     """Rank the PubTator `test_path` with the loaded tree `xm` (named `tree`); search settings left None come from
     its predict_config. Rows whose gold label is not in the tree are dropped (`rows` of `rows_total` kept).
     Returns (metrics, state): metrics is JSON-ready (acc@1, MRR, R@k, R@cand, with `train_path` the mention-string
-    breakdown and hybrid); state = the ranked rows for the reranker (None if no row is kept)."""
+    breakdown and hybrid); state = the ranked rows for the reranker (None if no row is kept). `events` (e.g.
+    {"split": "dev"}): emit eval part events data / predict / metrics with these fields (tui.md §8); None: none."""
+    part = (lambda name, phase: progress(stage="eval", part=name, phase=phase, **events)) if events is not None \
+        else (lambda name, phase: None)
+    part("data", "start")
     abbrev = xm.abbrev_expansion  # train side too: same dictionary keys
     test = Preprocessor.load_pubtator_file(test_path, window=xm.context_window, abbrev=abbrev)
     gold, texts = filter_labels_and_inputs(test["corpus"], test["labels"], xm.initial_labels)
     labels = np.array(xm.initial_labels)
+    # Evaluated population: [loaded row position, gold label] of every kept row, in order (TUI comparability)
+    allowed = set(xm.initial_labels)
+    population = [[i, y] for i, y in enumerate(test["labels"]) if y in allowed]
     m = {"tree": tree, "test_path": test_path, "train_path": train_path, "labels": len(labels),
-         "features": xm.features, "rows": len(gold), "rows_total": len(test["labels"]),
-         "distinct_gold": len(set(gold))}
+         "features": xm.features, "rows": len(gold), "rows_total": len(test["labels"]), "eval_protocol": EVAL_PROTOCOL,
+         "distinct_gold": len(set(gold)),
+         "population_sha256": hashlib.sha256(json.dumps(population).encode()).hexdigest(),
+         "preprocessing": {"context_window": xm.context_window, "abbrev_expansion": abbrev}}
     m["search"] = xm.resolve_predict_config(beam_size=beam_size, topk=topk, knn_beta=knn_beta,
                                             leaf_candidates=leaf_candidates)
+    part("data", "complete")
     if not gold:
+        if m["rows_total"]:
+            m["acc@1_all"] = 0.0  # defined: every loaded row is a miss (acc@1 is undefined)
         return m, None
+    part("predict", "start")
     start = time.perf_counter()
     scores = xm.predict(texts, **m["search"])
     seconds = time.perf_counter() - start
+    part("predict", "complete")
+    part("metrics", "start")
     m["predict_seconds"] = round(seconds, 1)
     m["ms_per_query"] = round(1000 * seconds / len(gold), 2)  # batch predict incl. encoding
     label_to_idx = {lab: i for i, lab in enumerate(labels)}
@@ -120,14 +139,22 @@ def evaluate_tree(xm, tree, test_path, train_path=None, beam_size=None, topk=Non
         b = string_breakdown(texts, gold, top1, train_pairs)
         m["hybrid"] = float(b.pop("hybrid"))
         m["hybrid_all"] = m["hybrid"] * len(gold) / len(test["labels"])
-        m["strings"] = {k: dict(zip(("n", "tree", "dict", "either"), (int(v[0]), *map(float, v[1:]))))
+        # an empty group's rates are undefined: null, never 0
+        m["strings"] = {k: dict(zip(("n", "tree", "dict", "either"),
+                                    (int(v[0]), *(float(x) if v[0] else None for x in v[1:]))))
                         for k, v in b.items()}
         # routed = gold among the candidates after topk (topk > 0 also counts ranking losses); a group's misses = (1 - routed) lost in routing + the rest ranked wrong
         n_lab = np.array([len(c) for c in train_string_labels(texts, train_pairs)])
         for k, g in {"all": n_lab >= 0, "seen, 1 label": n_lab == 1, "seen, >1 label": n_lab > 1,
                      "unseen string": n_lab == 0}.items():
-            m["strings"][k]["routed"] = float((ranks[g] > 0).mean()) if g.any() else 0.0
+            m["strings"][k]["routed"] = float((ranks[g] > 0).mean()) if g.any() else None
+        # effective dictionary per evaluated row: [loaded row position, train labels of its string, dictionary answer].
+        # Equal hashes = equal seen/unseen groups and dictionary answers (vocabulary and abbreviations included).
+        m["strings_sha256"] = hashlib.sha256(json.dumps(
+            [[i, len(c), c.most_common(1)[0][0] if c else None]
+             for (i, _), c in zip(population, train_string_labels(texts, train_pairs), strict=True)]).encode()).hexdigest()
     state = {"scores": scores, "texts": texts, "gold": gold, "ranks": ranks, "train_pairs": train_pairs}
+    part("metrics", "complete")
     return m, state
 
 
@@ -150,8 +177,9 @@ def format_metrics(m):
     if "strings" in m:
         lines += ["", "acc@1 by mention string (dict = most frequent train label for the exact string)",
                   f"  {'':16s} {'n':>6s} {'share':>6s} {'tree':>7s} {'dict':>7s} {'either':>7s} {'routed':>7s}"]
-        lines += [f"  {k:16s} {g['n']:6d} {g['n'] / n:6.3f} {g['tree']:7.4f} {g['dict']:7.4f} {g['either']:7.4f}"
-                  f" {g['routed']:7.4f}" for k, g in m["strings"].items()]
+        lines += [f"  {k:16s} {g['n']:6d} {g['n'] / n:6.3f}" + "".join(
+            f" {g[c]:7.4f}" if g[c] is not None else f" {'-':>7s}" for c in ("tree", "dict", "either", "routed"))
+                  for k, g in m["strings"].items()]
         lines.append(f"  hybrid (dict if string seen, else tree): {m['hybrid']:.4f}   (all rows: {m['hybrid_all']:.4f})")
     return "\n".join(lines)
 

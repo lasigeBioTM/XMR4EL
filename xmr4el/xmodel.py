@@ -17,7 +17,7 @@ from typing import Optional
 from xmr4el.features.label_embeddings import LabelEmbeddingFactory
 from xmr4el.data.readers import Preprocessor
 from xmr4el.features.encoder import FEATURES, TextEncoder
-from xmr4el.hierarchy.clusterers import BalancedKMeans
+from xmr4el.hierarchy.clusterers import ClusteringModel
 from xmr4el.hierarchy.tree import HierarchicalMLModel, rank_rows
 from xmr4el.learning.classifiers import ClassifierModel
 from xmr4el.learning.scoring import knn_index, label_max_cos
@@ -113,8 +113,8 @@ class XModel:
         # learner settings fail here, not after encoding
         if matcher_config:
             ClassifierModel.init_model(matcher_config)
-        if (clustering_config or {}).get("type") == "balancedkmeans":
-            BalancedKMeans.check_config(clustering_config.get("kwargs", {}))
+        if clustering_config:
+            ClusteringModel.check_config(clustering_config)
         
         self.min_leaf_size = min_leaf_size
         self.cut_half_cluster = cut_half_cluster
@@ -172,7 +172,7 @@ class XModel:
                     n = len(obj)
                     return f"{type(obj).__name__}(len={n})"
                     
-                # for numpy arrays / pandas objects show shape/len if possible
+                # Arrays show shape without printing their contents.
                 if hasattr(obj, "shape"):
                     return f"{type(obj).__name__}(shape={getattr(obj, 'shape')})"
                 
@@ -317,7 +317,8 @@ class XModel:
         X_processed, Y_label_to_indices = Preprocessor.prepare_data(X_text, Y_text)
         
         start = time.perf_counter()
-        self.logger.info("Encoding started: rows=%d features=%s", len(X_processed), self.features)
+        self.logger.info("Encoding started: rows=%d features=%s", len(X_processed), self.features,
+                         extra={"event": {"stage": "encode", "phase": "start", "rows": len(X_processed)}})
         
         # Encode X_processed
         text_encoder = TextEncoder(
@@ -333,10 +334,11 @@ class XModel:
         
         X_emb = text_encoder.encode(X_processed)
         self.transformer_config = text_encoder.transformer_config  # revision resolved to the commit
-        self.logger.info("Encoding completed: shape=%s elapsed=%.1fs", X_emb.shape, time.perf_counter() - start)
+        self.logger.info("Encoding completed: shape=%s elapsed=%.1fs", X_emb.shape, time.perf_counter() - start,
+                         extra={"event": {"stage": "encode", "phase": "complete"}})
 
         start = time.perf_counter()
-        self.logger.info("Label embeddings started: method=PIFA")
+        self.logger.info("Label embeddings started: method=PIFA", extra={"event": {"stage": "labels", "phase": "start"}})
         
         Y_label_matrix = LabelEmbeddingFactory.generate_label_matrix(Y_label_to_indices)
         
@@ -346,7 +348,8 @@ class XModel:
         self.initial_labels = classes.tolist()
         Z = LabelEmbeddingFactory.generate_PIFA(X_emb, Y_binary)
         self.logger.info("Label embeddings completed: labels=%d shape=%s elapsed=%.1fs",
-                         len(classes), Z.shape, time.perf_counter() - start)
+                         len(classes), Z.shape, time.perf_counter() - start,
+                         extra={"event": {"stage": "labels", "phase": "complete", "labels": len(classes)}})
         
         return X_emb, Y_binary, Z
     
@@ -365,10 +368,10 @@ class XModel:
 
         n_labels = self.Z.shape[0]
         local_to_global = np.arange(n_labels, dtype=int)
-        global_to_local = {g: i for i, g in enumerate(local_to_global)}
 
         hierarchy_start = time.perf_counter()
-        self.logger.info("Hierarchy started: depth=%d labels=%d", self.depth, n_labels)
+        self.logger.info("Hierarchy started: depth=%d labels=%d", self.depth, n_labels,
+                         extra={"event": {"stage": "hierarchy", "phase": "start", "labels": n_labels}})
 
         hml = HierarchicalMLModel(
             clustering_config=self.clustering_config,
@@ -383,12 +386,12 @@ class XModel:
             X_train=self.X,
             Y_train=self.Y,
             Z_train=self.Z,
-            local_to_global=local_to_global,
-            global_to_local=global_to_local
+            local_to_global=local_to_global
         )
 
         self.model = hml
-        self.logger.info("Hierarchy completed: elapsed=%.1fs", time.perf_counter() - hierarchy_start)
+        self.logger.info("Hierarchy completed: elapsed=%.1fs", time.perf_counter() - hierarchy_start,
+                         extra={"event": {"stage": "hierarchy", "phase": "complete"}})
         self.logger.info("Training completed: elapsed=%.1fs", time.perf_counter() - start)
         
         

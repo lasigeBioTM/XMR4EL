@@ -1,0 +1,778 @@
+/* One style for every screen; only theme variables (app.THEME), so a later theme needs no CSS change. */
+
+Screen {
+    background: $background;
+}
+
+TopBar {
+    dock: top;
+    height: 1;
+    margin-bottom: 1;
+    background: $surface;
+    color: $foreground-muted;
+}
+
+TopBar > .topbar--title {
+    color: $foreground;
+    text-style: bold;
+}
+
+* {
+    scrollbar-size: 1 1;
+    scrollbar-color: $foreground 25%;
+    scrollbar-color-hover: $foreground 40%;
+    scrollbar-color-active: $foreground 50%;
+    scrollbar-background: $surface;
+    scrollbar-background-hover: $surface;
+    scrollbar-background-active: $surface;
+}
+
+/* the rule above would give a too-narrow footer a scrollbar row that hides its keys */
+Footer {
+    scrollbar-size: 0 0;
+}
+
+/* docked, not split: the navbar and the footer keep the full width (title and Notifications do not move); the panel
+   sits under the navbar's two rows and above the footer (height: XMR4ELApp.fit_help), and narrows only the panels */
+HelpPanel {
+    split: none;
+    dock: right;
+    width: 40;
+    min-width: 40;
+    max-width: 40;
+    margin: 2 0 1 0;
+}
+
+#dash {
+    height: 1fr;
+}
+
+/* width is set by DashboardScreen.set_left_width (resizable, clamped) */
+#explorer {
+    height: 1fr;
+}
+
+#dash-right {
+    width: 1fr;
+}
+
+#description {
+    height: 2fr;
+}
+
+#active-runs {
+    height: 1fr;
+}
+
+/* Panels: muted border; the focused one gets the accent border and title. The cursor row of a blurred panel
+   keeps a dim accent background (selected, not focused). */
+#explorer, #description, #active-runs {
+    background: $surface;
+    border: round $border-blurred;
+    border-title-color: $foreground-muted;
+}
+
+#explorer:focus, #description:focus, #active-runs:focus {
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+/* Description, Dataset Setup and the file picker (widgets/description.py Rows): headings in full colour */
+Rows > .option-list--option-disabled {
+    color: $foreground;
+}
+
+/* Log panel (widgets/log_panel.py): the fullscreen viewer and the Run monitor's Live logs */
+LogPanel {
+    height: 1fr;
+}
+
+#log-header {
+    height: 1;
+    background: $surface;
+}
+
+#log-view, #log-missing {
+    height: 1fr;
+    background: $surface;
+}
+
+#log-missing {
+    padding: 1 2;
+}
+
+#log-search {
+    dock: bottom;
+}
+
+/* Run monitor (screens/monitor_screen.py): the left column's width is set by RunMonitorScreen.layout_columns */
+#mon, #mon-left {
+    height: 1fr;
+}
+
+#mon-right {
+    width: 1fr;
+}
+
+#overview {
+    height: auto;
+    max-height: 50%;
+    padding: 0 1;
+}
+
+#overview-text {
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#overview-banner, #cancel {
+    margin-top: 1;
+}
+
+#pipeline {
+    height: 1fr;
+    overflow-x: hidden;
+}
+
+#resources {
+    height: 35%;
+    min-height: 9;
+    padding: 0 1;
+}
+
+#overview, #pipeline, #resources, LogPanel {
+    background: $surface;
+    border: round $border-blurred;
+    border-title-color: $foreground-muted;
+}
+
+#overview:focus-within, #pipeline:focus, #resources:focus, LogPanel:focus-within {
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+/* Cancel Run confirmation (screens/stop_dialog.py) */
+StopDialog, StopBatchDialog, QuitDialog {
+    align: center middle;
+}
+
+#stop-box {
+    width: 70;
+    max-width: 100%;
+    height: auto;
+    padding: 1 2;
+    background: $panel;
+    border: round $error;
+}
+
+#stop-text {
+    margin: 1 0;
+}
+
+#stop-buttons {
+    height: 1;
+}
+
+#stop-buttons Button {
+    margin: 0 2 0 0;
+}
+
+/* Results (screens/results_screen.py): the left column's width is set by ResultsScreen.set_left_width. Row states
+   of the explorer (cursor, member, baseline) are painted by ResultsExplorer from the same theme tokens. */
+#res, #res-left, #res-right, #res-compare {
+    height: 1fr;
+}
+
+#res-right {
+    width: 1fr;
+}
+
+#baseline {
+    height: auto;
+    padding: 0 1;
+}
+
+#res-explorer {
+    height: 1fr;
+}
+
+/* Show incompatible: a one-row view filter over the explorer (not a comparison checkbox) */
+#show-all {
+    width: 100%;
+    height: 1;
+    border: none;
+    padding: 0 1;
+    background: $surface;
+    color: $foreground-muted;
+}
+
+#show-all:focus {
+    color: $foreground;
+    background: $xmr-cursor-row;
+}
+
+#summary {
+    height: auto;
+    max-height: 40%;  /* scrolls past it: the analysis table keeps a body (80x24) */
+    padding: 0 1;
+}
+
+#analysis {
+    height: 1fr;
+}
+
+#analysis-table {
+    height: 1fr;
+    min-height: 6;  /* two-row header, scrollbar and at least three metric rows */
+    background: $surface;
+}
+
+#analysis-table > .datatable--cursor {
+    background: $xmr-cursor-row;
+    color: $foreground;
+    text-style: none;
+}
+
+#analysis-notes {
+    height: auto;
+    margin: 1 0 0 0;
+    padding: 0 1;
+    color: $foreground-muted;
+}
+
+#inspect {
+    height: 1fr;
+    padding: 0 1;
+}
+
+#baseline, #res-explorer, #summary, #analysis, #inspect {
+    background: $surface;
+    border: round $border-blurred;
+    border-title-color: $foreground-muted;
+    border-subtitle-color: $foreground-muted;
+}
+
+#res-explorer:focus, #summary:focus, #analysis:focus-within, #inspect:focus {
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+#res-explorer:disabled {
+    opacity: 60%;
+}
+
+/* Navbar (widgets/top_bar.py): breadcrumbs, title, bell */
+TopBar > .topbar--crumb {
+    color: $foreground-muted;
+}
+
+TopBar > .topbar--current {
+    color: $foreground;
+    text-style: bold;
+}
+
+TopBar > .topbar--bell {
+    color: $foreground-muted;
+}
+
+TopBar > .topbar--unseen {
+    color: $accent;
+    text-style: bold;
+}
+
+/* Contextual footer (widgets/context_footer.py): the keys, or a confirmation (warning tint) / feedback (accent tint)
+   over the whole bar in place of every key */
+ContextFooter {
+    dock: bottom;
+    height: 1;
+    background: $footer-background;
+}
+
+ContextFooter.-confirm, ContextFooter.-confirm #footer-note {
+    background: $xmr-confirm-row;
+}
+
+ContextFooter.-feedback, ContextFooter.-feedback #footer-note {
+    background: $xmr-feedback-row;
+}
+
+ContextFooter Footer {
+    dock: none;
+    width: 1fr;
+}
+
+#footer-note {
+    width: 1fr;
+    height: 1;
+    padding: 0 1 0 0;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Toasts (lifecycle notifications only): top right under the navbar, over the screen; the severity tints only the
+   title (Textual's own -information / -warning / -error, and -success) */
+ToastRack {
+    dock: top;
+    align: right top;
+    margin: 2 1 0 0;
+}
+
+Toast {
+    width: 46;
+    max-width: 50%;
+    max-height: 6;
+    margin-top: 0;
+    padding: 0 1;
+    background: $xmr-overlay;
+    border-left: none;
+}
+
+Toast .toast--title {
+    color: $foreground;
+    background: $xmr-tint-information;
+}
+
+Toast.-success .toast--title {
+    background: $xmr-tint-success;
+}
+
+Toast.-warning .toast--title {
+    background: $xmr-tint-warning;
+}
+
+Toast.-error .toast--title {
+    background: $xmr-tint-error;
+}
+
+/* Notification center (screens/notification_center.py): a box under the bell, the screen below unchanged */
+NotificationCenter {
+    align: right top;
+    background: $background 0%;
+}
+
+#nc-box {
+    width: 52;
+    max-width: 100%;
+    height: auto;
+    margin: 2 0 0 0;
+    padding: 0 1;
+    background: $xmr-overlay;
+    border: round $border-blurred;
+}
+
+#nc-head, #nc-title, #nc-clear {
+    height: 1;
+}
+
+#nc-title {
+    width: 1fr;
+    text-style: bold;
+}
+
+#nc-clear {
+    width: auto;
+    color: $accent;
+}
+
+#nc-list {
+    height: auto;
+    margin-top: 1;
+    border: none;
+    padding: 0;
+    background: $xmr-overlay;
+}
+
+#nc-list > .option-list--option-highlighted {
+    background: $xmr-cursor-row;
+}
+
+#nc-list > .option-list--separator {
+    color: $xmr-divider;
+}
+
+#nc-empty {
+    margin: 1 0;
+    color: $foreground-muted;
+}
+
+#nc-foot {
+    margin-top: 1;
+}
+
+/* New Experiment, Dataset Setup (screens/dataset_setup.py): Datasets 30 % | Dataset Configuration */
+#ds {
+    height: 1fr;
+}
+
+#ds-list {
+    width: 30%;
+    min-width: 24;
+    height: 1fr;
+}
+
+#ds-config {
+    width: 1fr;
+    height: 1fr;
+}
+
+#ds-name-row {
+    height: 1;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+#ds-name-label {
+    width: 13;
+    color: $foreground-muted;
+}
+
+#ds-name, #fp-path {
+    width: 1fr;
+    height: 1;
+    border: none;
+    padding: 0 1;
+    background: $xmr-overlay;
+}
+
+#ds-name:focus, #fp-path:focus {
+    background: $xmr-cursor-row;
+}
+
+#ds-rows {
+    height: 1fr;
+    border: none;
+    padding: 0;
+    background: $surface;
+}
+
+#ds-list, #ds-config {
+    background: $surface;
+    border: round $border-blurred;
+    border-title-color: $foreground-muted;
+}
+
+#ds-list:focus, #ds-config:focus-within {
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+/* File picker (screens/file_picker.py): the path field over its directory's entries */
+#fp {
+    height: 1fr;
+    background: $surface;
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+#fp-list {
+    height: 1fr;
+    margin-top: 1;
+    border: none;
+    padding: 0;
+    background: $surface;
+}
+
+/* New Experiment, Model Builder (screens/model_builder.py): Model Builder 45 % over Library / Editor 55 % of the
+   rows between the navbar and the footer */
+ModelBuilderScreen {
+    layers: base overlay;
+}
+
+#mb {
+    height: 1fr;
+}
+
+#mb-banner {
+    height: 1;
+    padding: 0 1;
+    background: $accent;
+    color: $xmr-on-accent;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#mb-top {
+    height: 45%;
+    min-height: 5;
+}
+
+#mb-bottom {
+    height: 55%;
+}
+
+#mb-tabs-row {
+    height: 1;
+}
+
+#mb-tabs {
+    width: 1fr;
+    height: 1;
+}
+
+#mb-rename {
+    width: 32;
+    height: 1;
+    background: $xmr-cursor-row;
+}
+
+#mb-grid-box {
+    height: 1fr;
+    background: $surface;
+}
+
+#mb-library {
+    height: 1fr;
+    border: round $border-blurred;
+    padding: 0;
+    background: $surface;
+}
+
+#mb-library > .option-list--option {
+    padding: 0 1;
+}
+
+#mb-editor {
+    height: 1fr;
+}
+
+#mb-attrs-panel {
+    width: 40%;
+    height: 1fr;
+}
+
+#mb-attrs {
+    height: 1fr;
+    min-height: 3;
+    padding: 0 1;
+}
+
+#mb-help {
+    height: 35%;
+    min-height: 4;
+    max-height: 9;
+    padding: 0 1;
+    border-top: solid $border-blurred;
+    color: $foreground-muted;
+}
+
+#mb-help:focus {
+    border-top: solid $accent;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+#mb-help-text {
+    height: auto;
+}
+
+#mb-json {
+    width: 1fr;
+    height: 1fr;
+}
+
+#mb-json-text {
+    width: auto;
+}
+
+#mb-top, #mb-library, #mb-attrs-panel, #mb-json {
+    background: $surface;
+    border: round $border-blurred;
+    border-title-color: $foreground-muted;
+    border-subtitle-color: $foreground-muted;
+}
+
+#mb-top:focus-within, #mb-library:focus, #mb-attrs-panel:focus-within, #mb-json:focus {
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+.mb-desc {
+    color: $foreground-muted;
+    margin-bottom: 1;
+}
+
+.mb-field {
+    height: 1;
+}
+
+.mb-field:focus-within .mb-label {
+    color: $accent;
+    text-style: bold;
+}
+
+.mb-label {
+    width: 45%;
+    max-width: 26;
+    min-width: 10;
+    color: $foreground-muted;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+.mb-field Input, .mb-field Select {
+    width: 1fr;
+}
+
+.mb-field Input {
+    background: $xmr-overlay;
+}
+
+.mb-field Input:focus {
+    background: $xmr-cursor-row;
+}
+
+.mb-field Input.mb-range {
+    width: 8;
+    margin-right: 1;
+}
+
+.mb-error {
+    height: auto;
+    padding-left: 2;
+    color: $error;
+}
+
+#mb-buttons {
+    height: 1;
+    padding: 0;
+}
+
+#mb-buttons Button {
+    margin-right: 1;
+    min-width: 0;
+}
+
+/* New Experiment, Review Batch (screens/review_batch.py): compact header over Execution Queue 30 % | Review Details */
+#rv {
+    height: 1fr;
+}
+
+#rv-head {
+    height: auto;
+    padding: 0 1;
+}
+
+#rv-name-row {
+    height: 1;
+}
+
+#rv-name, #rv-rename {
+    width: 1fr;
+    height: 1;
+}
+
+#rv-rename {
+    background: $xmr-cursor-row;
+}
+
+#rv-launch {
+    width: 1fr;
+    margin: 0 1;
+}
+
+#rv-reason {
+    height: 1;
+    padding: 0 1;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#rv-info, #rv-state {
+    height: 1;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#rv-body {
+    height: 1fr;
+}
+
+#rv-left {
+    width: 30%;
+    min-width: 28;
+    height: 1fr;
+}
+
+#rv-details {
+    width: 1fr;
+    height: 1fr;
+}
+
+#rv-queue, #rv-list {
+    height: 1fr;
+    border: none;
+    padding: 0;
+    background: $surface;
+}
+
+#rv-moves {
+    height: 1;
+}
+
+#rv-moves Button {
+    margin-right: 1;
+    min-width: 0;
+}
+
+#rv-head, #rv-left, #rv-details {
+    background: $surface;
+    border: round $border-blurred;
+    border-title-color: $foreground-muted;
+}
+
+#rv-left:focus-within, #rv-details:focus-within {
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
+
+/* Batch monitor (screens/batch_monitor.py) and the batch list */
+#bm, #bm-left, #bm-right {
+    height: 1fr;
+}
+
+#bm-left {
+    width: 35%;
+    min-width: 30;
+}
+
+#bm-right {
+    width: 1fr;
+}
+
+#bm-overview, #bm-detail {
+    height: auto;
+    max-height: 50%;
+    padding: 0 1;
+}
+
+#bm-queue, #bm-logs, #bm-list {
+    height: 1fr;
+}
+
+#bm-queue {
+    padding: 0;
+}
+
+#bm-stop {
+    margin: 0 1;
+}
+
+#bm-overview, #bm-detail, #bm-queue, #bm-logs, #bm-list {
+    background: $surface;
+    border: round $border-blurred;
+    border-title-color: $foreground-muted;
+}
+
+#bm-overview:focus-within, #bm-detail:focus-within, #bm-queue:focus-within, #bm-logs:focus-within,
+#bm-list:focus-within {
+    border: round $border;
+    border-title-color: $accent;
+    border-title-style: bold;
+}
