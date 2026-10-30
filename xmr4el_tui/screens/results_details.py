@@ -1,4 +1,4 @@
-"""Texts of the Results screen (tui.md §5.12): baseline line, Comparison Summary, Detailed Analysis cells, inspection.
+"""Texts of the Results screen (tui.md §5.3): baseline line, Comparison Summary, Detailed Analysis cells, inspection.
 No file reads and no comparability decisions: Facts and Compat come from services.comparison."""
 from rich.console import Group
 from rich.rule import Rule
@@ -10,10 +10,10 @@ from xmr4el_tui import fmt
 from xmr4el_tui.runs import state_word
 from xmr4el_tui.services.comparison import (BASELINE, CAUTION, GROUP_NOTES, GROUPS, INCOMPATIBLE, NA, NO_DELTA,
                                             VERIFIED, rows, summary_cells)
-from xmr4el_tui.theme import beam_color, color, style
+from xmr4el_tui.theme import Lazy, beam_color, color, style
 from xmr4el_tui.widgets.explorer import CAUTION_MARK, chip
 
-LEVEL_STYLE = {VERIFIED: style("success"), CAUTION: style("warning", "bold"), INCOMPATIBLE: style("error")}
+LEVEL_STYLE = Lazy(lambda: {VERIFIED: style("success"), CAUTION: style("warning", "bold"), INCOMPATIBLE: style("error")})
 LEGEND = f"Δ: percentage points (pp) vs Base (MRR: own scale; Acc@1: in-vocabulary mentions, Acc@1_all: all loaded) · {NO_DELTA}: not verifiably comparable"
 HEADER_WIDTH = 24
 NAME_WIDTH = 30  # Summary evaluation column at most; longer names end in …

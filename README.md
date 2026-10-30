@@ -1,5 +1,9 @@
 # XMR4EL
 
+[![CI](https://github.com/lasigeBioTM/XMR4EL/actions/workflows/ci.yml/badge.svg)](https://github.com/lasigeBioTM/XMR4EL/actions/workflows/ci.yml)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Extreme multi-label ranking (XMR) for biomedical entity linking. Given a mention and its document context,
 XMR4EL ranks concept IDs from a large label space (MeSH, OMIM, UMLS CUIs, ...). It clusters the labels into a
 tree, trains a matcher per tree node, and searches the tree with a beam at prediction time.
@@ -16,6 +20,8 @@ files.
 | `docs/` | [Pipeline behavior, future work, TUI design](docs/README.md). |
 
 ## How it works
+
+![XMR4EL pipeline: read a mention with its context, encode it, embed the labels, cluster them into a tree with a matcher per node, predict by beam search](docs/images/pipeline.svg)
 
 1. **Read** PubTator annotations (or grouped TSV texts). Each annotation becomes `mention [SEP] context`
    with its concept ID as the label.
@@ -165,14 +171,22 @@ Embeddings are cached in `outputs/cache/transformers/`; `XMR4EL_TRANSFORMER_CACH
 uv sync --locked --extra tui && .venv/bin/python -m xmr4el_tui    # or xmr4el-tui; --root <repo> elsewhere
 ```
 
+![Dashboard: trees by dataset, the selected tree's description, active runs](docs/images/tui_dashboard.svg)
+
+![Results: a baseline against three challengers; Δ — marks deltas the recorded evidence does not allow](docs/images/tui_results.svg)
+
+*Screenshots from small test batches; the values are not benchmark results.*
+
 | Screen | Key | Purpose |
 |---|---|---|
 | Dashboard | start | Saved trees by dataset, their evaluations and runs; active runs. |
 | Run Monitor | `enter` on a run | Pipeline stages, resources, live logs; cancel runs this TUI launched. |
 | Results | `r` on an evaluation | Compare up to four evaluations of the same test file (VERIFIED / CAUTION / INCOMPATIBLE). |
-| New Experiment | `n` | Pick a dataset, build one or more model configs, review and launch a batch. |
+| New Experiment | `n` | Pick a dataset, build one or more model configs, review and launch a batch. `c` resumes an unfinished one. |
+| Batch Monitor | opens at launch; `b` lists batches | Execution queue, the selected tree's live log, Stop Batch. |
 
-`?` lists the keys. The TUI reads run files and starts the existing runner; it contains no training or
+`?` lists the keys; on the Dashboard, `ctrl+p` -> `Palette: …` switches colours (Notebook, the default; Notebook
+light; Classic). The TUI reads run files and starts the existing runner; it contains no training or
 evaluation code. Design: [`docs/design/tui.md`](docs/design/tui.md).
 
 ## Docker
