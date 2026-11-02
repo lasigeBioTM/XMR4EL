@@ -238,6 +238,13 @@ def test_dict_to_pubtator_refuses_own_input(tmp_path):
     assert r.returncode != 0 and "is the input file" in r.stderr and ctd.read_bytes() == before
 
 
+def test_pecos_export_refuses_nonempty_dir(tmp_path):
+    (tmp_path / "pred_old.npz").write_bytes(b"")
+    r = subprocess.run([sys.executable, str(ROOT / "scripts/baselines/pecos_compare.py"), "export",
+                        "-xmodel_path", "unused", "-out", str(tmp_path)], capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode != 0 and "not empty" in r.stderr
+
+
 def test_beam_sweep_fails_when_a_child_fails(tmp_path):
     r = subprocess.run([sys.executable, str(ROOT / "scripts/experiments/beam_sweep.py"), str(tmp_path / "none"),
                         str(tmp_path / "none"), "5", "5", "0"], capture_output=True, text=True, cwd=ROOT)

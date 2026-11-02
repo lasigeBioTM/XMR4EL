@@ -35,7 +35,7 @@ def main():
                         help="train PubTator file; adds the seen/unseen mention-string breakdown")
     parser.add_argument("-knn_beta", type=float, default=None,
                         help="multiply each candidate's score by exp(beta * max cosine of the mention block to the "
-                             "label's training rows); 0 = off (default: predict_config)")
+                             "label's training rows); 0 = off (default: predict_config; PIPELINE.md#training-and-inference)")
     parser.add_argument("-reranker_path", type=str, default=None,
                         help="outputs/rerankers/<tree>_<ts>: rerank the top K, one table row per -rerank_w")
     parser.add_argument("-rerank_k", type=int, default=None, help="default: the reranker's training K")

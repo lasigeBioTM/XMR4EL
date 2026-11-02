@@ -90,7 +90,7 @@ def evaluate_tree(xm, tree, test_path, train_path=None, beam_size=None, topk=Non
     its predict_config. Rows whose gold label is not in the tree are dropped (`rows` of `rows_total` kept).
     Returns (metrics, state): metrics is JSON-ready (acc@1, MRR, R@k, R@cand, with `train_path` the mention-string
     breakdown and hybrid); state = the ranked rows for the reranker (None if no row is kept). `events` (e.g.
-    {"split": "dev"}): emit eval part events data / predict / metrics with these fields (tui.md §8); None: none."""
+    {"split": "dev"}): emit eval part events data / predict / metrics with these fields (TUI.md#progress-and-resources); None: none."""
     part = (lambda name, phase: progress(stage="eval", part=name, phase=phase, **events)) if events is not None \
         else (lambda name, phase: None)
     part("data", "start")

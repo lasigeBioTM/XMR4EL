@@ -1,4 +1,4 @@
-"""Per-stage resource summaries -> resources.json (docs/design/tui.md §8). A daemon thread samples every
+"""Per-stage resource summaries -> resources.json (TUI.md#progress-and-resources). A daemon thread samples every
 `interval` seconds; stage start and end sample too, so a stage shorter than the interval still has two samples.
 Raw samples are not kept.
 
