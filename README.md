@@ -146,7 +146,8 @@ tree (e.g. the `*_test.json` specs). An input file that changes during the run f
 ## Configuration
 
 `configs/xmr4el_base_config.json` (MedMentions) and `configs/xmr4el_bc5cdr_config.json` (BC5CDR, also used for
-NCBI-disease, BioRED and NLM-Chem).
+NCBI-disease, BioRED, NLM-Chem and MedMentions; above PECOS XR-Linear on every one of them, dev and test; the TUI's
+default for a new tree).
 
 | Key | Meaning |
 |---|---|

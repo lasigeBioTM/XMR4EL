@@ -395,7 +395,9 @@ Baseline row (Summary) and member rows (Explorer) are on the accent; the explore
 │                    ││     Choose another file…                                    │
 │                    ││ Evaluation files                                            │
 │                    ││ [x] Development  datasets/BioRED/chemical/dev.pubtator   Ready │
+│                    ││     Choose another file…                                    │
 │                    ││ [ ] Test         datasets/BioRED/chemical/test.pubtator  Ready │
+│                    ││     Choose another file…                                    │
 │                    ││   Confirm Dataset                                           │
 ╰────────────────────╯╰─────────────────────────────────────────────────────────────╯
  enter choose file  space toggle  esc back  ctrl+s confirm dataset  u discard changes
@@ -510,7 +512,7 @@ Baseline row (Summary) and member rows (Explorer) are on the accent; the explore
   printable characters, unique, case-insensitive); `1`-`9` show tree N. Stable ids (`Tree.id`) keep runs apart;
   names are display only.
 - Template of a new tree: the model config of an experiment spec that trains on the confirmed training file, else
-  `configs/xmr4el_base_config.json`; a `features: "tfidf"` config is refused with a footer note, never converted.
+  `configs/xmr4el_bc5cdr_config.json` (the configuration that beats PECOS XR-Linear on every benchmark set); a `features: "tfidf"` config is refused with a footer note, never converted.
   Changing the dataset never rewrites the trees.
 - Grid: blocks of name, installed component and short settings (3, 2 or 1 rows as the height allows; scrolls in both
   directions at 80x24); the cursor block is accent when the grid is focused, dim accent otherwise; an invalid slot
@@ -632,15 +634,15 @@ Each screen's empty, loading and error states are in its section (§5).
 | Run monitor | Live logs: `/` `n` `N` `l`, scroll keys | As the log viewer. |
 | Dashboard | `ctrl+r` | Rescan. |
 | Dashboard | `ctrl+b`, `<` / `>`, drag the explorer's right border | Hide / show the explorer; narrower / wider by 2 cells. Default 22 % of the width, at least 18 cells, at most half the screen and never leaving the right panels under 40 (the minimum wins on tiny screens); kept for the session, re-clamped on terminal resize. |
-| Description | `up` `down`, click | Select a row (read-only; headings and blank lines are skipped, the list wraps). A rescan of the same item keeps the row with the same field label. |
+| Description | `up` `down`, click | Select a row (read-only; headings and blank lines are skipped, the list wraps; a click that focuses the panel selects its first row and opens nothing). A rescan of the same item keeps the row with the same field label. |
 | Description | `enter` / click on `View Logs  [Open]` | Fullscreen read-only log of the item's run (evaluation: its run, between Run and State; run: between Type and State; tree: its training run, between Training run and Run state). `esc` returns with the row still selected. |
 | Log viewer | `↑` `↓` `pgup` `pgdn` `home` `end`, `/` search (enter finds, `esc` closes the box), `n` / `N` next / previous match, `l` level all → INFO+ → WARNING+ → ERROR+, `esc` back | Header: run name, id, state, file, level, match i/n. An active run is polled every second and follows the end while the view is at the end; a finished run is read once. A missing log shows why, nothing is generated. At most 100 000 lines kept, first read ≤ 8 MiB from the end. |
 | Explorer, Description, Active runs | mouse drag | Select text (blue); on release it is copied to the clipboard by OSC 52 (`App.copy_to_clipboard`), so it reaches the terminal the TUI runs in, also through `ssh` / `docker exec`; a toast says how many characters. A click without a drag copies nothing; dragging the explorer border resizes, never selects. The terminal must allow OSC 52. |
 | Everywhere | `n` | New Experiment: Dataset Setup (§5.4); shown in the Dashboard footer. Already open: back to it; after a launch: a new draft. |
 | Dataset Setup | Datasets: `up` `down`, `enter` / click; `ctrl+tab` / `ctrl+shift+tab` (`]` / `[`); `esc` | Move (nothing changes) / configure the dataset; next / previous panel (Datasets, Name, configuration); back to the previous screen (unconfirmed edits stay in the draft). |
-| Dataset Setup | Configuration: `tab` `shift+tab` (or `up` `down`), `enter`, `space`, click on `[x]`, `ctrl+s`, `u`, `esc` | Move between controls; a file row opens the picker (training variant: selects it); select a training variant / toggle a split; toggle; Confirm Dataset; discard unconfirmed changes (asks); back to Datasets. `ctrl+r` rereads datasets. |
+| Dataset Setup | Configuration: `tab` `shift+tab` (or `up` `down`), `enter`, `space`, click, `ctrl+s`, `u`, `esc` | Move between controls; `Choose another file…` opens the picker, a training variant selects it, an evaluation row toggles its split; select a training variant / toggle a split; a click that focuses the panel selects its first control and opens nothing, a click in the focused panel acts as `enter`; Confirm Dataset; discard unconfirmed changes (asks); back to Datasets. `ctrl+r` rereads datasets. |
 | Dataset Setup | `m` | Model Builder (§5.5) with the confirmed dataset. |
-| Model Builder | grid: arrows, `enter`, click; library: `up` `down`, `enter` / click; `esc` | Move between slots (branches) / open the slot's components; open the component's editor; editor -> library -> grid -> Dataset Setup. |
+| Model Builder | grid: arrows, `enter`, click; library: `up` `down`, `enter` / click; `esc` | Move between slots (branches) / open the slot's components; open the component's editor; editor -> library -> grid -> Dataset Setup. Opened from Review Batch (Edit, Fix Issue): one `esc` from any level returns to it (unapplied changes ask first). |
 | Model Builder | editor: `tab` `shift+tab`, `enter` (next field / Apply), `ctrl+s`, `u`, `esc`; preview `y` | Move between attributes; Apply; discard (asks); back to the library (asks with unapplied changes); copy the JSON. |
 | Model Builder | `tab` / `shift+tab` | Next / previous control inside the focused panel only (Model Builder: tabs, grid; attributes: fields, help, Apply, Cancel); wraps. |
 | Model Builder | `enter` / `esc` | Levels: Tree Selection (tab strip) > grid > library > editor (attributes, `Preview` button for the JSON panel, Apply, Cancel). `enter` goes in, `esc` goes out (editor asks with unapplied changes; esc from Preview returns to the attributes; esc from Tree Selection leaves the screen). No panel-switching key (no ctrl+tab, no F6). |
@@ -649,8 +651,8 @@ Each screen's empty, loading and error states are in its section (§5).
 | Model Builder | tabs: `left` / `right`, `shift+left` / `shift+right`, `a`, `d`, `delete`; `F2`, `1`-`9` | Switch / reorder trees, add, duplicate, remove (asks); rename; show tree N. |
 | File picker | `up` `down`, typing, `enter`, `esc` | Move; filter or type / paste a path; open the directory or choose the file; cancel. |
 | Dashboard | `r`, `b`, `n`, `c` | Results with the selected evaluation as baseline; Batches; New Experiment; resume the unfinished experiment (only while one exists). |
-| Review Batch | queue: `up` `down`, `enter`, `e`, `space` then `up` `down` then `space` (`esc` restores), `alt+left` / `alt+right` | Move; read the tree's details; edit the tree in the Model Builder; pick up, carry and drop a tree (reorder); move one place. |
-| Review Batch | details: `1` / `2` (or `left` / `right`), `enter` on an issue | Overview / Differences; Fix Issue (opens the editor that fixes it). |
+| Review Batch | queue: `up` `down`, `enter`, `e`, `space` then `up` `down` then `space` (`esc` restores), `alt+left` / `alt+right` | Move (a click selects the tree, focus stays on the queue); read the tree's details; edit the tree in the Model Builder; pick up, carry and drop a tree (reorder); move one place. |
+| Review Batch | details: `1` / `2` (or `left` / `right`), `enter` on an issue | Overview / Differences; Fix Issue (opens the editor that fixes it). A click that focuses the panel selects its first row. |
 | Review Batch | `F2`, `l`, `tab` `shift+tab`, `esc` | Rename the batch; Launch Batch (asks, `l` confirms); next / previous panel; back (a second `esc` leaves). |
 | Batch Monitor | `up` `down`, `enter` / `o`, `s`, `esc` | Move in the execution queue; the tree's run in the Run Monitor; Stop Batch (dialog, Keep running is the default); back to the Dashboard. |
 | Batches | `up` `down`, `enter`, `esc` | Move; open the batch's monitor; back. |

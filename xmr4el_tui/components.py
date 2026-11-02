@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HYBRID = "sapbert_char_context"
-BASE_CONFIG = Path("configs", "xmr4el_base_config.json")  # MedMentions config: the template when no spec names one
+DEFAULT_CONFIG = Path("configs", "xmr4el_bc5cdr_config.json")  # template when no spec names one: beats PECOS XR-Linear on every benchmark set
 SPECS_DIR = Path("configs", "experiments")
 OMIT = object()  # "leave the key out" (backend default)
 INT = re.compile(r"[+-]?\d+")
@@ -523,7 +523,7 @@ def read(root, rel):
 
 def template(root, selection=None):
     """(config, source, note) a new tree starts from: the model config of an experiment spec that trains on the
-    confirmed training file (sorted by spec name), else configs/xmr4el_base_config.json. A TF-IDF-only config is
+    confirmed training file (sorted by spec name), else DEFAULT_CONFIG. A TF-IDF-only config is
     refused (`note` says which), never converted. (None, None, note) when none is usable."""
     named = []
     if selection is not None and selection.train:
@@ -532,7 +532,7 @@ def template(root, selection=None):
             if data and data.get("train_path") == selection.train and isinstance(data.get("model_config"), str):
                 named.append(data["model_config"])
     notes = []
-    for rel in dict.fromkeys([*named, str(BASE_CONFIG)]):
+    for rel in dict.fromkeys([*named, str(DEFAULT_CONFIG)]):
         cfg = read(root, rel)
         if cfg is None:
             continue
@@ -540,4 +540,4 @@ def template(root, selection=None):
             notes.append(f"{rel} uses features {cfg.get('features')!r} (not the hybrid recipe): not used")
             continue
         return ordered({"features": HYBRID, **cfg}), rel, "; ".join(notes)
-    return None, None, "; ".join(notes) or "no model configuration found (configs/xmr4el_base_config.json)"
+    return None, None, "; ".join(notes) or f"no model configuration found ({DEFAULT_CONFIG})"

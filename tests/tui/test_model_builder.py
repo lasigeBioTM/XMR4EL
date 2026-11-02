@@ -100,7 +100,7 @@ def test_merged_preview_keeps_every_other_key_and_highlights_by_path():
 
 def test_template_from_the_spec_of_the_training_file_and_tfidf_refused(tmp_path):
     (tmp_path / "configs/experiments").mkdir(parents=True)
-    shutil.copy(REPO / "configs/xmr4el_base_config.json", tmp_path / "configs/xmr4el_base_config.json")
+    shutil.copy(REPO / "configs/xmr4el_bc5cdr_config.json", tmp_path / "configs/xmr4el_bc5cdr_config.json")
     (tmp_path / "configs/model_a.json").write_text(json.dumps({**BASE, "depth": 3}))
     (tmp_path / "configs/plain.json").write_text(json.dumps({**BASE, "features": "tfidf"}))
     sel = Selection("datasets/A", "A", train="datasets/A/train.pubtator")
@@ -111,8 +111,10 @@ def test_template_from_the_spec_of_the_training_file_and_tfidf_refused(tmp_path)
     assert list(cfg)[:2] == ["features", "transformer_config"]
     (tmp_path / "configs/experiments/a.json").write_text(json.dumps({**spec, "model_config": "configs/plain.json"}))
     cfg, source, note = components.template(tmp_path, sel)
-    assert source == "configs/xmr4el_base_config.json" and cfg["features"] == components.HYBRID
+    assert source == "configs/xmr4el_bc5cdr_config.json" and cfg["features"] == components.HYBRID
     assert "configs/plain.json uses features 'tfidf'" in note
+    assert (cfg["clustering_config"]["kwargs"]["n_clusters"], cfg["predict_config"]["beam_size"],
+            cfg["predict_config"]["knn_beta"]) == (128, 10, 10.0)  # the configuration that beats PECOS
 
 
 # --- draft trees --------------------------------------------------------------------------------------------------
@@ -151,7 +153,7 @@ SEL = Selection("datasets/A", "NCBI Disease", "", "datasets/A/train_plus_ctd.pub
 def make_root(root):
     (root / "outputs/runs").mkdir(parents=True)
     (root / "configs").mkdir()
-    (root / "configs/xmr4el_base_config.json").write_text(json.dumps(BASE))
+    (root / "configs/xmr4el_bc5cdr_config.json").write_text(json.dumps(BASE))
     return root
 
 

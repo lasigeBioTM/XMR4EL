@@ -42,10 +42,12 @@ class DatasetList(Rows):
 
 
 class ConfigRows(Rows):
-    """The selected dataset's files: tab / shift+tab (or up / down) move between controls, enter activates (a file
-    opens the picker), space selects a training variant or toggles an evaluation split. A click on [x] toggles."""
+    """The selected dataset's files: tab / shift+tab (or up / down) move between controls, enter activates (Choose
+    another file… opens the picker), space or enter selects a training variant or toggles an evaluation split. A click
+    that focuses the panel selects its first control."""
     BINDINGS = [Binding("enter", "select", "choose"), Binding("space", "screen.toggle", "toggle"),
                 Binding("tab", "step(1)", show=False), Binding("shift+tab", "step(-1)", show=False)]
+    FIRST_ROW_ON_FOCUS = True
 
     def action_step(self, step):
         """Next / previous control; past the last (first) one, focus leaves the panel as tab does elsewhere."""
@@ -56,15 +58,6 @@ class ConfigRows(Rows):
             self.screen.focus_next() if step > 0 else self.screen.focus_previous()
         else:
             self.highlighted = nxt[0] if step > 0 else nxt[-1]
-
-    async def _on_click(self, event):
-        index = event.style.meta.get("option")
-        option = self.options[index] if index is not None else None
-        if option is not None and option.id and option.id.startswith("eval:") and event.x < 4:
-            self.highlighted = index
-            self.screen.action_toggle()
-            return
-        await super()._on_click(event)
 
 
 class DatasetSetupScreen(Screen):
@@ -233,6 +226,7 @@ class DatasetSetupScreen(Screen):
         for split, label in SPLITS.items():
             e = sel.evaluation(split)
             opts.append(Option(self.file_row("[x]" if e.enabled else "[ ]", label, e.path, width), id=f"eval:{split}"))
+            opts.append(Option(Text("    Choose another file…", theme.style("text-muted")), id=f"eval-other:{split}"))
             opts += errors(problems, split, width)
         opts += errors(problems, "evals", width)
         opts += [blank(), Option(Text("  Confirm Dataset  ", theme.style("accent", "bold")), id="confirm"),
@@ -297,8 +291,8 @@ class DatasetSetupScreen(Screen):
             self.query_one(ConfigRows).focus()
 
     def activate(self, rid):
-        """enter on a control: a file row opens the picker (training variant rows choose that variant), the
-        confirm row confirms."""
+        """enter on a control: Choose another file… opens the picker, a training variant row chooses that variant, an
+        evaluation row toggles its split, the confirm row confirms."""
         d, sel = self.shown()
         if rid == "confirm":
             self.action_confirm()
@@ -310,6 +304,9 @@ class DatasetSetupScreen(Screen):
             self.pick("Training file", sel.train, lambda p: self.edit(replace_train(self.shown()[1], p)))
         elif rid and rid.startswith("eval:"):
             split = rid[5:]
+            self.edit(sel.with_eval(split, enabled=not sel.evaluation(split).enabled))
+        elif rid and rid.startswith("eval-other:"):
+            split = rid[11:]
             e = sel.evaluation(split)
             current = e.path or (d.candidates(split)[0].path if d.candidates(split) else sel.train)
             self.pick(f"{SPLITS[split]} file", current,
@@ -325,11 +322,7 @@ class DatasetSetupScreen(Screen):
     def action_toggle(self):
         box = self.query_one(ConfigRows)
         rid = box.highlighted_option.id if self.focused is box and box.highlighted_option else None
-        _, sel = self.shown()
-        if rid and rid.startswith("eval:"):
-            split = rid[5:]
-            self.edit(sel.with_eval(split, enabled=not sel.evaluation(split).enabled))
-        elif rid and rid.startswith("train:") and rid != "train:other":
+        if rid and (rid.startswith("eval:") or rid.startswith("train:") and rid != "train:other"):
             self.activate(rid)
 
     def action_confirm(self):

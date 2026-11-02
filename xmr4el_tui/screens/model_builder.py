@@ -83,7 +83,7 @@ class ModelBuilderScreen(Screen):
     def __init__(self, focus=None, from_review=False, restore=None):
         super().__init__()
         self.restore = restore   # saved_editor() of an editor closed with the screen: reopened on mount
-        self.from_review = from_review or focus is not None  # opened from Review Batch: esc from the grid goes straight back to it
+        self.from_review = from_review or focus is not None  # opened from Review Batch: one esc goes straight back to it
         self.focus_issue = focus  # review.Issue to open on mount (Review Batch's Fix Issue / open tree), then None
         self.focus_path = None   # configuration path the preview emphasises while the editor was opened for it
         self.editing = None
@@ -534,9 +534,11 @@ class ModelBuilderScreen(Screen):
 
     def action_back(self):
         """Preview -> attributes; editor -> library (asks with unapplied changes) -> grid -> Tree Selection -> the
-        previous screen (Dataset Setup)."""
+        previous screen (Dataset Setup). Opened from Review Batch: one esc goes back to it (unapplied changes ask)."""
         if self.renaming is not None:
             self.end_rename()
+        elif self.from_review:
+            self.guard(self.app.pop_screen)
         elif self.editing is not None:
             if self.focused is self.query_one(JsonPreview):
                 focus = self.attr_focus
@@ -545,10 +547,10 @@ class ModelBuilderScreen(Screen):
                 self.guard(self.to_library)
         elif self.focused is self.query_one(Library):
             self.query_one(PipelineGrid).focus()
-        elif self.focused is self.query_one(PipelineGrid) and not self.from_review:
+        elif self.focused is self.query_one(PipelineGrid):
             self.query_one(TreeTabs).cursor = self.tree.id  # Tree Selection
             self.query_one(TreeTabs).focus()
-        elif self.app.leave(self, "Review Batch" if self.from_review else "Model Builder"):
+        elif self.app.leave(self, "Model Builder"):
             self.app.pop_screen()
 
     def action_copy_json(self):

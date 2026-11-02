@@ -20,7 +20,7 @@ PUB = "11|t|Heart attack risk\n11|a|Some abstract.\n11\t0\t5\tHeart\tDisease\tD0
 def make_root(root):
     (root / "outputs/runs").mkdir(parents=True)
     (root / "configs").mkdir()
-    (root / "configs/xmr4el_base_config.json").write_text(json.dumps(BASE))
+    (root / "configs/xmr4el_bc5cdr_config.json").write_text(json.dumps(BASE))
     for f in ("train.txt", "dev.pubtator", "test.pubtator"):  # a PubTator file may be .txt
         (root / "datasets/A").mkdir(parents=True, exist_ok=True)
         (root / "datasets/A" / f).write_text(PUB)
@@ -449,8 +449,7 @@ def test_fix_issue_opens_the_field_and_review_context_returns(tmp_path):
         assert app.draft.trees[1].config == bad  # typing alone commits nothing
         await pilot.press("ctrl+s")  # Apply
         assert app.draft.trees[1].config["clustering_config"]["kwargs"]["n_clusters"] == 64
-        for _ in range(2):  # Apply left the grid focused: Tree Selection, then the previous screen
-            await pilot.press("escape")
+        await pilot.press("escape")  # one esc back to Review Batch
         await settle(app, pilot)
         assert app.screen is screen and screen.view == "differences" and screen.selected == app.draft.trees[1].id
         assert not any("Issue:" in line for line in lines(screen)) and "Invalid" not in str(
@@ -515,8 +514,7 @@ def test_cancelled_fix_leaves_the_issue_in_place(tmp_path):
         builder = app.screen
         assert builder.editing is not None and builder.editing.slot.id == "hierarchy"
         await pilot.click("#mb-cancel")
-        for _ in range(3):
-            await pilot.press("escape")
+        await pilot.press("escape")
         await settle(app, pilot)
         assert app.screen is screen and app.draft.trees[1].config == bad
         assert "Invalid · 1 issue" in str(screen.query_one(Queue).options[1].prompt)
@@ -535,7 +533,7 @@ def test_unsupported_component_opens_its_library_and_tree_name_opens_rename(tmp_
         builder = app.screen
         assert builder.editing is None and app.focused is builder.query_one(Library) and app.draft.slot == "matcher"
         assert "No supported component" in footer(app)
-        await pilot.press("escape", "escape", "escape")
+        await pilot.press("escape")
         await settle(app, pilot)
         assert app.screen is screen
         app.draft.trees[1].name = "a\tb"
@@ -617,7 +615,7 @@ def test_builder_keeps_its_esc_hierarchy_and_numeric_shortcuts_with_review_above
         first = app.draft.trees[0].id
         await pilot.press("alt+right")  # builder: alt + arrows organise the order, the shown tree stays
         assert app.draft.trees[1].id == first and builder.tree.id == first
-        await pilot.press("escape", "escape")  # the grid's esc returns to Review (not Tree Selection), after asking
+        await pilot.press("escape")  # one esc returns to Review (not Tree Selection)
         assert app.screen is screen
         builder = app.screen_stack[-2]
         assert isinstance(builder, ModelBuilderScreen)  # the first builder keeps its own levels and numbers
@@ -689,3 +687,22 @@ def test_review_and_builder_controls_fit_in_80_columns(tmp_path):
         await pilot.pause()
         fits(app.screen)
     run_review(make_root(tmp_path), go, size=(80, 24))
+
+
+async def click_row(pilot, rows, index):
+    y = next(i for i, line in enumerate(rows._lines) if line[0] == index) - int(rows.scroll_offset.y)
+    await pilot.click(offset=(rows.content_region.x + 2, rows.content_region.y + y))
+    await pilot.pause()
+
+
+def test_mouse_keeps_the_queue_focused_and_details_start_at_the_top(tmp_path):
+    async def go(app, pilot, screen):
+        queue, details = screen.query_one(Queue), screen.query_one(DetailsList)
+        details.focus()
+        await click_row(pilot, queue, 1)  # a tree: selected, its details shown, focus stays on the queue
+        assert app.focused is queue and screen.selected == app.draft.trees[1].id
+        rows = [i for i, o in enumerate(details.options) if not o.disabled]
+        shown = {line[0] for line in details._lines[:details.content_region.height]}
+        await click_row(pilot, details, max(i for i in rows if i in shown))  # focusing the panel only: the first row, nothing fixed
+        assert len(rows) > 1 and app.focused is details and details.highlighted == rows[0] and app.screen is screen
+    run_review(make_root(tmp_path), go)
