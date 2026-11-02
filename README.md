@@ -1,4 +1,4 @@
-# XMR4EL
+# <img src="docs/images/xmr4el-icon.svg" alt="" width="64" height="64"> XMR4EL
 
 [![CI](https://github.com/lasigeBioTM/XMR4EL/actions/workflows/ci.yml/badge.svg)](https://github.com/lasigeBioTM/XMR4EL/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -10,7 +10,10 @@ for supplied mentions and context by beam search, with optional mention-kNN fusi
 Mention detection, a knowledge-base lookup service, and a serving API are outside
 the implemented pipeline.
 
-![Read, encode, embed labels, cluster, train matchers, and predict](docs/images/pipeline.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/beam-search-tree-dark.gif">
+  <img alt="Animated beam search through the label tree" src="docs/images/beam-search-tree-light.gif">
+</picture>
 
 | Reference | Contents |
 | --- | --- |

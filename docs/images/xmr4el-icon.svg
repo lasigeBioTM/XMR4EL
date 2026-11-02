@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Beam-search tree, final frame of the home animation, in white on the dark page background -->
+  <rect width="64" height="64" rx="12" fill="#10151C"/>
+  <g stroke="#fff" stroke-linecap="round">
+    <path d="M43 12 14 30M43 12v18l-11 18" stroke-width="3" fill="none"/>
+    <g fill="#10151C" stroke-width="3">
+      <circle cx="43" cy="12" r="5"/>
+      <circle cx="14" cy="30" r="5"/>
+      <circle cx="43" cy="30" r="5"/>
+    </g>
+  </g>
+  <rect x="27" y="43.5" width="10" height="10" fill="#fff"/>
+</svg>
