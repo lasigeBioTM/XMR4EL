@@ -1,0 +1,88 @@
+"""Split a local PubTator corpus into train/dev/test files."""
+import argparse
+import os
+import tempfile
+from xmr4el.data.splits import (deterministic_split, parse_pubtator, write_pubtator_file,
+                                emit_jsonl_for_split, load_pmids)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True, help="Full PubTator corpus file")
+    parser.add_argument("--outdir", required=True, help="Output directory to write splits")
+    parser.add_argument("--train_ratio", type=float, default=0.8)
+    parser.add_argument("--dev_ratio", type=float, default=0.1, help="test gets 1 - train_ratio - dev_ratio")
+    parser.add_argument("--train_pmids", help="Optional file with official train PMIDs")
+    parser.add_argument("--dev_pmids", help="Optional file with official dev PMIDs")
+    parser.add_argument("--test_pmids", help="Optional file with official test PMIDs")
+    parser.add_argument("--emit_jsonl", action="store_true", help="Also emit JSONL for each split")
+    args = parser.parse_args()
+    official = [args.train_pmids, args.dev_pmids, args.test_pmids]
+    if any(official) and not all(official):
+        parser.error("give all three of --train_pmids/--dev_pmids/--test_pmids or none")
+    if not (args.train_ratio >= 0 and args.dev_ratio >= 0 and args.train_ratio + args.dev_ratio <= 1):  # NaN fails
+        parser.error("need train_ratio, dev_ratio >= 0 with train_ratio + dev_ratio <= 1")
+
+    names = ["corpus_pubtator_%s.txt" % s for s in ("train", "dev", "test")]
+    if args.emit_jsonl:
+        names += ["%s.jsonl" % s for s in ("train", "dev", "test")]
+    existing = [os.path.join(args.outdir, n) for n in names if os.path.exists(os.path.join(args.outdir, n))]
+    if existing:  # a failed publish then leaves no mix of old and new splits
+        parser.error(f"outputs exist, remove them first: {existing}")
+
+    pmid_blocks = parse_pubtator(args.input)
+    pmids = sorted(pmid_blocks.keys())
+
+    splits = {"train": [], "dev": [], "test": []}
+
+    if all(official):
+        # Use official PMID splits
+        splits["train"] = load_pmids(args.train_pmids)
+        splits["dev"] = load_pmids(args.dev_pmids)
+        splits["test"] = load_pmids(args.test_pmids)
+        seen = {}
+        for name, ids in splits.items():
+            for pmid in ids:
+                if pmid in seen:
+                    parser.error(f"PMID {pmid} listed in {seen[pmid]} and in {name}")
+                seen[pmid] = name
+        unknown = [p for p in seen if p not in pmid_blocks]
+        if unknown:
+            parser.error(f"{len(unknown)} listed PMIDs are not in {args.input} (first: {unknown[:5]})")
+        omitted = len(pmids) - len(seen)
+    else:
+        # Deterministic split
+        for pmid in pmids:
+            s = deterministic_split(pmid, args.train_ratio, args.dev_ratio)
+            splits[s].append(pmid)
+
+    # Write every split to a temp file, publish only after all succeed; a failed publish removes what it published
+    os.makedirs(args.outdir, exist_ok=True)
+    jobs = [(write_pubtator_file, s, "corpus_pubtator_%s.txt" % s) for s in ("train", "dev", "test")]
+    if args.emit_jsonl:
+        jobs += [(emit_jsonl_for_split, s, "%s.jsonl" % s) for s in ("train", "dev", "test")]
+    tmps, published = [], []
+    try:
+        for write, split, _ in jobs:
+            fd, tmp = tempfile.mkstemp(dir=args.outdir, suffix=".tmp")
+            os.close(fd)
+            tmps.append(tmp)
+            write(splits[split], pmid_blocks, tmp)
+        for (_, _, name), tmp in zip(jobs, tmps):
+            out = os.path.join(args.outdir, name)
+            if os.path.exists(out):
+                raise FileExistsError(out)
+            os.replace(tmp, out)
+            published.append(out)
+    except BaseException:
+        for path in tmps + published:
+            if os.path.exists(path):
+                os.unlink(path)
+        raise
+
+    print("Done. Split sizes: train=%d dev=%d test=%d" %
+          (len(splits["train"]), len(splits["dev"]), len(splits["test"])))
+    if all(official) and omitted:
+        print("%d corpus documents are in no PMID list (not written)" % omitted)
+
+if __name__ == "__main__":
+    main()
