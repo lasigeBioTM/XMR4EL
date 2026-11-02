@@ -311,7 +311,7 @@ def test_file_picker_cancel_choose_and_restore(tmp_path):
 
     async def go(app, pilot, screen):
         await pilot.press("enter")
-        await to_row(pilot, screen, "eval:dev")
+        await to_row(pilot, screen, "eval-other:dev")
         before = app.draft.current(screen.shown()[0])
         await pilot.press("enter")
         picker = app.screen
@@ -320,7 +320,7 @@ def test_file_picker_cancel_choose_and_restore(tmp_path):
         await pilot.press("escape")  # cancel: mapping, focus and row unchanged
         assert app.screen is screen and app.draft.current(screen.shown()[0]) == before
         assert app.focused is screen.query_one(ConfigRows) and row_ids(screen)[
-            screen.query_one(ConfigRows).highlighted] == "eval:dev"
+            screen.query_one(ConfigRows).highlighted] == "eval-other:dev"
         await pilot.press("enter")
         await pilot.press(*"/test")  # a filter
         assert [e.name for e in app.screen.entries] == ["test.pubtator"]
@@ -337,7 +337,7 @@ def test_file_picker_directories_and_typed_path(tmp_path):
 
     async def go(app, pilot, screen):
         await pilot.press("enter")
-        await to_row(pilot, screen, "eval:test")
+        await to_row(pilot, screen, "eval-other:test")
         await pilot.press("enter")
         field = app.screen.query_one(Input)
         field.value = "elsewhere/"
@@ -384,7 +384,7 @@ def test_register_local_dataset(tmp_path):
         assert app.draft.confirmed is None and "Name required" in footer(app)
         assert app.focused is screen.query_one("#ds-name")  # the control that corrects it
         await pilot.press(*"Mine", "enter")
-        for rid, path in (("train:other", "mine/corpus_train.txt"), ("eval:dev", "mine/corpus_dev.txt")):
+        for rid, path in (("train:other", "mine/corpus_train.txt"), ("eval-other:dev", "mine/corpus_dev.txt")):
             await to_row(pilot, screen, rid)
             await pilot.press("enter")
             app.screen.query_one(Input).value = path
@@ -420,4 +420,24 @@ def test_builder_refused_while_another_dataset_is_shown(tmp_path):
         await pilot.press("m")
         await pilot.pause()
         assert isinstance(app.screen, DatasetSetupScreen) and "this experiment uses A" in footer(app)
+    run_setup(root, go)
+
+
+def test_eval_rows_toggle_and_a_focusing_click_opens_nothing(tmp_path):
+    root = make_root(tmp_path)
+
+    async def go(app, pilot, screen):
+        await pilot.press("enter")
+        rows = screen.query_one(ConfigRows)
+        assert "eval-other:dev" in row_ids(screen) and "eval-other:test" in row_ids(screen)
+        screen.query_one(DatasetList).focus()
+        y = next(i for i, line in enumerate(rows._lines) if line[0] == row_ids(screen).index("eval:dev"))
+        await pilot.click(offset=(rows.content_region.x + 8, rows.content_region.y + y - int(rows.scroll_offset.y)))
+        await pilot.pause()
+        assert app.screen is screen and app.focused is rows  # no picker: the click only focused the panel
+        assert rows.highlighted == next(i for i, o in enumerate(rows.options) if not o.disabled)
+        before = app.draft.current(screen.shown()[0]).evaluation("dev").enabled
+        await to_row(pilot, screen, "eval:dev")
+        await pilot.press("enter")  # enter toggles the split, no picker
+        assert app.screen is screen and app.draft.current(screen.shown()[0]).evaluation("dev").enabled != before
     run_setup(root, go)

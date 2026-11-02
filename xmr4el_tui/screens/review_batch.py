@@ -48,7 +48,7 @@ class Launched(Message):
 
 
 class Queue(Rows):
-    """Execution Queue: up / down or tab select a tree (nothing is edited), enter reviews its details, e edits it in the
+    """Execution Queue: up / down, tab or a click select a tree (nothing is edited; focus stays here), enter reviews its details, e edits it in the
     Model Builder, space picks it up to reorder: up / down then carry it, space drops it, esc puts everything back.
     alt+left / alt+right move the selected tree one place without picking it up."""
     BINDINGS = [Binding("enter", "screen.focus_details", "details"), Binding("e", "screen.edit", "edit"),
@@ -63,11 +63,13 @@ class Queue(Rows):
 
 
 class DetailsList(Rows):
-    """The selected tree's lines; enter on a problem is Fix Issue, 1 / 2 or left / right switch the view."""
+    """The selected tree's lines; enter on a problem is Fix Issue, 1 / 2 or left / right switch the view. A click that
+    focuses the panel selects its first row."""
     BINDINGS = [Binding("enter", "select", "fix issue"), Binding("1", "screen.view('overview')", "overview"),
                 Binding("2", "screen.view('differences')", "differences"),
                 Binding("left", "screen.view('overview')", show=False),
                 Binding("right", "screen.view('differences')", show=False)]
+    FIRST_ROW_ON_FOCUS = True
 
 
 class ViewTabs(Widget, can_focus=True):
@@ -342,9 +344,7 @@ class ReviewBatchScreen(Screen):
             self.fill_details()
 
     def on_option_list_option_selected(self, event):
-        if event.option_list.id == "rv-queue":
-            self.action_focus_details()
-        elif event.option.id and event.option.id.startswith("fix:"):
+        if event.option_list.id != "rv-queue" and event.option.id and event.option.id.startswith("fix:"):
             issue = next((i for i in self.every() if i.id == event.option.id[4:]), None)
             if issue is not None:
                 self.fix(issue)

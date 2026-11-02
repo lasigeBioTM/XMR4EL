@@ -18,6 +18,18 @@ def selectable(line):
 class Rows(Selectable, FullRow, OptionList):
     """OptionList with the full-row cursor and mouse text selection (Description, Dataset Setup, file picker)."""
     CURSOR = "option-list--option-highlighted"
+    FIRST_ROW_ON_FOCUS = False  # a click that focuses the panel only puts the cursor on its first row
+    click_focuses = False
+
+    def focus_on_click(self):
+        self.click_focuses = self.FIRST_ROW_ON_FOCUS and not self.has_focus
+        return super().focus_on_click()
+
+    def _on_click(self, event):
+        if self.click_focuses:  # Textual runs every _on_click in the MRO: prevent_default skips OptionList's select
+            self.click_focuses = False
+            event.prevent_default()
+            self.highlighted = next((i for i, o in enumerate(self.options) if not o.disabled), None)
 
     def cursor_at(self, y):
         try:
@@ -28,10 +40,11 @@ class Rows(Selectable, FullRow, OptionList):
 
 class Description(Rows):
     """Read-only lines of the selected item, one option each: up / down (or a click) select a row, headings and
-    blank lines are skipped, nothing is editable. left / right leave for Results / Run monitor. The selected row is
+    blank lines are skipped, nothing is editable. A click that focuses the panel selects its first row. left / right leave for Results / Run monitor. The selected row is
     one colour (a green COMPLETED would vanish on the accent)."""
     BINDINGS = [Binding("left", "screen.results", "results"), Binding("right", "screen.monitor", "monitor"),
                 Binding("escape", "screen.focus_explorer", "explorer")]
+    FIRST_ROW_ON_FOCUS = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

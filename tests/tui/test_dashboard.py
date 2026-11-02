@@ -576,7 +576,8 @@ def test_mouse_selection_copies(tmp_path):
         assert app.clipboard == "UNVERIFIED"
         await drag_over(pilot, tree, "My Custom")
         assert app.clipboard == "My Custom"
-        await pilot.click(Description, offset=(5, 3))  # a click selects a row, copies nothing
+        await pilot.click(Description, offset=(5, 3))  # a click that focuses it: first row, copies nothing
+        assert desc.highlighted == next(i for i, o in enumerate(desc.options) if not o.disabled)
         await drag(pilot, (tree.region.right - 1, 5), (tree.region.right + 9, 5))  # border drag: a resize only
         assert app.clipboard == "My Custom" and tree.outer_size.width == 36
     run_app(fake_root(tmp_path), check)
