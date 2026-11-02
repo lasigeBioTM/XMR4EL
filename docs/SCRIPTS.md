@@ -1,6 +1,6 @@
 # Script reference
 
-Run commands from the checkout root after [setup](README.md#setup). Examples
+Run commands from the checkout root after [setup](../README.md#setup). Examples
 require your own local inputs and saved artifacts; replace paths before running.
 Use `.venv/bin/python` locally and `python3` in the project container.
 
@@ -206,8 +206,8 @@ SIGTERM/SIGINT records a stopped run; SIGKILL cannot record a final state.
 The launch-binding options `-model_config_sha256` and `-tree_id` reject changed
 reviewed artifacts with exit 3. Detailed process/comparison ownership belongs to
 the [TUI reference](TUI.md).
-Implementation: [run_experiment.py](scripts/run_experiment.py); checks:
-[test_run_experiment.py](tests/test_run_experiment.py).
+Implementation: [run_experiment.py](../scripts/run_experiment.py); checks:
+[test_run_experiment.py](../tests/test_run_experiment.py).
 
 ## Diagnose and screen
 
@@ -281,7 +281,7 @@ Back in the project environment:
 .venv/bin/python scripts/baselines/pecos_compare.py score -out "$EXPORT"
 ```
 
-PECOS is absent from project dependencies; [pecos.dockerfile](pecos.dockerfile)
+PECOS is absent from project dependencies; [pecos.dockerfile](../docker/pecos.dockerfile)
 provides a separate Linux/amd64 environment. `ours` uses exported features;
 `tfidf` fits PECOS preprocessing on the exported texts. Parser defaults are
 beams `2,10`, topk 100, branching 8, maximum leaf size 100, weight-pruning
@@ -294,7 +294,7 @@ Shared parameter names do not establish algorithm equivalence.
 logistic/path-product settings; `pecos_compare.py agree -out "$EXPORT" -beam_size 10`
 compares predictions with the tree (kNN off).
 
-scispaCy is also external ([scispacy.dockerfile](scispacy.dockerfile));
+scispaCy is also external ([scispacy.dockerfile](../docker/scispacy.dockerfile));
 `scispacy_run.py -data "$EXPORT" -kb umls` writes `pred_scispacy_umls.npz` for the
 same scorer. Its default UMLS candidate space is for CUI-labelled data such as
 MedMentions, not an automatic mapping to MeSH IDs. Neither external runtime was
@@ -367,6 +367,6 @@ Useful subsets:
 
 The library installs a `NullHandler`; Python applications supply their own
 logging handler. `xmr4el.set_verbosity(0/1/2)` selects WARNING/INFO/DEBUG.
-CI also runs [smoke_installed.py](tests/smoke_installed.py) outside a read-only
+CI also runs [smoke_installed.py](../tests/smoke_installed.py) outside a read-only
 wheel installation with a mocked transformer; it is not a pytest test or a
 real checkpoint-download check.

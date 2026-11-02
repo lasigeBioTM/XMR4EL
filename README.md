@@ -14,10 +14,10 @@ the implemented pipeline.
 
 | Reference | Contents |
 | --- | --- |
-| [Pipeline](PIPELINE.md) | Data contracts, features, labels, hierarchy, scoring, evaluation and persistence. |
-| [Scripts](SCRIPTS.md) | Preparation, training, tracked runs, diagnostics, baselines and development checks. |
-| [TUI reference](TUI.md) | Terminal workflows, keys, execution, file and comparison contracts. |
-| [Benchmark](BENCHMARK.md) | Recorded results and provenance; verification is tracked in [INVENTORY.md](INVENTORY.md). |
+| [Pipeline](docs/PIPELINE.md) | Data contracts, features, labels, hierarchy, scoring, evaluation and persistence. |
+| [Scripts](docs/SCRIPTS.md) | Preparation, training, tracked runs, diagnostics, baselines and development checks. |
+| [TUI reference](docs/TUI.md) | Terminal workflows, keys, execution, file and comparison contracts. |
+| [Benchmark](docs/BENCHMARK.md) | Recorded results and provenance; verification is tracked in [INVENTORY.md](docs/INVENTORY.md). |
 
 ## Setup
 
@@ -31,7 +31,7 @@ uv sync --locked
 [uv.lock](uv.lock) records dependency versions. On Linux the project selects
 Torch from the CUDA 12.6 index. Transformer encoding prefers CUDA, then Apple MPS,
 then CPU; matcher training has additional device and sparse-input constraints
-in [PIPELINE.md](PIPELINE.md#training-and-inference).
+in [PIPELINE.md](docs/PIPELINE.md#training-and-inference).
 The first transformer use needs a downloaded Hugging Face checkpoint or a local
 checkpoint/cache. The supplied presets use SapBERT.
 
@@ -52,7 +52,7 @@ PubTator uses title/abstract headers and tab-separated annotations:
 Annotations contain document ID, start, end, mention, type and concept ID. Offsets
 refer to `title + " " + abstract` when an abstract is present. The reader creates
 `mention [SEP] context`; context is the document or a configured word window.
-See [reader rules](PIPELINE.md#preprocessing) for skipped IDs, composites and validation.
+See [reader rules](docs/PIPELINE.md#preprocessing) for skipped IDs, composites and validation.
 
 ```bash
 .venv/bin/python scripts/train.py \
@@ -71,11 +71,11 @@ MODEL=outputs/saved_trees/xmodel_REPLACE_WITH_SAVED_NAME
 
 `-ds_len N` on `train.py` selects the first N label groups, not a random sample or
 a document limit. Small vocabularies can make the preset's clustering infeasible
-and reduce evaluation coverage. [SCRIPTS.md](SCRIPTS.md#train-and-evaluate) lists defaults.
+and reduce evaluation coverage. [SCRIPTS.md](docs/SCRIPTS.md#train-and-evaluate) lists defaults.
 
 Grouped TSV training instead uses `integer_group_id<TAB>text` plus a label file
 aligned with sorted group IDs. It requires `-labels_path` and `"features": "tfidf"`;
-see the [TSV recipe](SCRIPTS.md#grouped-tsv). The evaluation CLI reads PubTator.
+see the [TSV recipe](docs/SCRIPTS.md#grouped-tsv). The evaluation CLI reads PubTator.
 
 For Python inference, pass already formatted queries:
 
@@ -89,7 +89,7 @@ best = model.initial_labels[row.indices[row.data.argmax()]] if row.nnz else None
 ```
 
 The result is a CSR matrix of queries × labels; column `j` names
-`model.initial_labels[j]`. [Prediction settings](PIPELINE.md#training-and-inference)
+`model.initial_labels[j]`. [Prediction settings](docs/PIPELINE.md#training-and-inference)
 default to the saved tree's configuration.
 
 ## Evaluation and recorded runs
@@ -98,7 +98,7 @@ Evaluation reports acc@1, MRR, recall@k, candidate recall and vocabulary coverag
 Ranking metrics use loaded rows whose gold label is in the trained vocabulary;
 `acc@1_all` counts other loaded rows as misses. `-train_path` adds mention-string
 groups and dictionary/hybrid accuracy. Candidate recall also reflects the leaf
-candidate cap and any final `topk` cut. See [metric definitions](PIPELINE.md#evaluation).
+candidate cap and any final `topk` cut. See [metric definitions](docs/PIPELINE.md#evaluation).
 
 ```bash
 .venv/bin/python scripts/run_experiment.py -spec configs/experiments/bc5cdr.json
@@ -106,27 +106,35 @@ candidate cap and any final `topk` cut. See [metric definitions](PIPELINE.md#eva
 
 The runner trains/evaluates a PubTator spec, or evaluates an existing tree with
 `-xmodel_path`. It writes provenance, metrics, logs and telemetry under
-`outputs/runs/`. [SCRIPTS.md](SCRIPTS.md#tracked-runs) documents validation and outputs.
+`outputs/runs/`. [SCRIPTS.md](docs/SCRIPTS.md#tracked-runs) documents validation and outputs.
 
 ## Optional terminal UI
+
+The terminal interface is built with [Textual](https://textual.textualize.io/).
 
 ```bash
 uv sync --locked --extra tui
 .venv/bin/python -m xmr4el_tui --root .
 ```
 
-The `xmr4el-tui` entry point is equivalent. See the [TUI reference](TUI.md)
+The `xmr4el-tui` entry point is equivalent. See the [TUI reference](docs/TUI.md)
 for browsing results, monitoring runs and launching experiments.
+
+![Dashboard: trees by dataset, the selected tree's description, active runs](docs/images/tui_dashboard.svg)
+
+![Results: a baseline against three challengers; Δ — marks deltas the recorded evidence does not allow](docs/images/tui_results.svg)
+
+*Screenshots from small test batches; the values are not benchmark results.*
 
 ## Docker
 
-[xmr4el.dockerfile](xmr4el.dockerfile) installs locked dependencies, including the
+[xmr4el.dockerfile](docker/xmr4el.dockerfile) installs locked dependencies, including the
 TUI and NVML extras, in `/opt/venv`. Mount the checkout at `/app`; use `python3`
 inside the container. This example assumes NVIDIA Container Toolkit; omit
 `--gpus all` for CPU:
 
 ```bash
-docker build -f xmr4el.dockerfile -t xmr4el .
+docker build -f docker/xmr4el.dockerfile -t xmr4el .
 mkdir -p "$HOME/.cache/huggingface"
 docker run --rm --init --gpus all --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$PWD,dst=/app" \
@@ -162,7 +170,7 @@ uvx ruff check xmr4el xmr4el_tui scripts tests
 ```
 
 [CI](.github/workflows/ci.yml) declares these checks and an installed-wheel smoke
-check with a mocked transformer. [SCRIPTS.md](SCRIPTS.md#development-checks) lists
+check with a mocked transformer. [SCRIPTS.md](docs/SCRIPTS.md#development-checks) lists
 targeted tests and script self-checks. These checks do not establish corpus
 quality, accelerator behavior or benchmark reproduction.
 
@@ -175,6 +183,7 @@ quality, accelerator behavior or benchmark reproduction.
 | `xmr4el/telemetry/`, `xmr4el_tui/` | Runner events/resources and terminal application. |
 | `scripts/`, `configs/`, `tests/` | Commands, JSON presets/specs and checks. |
 | `outputs/` | Generated trees, runs, caches and exports (gitignored). |
-| `docs/` | Diagrams and supporting non-Markdown assets. |
+| `docs/` | Pipeline, scripts, TUI and benchmark guides, verification inventory and assets. |
+| `docker/` | Project, PECOS and scispaCy dependency images. |
 
 MIT license; see [LICENSE](LICENSE).

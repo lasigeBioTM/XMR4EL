@@ -1,4 +1,4 @@
-"""events.jsonl writer (TUI.md#progress-and-resources): one JSON object per line, appended in emission order."""
+"""events.jsonl writer (docs/TUI.md#progress-and-resources): one JSON object per line, appended in emission order."""
 import json
 import logging
 import time

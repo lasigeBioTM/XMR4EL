@@ -6,7 +6,7 @@
 set -euo pipefail
 SETS=${*:-ncbi_disease biored_disease bc5cdr_chemical biored_chemical nlm_chem medmentions_st21pv}
 MM=$([[ " $SETS " == *" medmentions_st21pv "* ]] && echo 1 || true)
-[ -n "$MM" ] && docker build --platform linux/amd64 -f scispacy.dockerfile -t xmr4el-scispacy .  # fail before training
+[ -n "$MM" ] && docker build --platform linux/amd64 -f docker/scispacy.dockerfile -t xmr4el-scispacy .  # fail before training
 mkdir -p "$HOME/.cache/huggingface"
 docker run --rm --init --gpus all --user "$(id -u):$(id -g)" --mount "type=bind,src=$PWD,dst=/app" -w /app \
   --mount "type=bind,src=$HOME/.cache/huggingface,dst=/cache/huggingface" -e HF_HOME=/cache/huggingface \

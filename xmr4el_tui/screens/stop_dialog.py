@@ -1,4 +1,4 @@
-"""Cancel Run confirmation (TUI.md#screens-and-workflow): names the exact run; focus starts on Keep running."""
+"""Cancel Run confirmation (docs/TUI.md#screens-and-workflow): names the exact run; focus starts on Keep running."""
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding

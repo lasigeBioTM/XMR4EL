@@ -1,4 +1,4 @@
-"""New Experiment, step 2: Model Builder (TUI.md#screens-and-workflow). Model Builder 45 % (tree tabs, zoom, pipeline grid) over the
+"""New Experiment, step 2: Model Builder (docs/TUI.md#screens-and-workflow). Model Builder 45 % (tree tabs, zoom, pipeline grid) over the
 Component Library or the Component Editor (Attributes 40 % | JSON preview 60 %) 55 %.
 
 Every tree's applied configuration lives in the app's draft (`app.draft.trees`). The editor works on a copy of

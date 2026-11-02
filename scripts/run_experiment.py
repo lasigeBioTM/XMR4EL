@@ -11,7 +11,7 @@ tree.json (saved tree path), metrics_<split>.json (scripts/evaluate.py's numbers
 completed | failed with the error | stopped by SIGTERM/SIGINT; process identity from xmr4el_tui.procinfo kept
 throughout; once a final status is written, a later SIGTERM is ignored), heartbeat (touched every HEARTBEAT seconds
 while running), events.jsonl (one progress event per line: the `event` of xmr4el's stage log records and of
-xmr4el.progress, plus run start/end and failed/stopped ends of open stages, TUI.md#progress-and-resources), resources.json
+xmr4el.progress, plus run start/end and failed/stopped ends of open stages, docs/TUI.md#progress-and-resources), resources.json
 (per-stage CPU / memory / GPU summary, sampled every -resource_interval seconds, 0 = off). Python warnings go to
 run.log. An eval with no row in the tree's vocabulary fails the run. With -xmodel_path:
 no training, evals only. `run(spec, xmodel_path)` is the same run without argument parsing.

@@ -1,4 +1,4 @@
-"""Batch execution in the TUI (TUI.md#execution-and-cancellation): Review Batch launch, batch monitor, Stop Batch, Dashboard discovery, the
+"""Batch execution in the TUI (docs/TUI.md#execution-and-cancellation): Review Batch launch, batch monitor, Stop Batch, Dashboard discovery, the
 quit dialog and batch notifications. A fake runner stands in for the real one; nothing is trained."""
 import copy
 import json

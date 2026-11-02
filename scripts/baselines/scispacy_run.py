@@ -1,7 +1,7 @@
 # LOCAL TEST ARTIFACT (user's baseline comparison): kept on `repeat`, not merged into `main`.
 """scispaCy's entity-linker candidate generator on the gold mentions of a `pecos_compare.py export` (plan G, 5).
 
-Runs in its own container (`scispacy.dockerfile`). Each dev row's mention string (text before [SEP], as the 1-NN
+Runs in its own container (`docker/scispacy.dockerfile`). Each dev row's mention string (text before [SEP], as the 1-NN
 baselines; abbreviation expansion as the tree's loader) goes to `CandidateGenerator(name=<kb>)`: char 3-gram TF-IDF
 nearest neighbours over the KB's aliases, a concept's score = its max alias similarity (`EntityLinker` without the
 0.7 threshold, so every candidate is ranked). Concepts outside the tree's label set are dropped: the same candidate

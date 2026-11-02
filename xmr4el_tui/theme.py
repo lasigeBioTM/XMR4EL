@@ -1,4 +1,4 @@
-"""The one source of the TUI's colours (TUI.md#navigation-logs-and-notifications). Stdlib only.
+"""The one source of the TUI's colours (docs/TUI.md#navigation-logs-and-notifications). Stdlib only.
 
 A palette is a few brand colours (`BRANDS`); `build` derives every semantic token from them, lifting each hue toward
 the text colour until it reads (WCAG AA, 4.5:1) on the surface. `TOKENS` is the active palette, switched in place by

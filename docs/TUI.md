@@ -1,9 +1,10 @@
 # Terminal workbench
 
-The optional Textual application browses `outputs/runs/` and `outputs/batches/`,
+The optional [Textual](https://textual.textualize.io/) application browses
+`outputs/runs/` and `outputs/batches/`,
 edits experiment configurations, and launches sequential training/evaluation
 batches. It reads records and starts external processes; the scientific pipeline
-stays in [the runner](scripts/run_experiment.py) and [XMR4EL](PIPELINE.md).
+stays in [the runner](../scripts/run_experiment.py) and [XMR4EL](PIPELINE.md).
 
 This reference describes implemented behavior. Verification and untested
 environments are recorded in [INVENTORY.md](INVENTORY.md#session-3-verification-2026-11-02).
@@ -57,9 +58,9 @@ After returning to Dashboard, **`n` creates a fresh draft and opens Dataset
 Setup**, rather than reopening the launched Review Batch. Before starting that
 new draft, `c` can restore the previous workflow within the same TUI session;
 this restores editing, not execution. A failed launch preserves the draft and
-Review screen. Source: [app navigation](xmr4el_tui/app.py),
-[draft](xmr4el_tui/draft.py), and
-[launch/navigation regressions](tests/tui/test_batch_ui.py).
+Review screen. Source: [app navigation](../xmr4el_tui/app.py),
+[draft](../xmr4el_tui/draft.py), and
+[launch/navigation regressions](../tests/tui/test_batch_ui.py).
 
 Dataset Setup accepts PubTator. Discovery uses experiment specs, recognized
 dataset directories and the local registry. It checks file availability and
@@ -68,7 +69,7 @@ symlinks), requires an enabled evaluation and unique split names, and sniffs onl
 the first **64 KiB**. Ready means these preflight checks passed; it does not
 establish full parsing, vocabulary size, SVD rank or hierarchy feasibility.
 Discovery, confirmation and the file picker still have synchronous filesystem
-paths; slow/large directories can stall them. See [datasets.py](xmr4el_tui/datasets.py).
+paths; slow/large directories can stall them. See [datasets.py](../xmr4el_tui/datasets.py).
 
 Model Builder supports the hybrid `sapbert_char_context` recipe: transformer,
 mention TF-IDF and SVD, context TF-IDF and SVD, hierarchy, matcher and search.
@@ -78,8 +79,8 @@ document-frequency counts stay distinct from floating-point fractions. New
 trees use an available hybrid config from a matching training spec, falling back
 to `configs/xmr4el_bc5cdr_config.json`; unsupported recipes are skipped, not
 converted. Changing the dataset does not rewrite existing trees.
-See [components.py](xmr4el_tui/components.py) and
-[Model Builder](xmr4el_tui/screens/model_builder.py).
+See [components.py](../xmr4el_tui/components.py) and
+[Model Builder](../xmr4el_tui/screens/model_builder.py).
 
 In Tree Selection, `n` adds, `d` duplicates the applied config, `x` removes after
 confirmation (the last tree stays), `shift+left`/`shift+right` reorder, and `F2`
@@ -90,7 +91,7 @@ the TF-IDF count/fraction distinction. Invalid issues block launch; duplicate
 configs produce a nonblocking Caution. Launch rechecks readiness and copies the
 applied configurations into a plan. Each generated evaluation includes the
 shared training file as `train_path`, enabling dictionary and seen/unseen
-evidence. See [review.py](xmr4el_tui/review.py).
+evidence. See [review.py](../xmr4el_tui/review.py).
 
 Results opens with the selected evaluation as baseline, identified by
 `(run id, split)`. A tree with several evaluations requires a choice. Each new
@@ -125,17 +126,17 @@ start/process identity, so an old notice cannot open a different run that reused
 the directory name. LOST is provisional and can be replaced by a later recorded
 outcome; an unreadable status is waited out. A STOPPED notice claims user
 cancellation only when this TUI requested it. Opening a notice preserves the
-screen beneath it. Sources: [notifications](xmr4el_tui/services/notifications.py)
-and [app](xmr4el_tui/app.py).
+screen beneath it. Sources: [notifications](../xmr4el_tui/services/notifications.py)
+and [app](../xmr4el_tui/app.py).
 
 ## Execution and cancellation
 
 The TUI launches a detached coordinator; **the coordinator owns the runners**.
-[batch.py](xmr4el_tui/batch.py) prepares records and starts
+[batch.py](../xmr4el_tui/batch.py) prepares records and starts
 `python -m xmr4el_tui.coordinator <batch-directory>` in its own session with
 stdin disconnected and stdout/stderr in `coordinator.log`.
-[coordinator.py](xmr4el_tui/coordinator.py) launches one tree at a time through
-[process.spawn](xmr4el_tui/process.py), using an argument list, the project root
+[coordinator.py](../xmr4el_tui/coordinator.py) launches one tree at a time through
+[process.spawn](../xmr4el_tui/process.py), using an argument list, the project root
 as working directory, a new session/group and file-backed stdout/stderr. The
 runner receives its spec on stdin (`-spec -`), a new `-run_dir`, and
 `-model_config_sha256`. Existing run/console paths are not overwritten.
@@ -182,7 +183,7 @@ Run stopping requires all of:
 changed, unverified or shared-group processes are not signalled. A reattached TUI
 in the same runtime can use the persistent launch record. Linux runtime identity
 combines host boot ID and PID namespace; macOS uses boot time. Hostname alone is
-not ownership evidence. See [procinfo.py](xmr4el_tui/procinfo.py).
+not ownership evidence. See [procinfo.py](../xmr4el_tui/procinfo.py).
 
 | Run state | Meaning |
 | --- | --- |
@@ -227,8 +228,8 @@ input hashing are separate operations described above.
 | Batch `stop`, `coordinator.log`, `coordinator.lock` | Stop request, supervisor log and liveness/ownership lock. |
 | `outputs/tui/datasets.json`, `settings.json` | Registered local mappings and palette. An unreadable dataset registry is not overwritten by registration. |
 
-[runs.py](xmr4el_tui/runs.py) tolerates missing/corrupt metadata and reports
-problems. [ExperimentRepository](xmr4el_tui/services/experiment_repository.py)
+[runs.py](../xmr4el_tui/runs.py) tolerates missing/corrupt metadata and reports
+problems. [ExperimentRepository](../xmr4el_tui/services/experiment_repository.py)
 owns cached snapshots and selection details. Scans run every **5 s** in a
 serialized, coalescing worker; unchanged run metadata is reused by file
 signature. Provenance, git and metrics changes invalidate comparison facts.
@@ -238,14 +239,14 @@ reconciliation**; browsing is not globally free of writes.
 
 Run Monitor telemetry, live logs and Batch Monitor status poll every **1 s**
 while active; run state comes from the shared scan. Logs prefer `run.log`, falling
-back to the console log. [LogTail](xmr4el_tui/logs.py) reads at most **8 MiB** per
+back to the console log. [LogTail](../xmr4el_tui/logs.py) reads at most **8 MiB** per
 call, restarting after replacement/truncation; excess earlier bytes are skipped.
 The viewer keeps at most **100,000 lines**. Partial live lines wait for completion.
 Missing logs are reported, not generated.
 
 ## Progress and resources
 
-[EventLog](xmr4el/telemetry/events.py) writes schema-v1 JSON lines with `v`, an
+[EventLog](../xmr4el/telemetry/events.py) writes schema-v1 JSON lines with `v`, an
 offset-aware timestamp `t`, `stage` and `phase`, plus `split`/`part` where needed.
 Phases include start, complete, failed, stopped, tick and cache_hit; end events
 carry monotonic `duration_seconds`. Events are structured logging fields, not
@@ -260,7 +261,7 @@ and matcher stages. Evaluation parts are data, predict, metrics and write.
 Transformer ticks count distinct mentions, throttled to five seconds with a final
 count/cache-hit event. They do not estimate whole-run progress or ETA.
 
-[ResourceMonitor](xmr4el/telemetry/resources.py) samples at
+[ResourceMonitor](../xmr4el/telemetry/resources.py) samples at
 `-resource_interval` seconds (default **5**, **0** disables it), also at stage
 boundaries, and writes summaries by atomic replacement at stage end. Raw samples
 are not persisted. Missing values are null and displayed as N/A.
@@ -278,7 +279,7 @@ bounded log display do not make all monitoring memory constant.
 
 ## Comparison contract
 
-Only [services/comparison.py](xmr4el_tui/services/comparison.py) `assess` decides
+Only [services/comparison.py](../xmr4el_tui/services/comparison.py) `assess` decides
 comparability; `allowed` gates individual deltas. `read_facts` gathers evidence
 for the selected `(run id, split)` and its tree's training run off the UI thread.
 Batch membership, matching paths or equal coverage do not prove comparability.
@@ -323,7 +324,7 @@ deltas use percentage points; MRR uses its native scale. Summary always uses
 Acc@1_all, Acc@1 and coverage, without selecting a winner. Beam, vocabulary and
 search differences are shown rather than used as eligibility gates.
 
-[evaluate_tree](xmr4el/eval.py) currently records `EVAL_PROTOCOL = 1`. Changing a
+[evaluate_tree](../xmr4el/eval.py) currently records `EVAL_PROTOCOL = 1`. Changing a
 metric formula, denominator, filtering or tie rule requires bumping that
 constant. Re-evaluate saved trees to obtain missing evidence; do not relax gates
 to subtract older metrics. See [evaluation definitions](PIPELINE.md#evaluation).
@@ -354,10 +355,10 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 \
 
 Relevant tests cover Dashboard/Builder/Review navigation, `n` after launch,
 comparison evidence, process ownership, locks, stop/failure/crash handling and
-reconnection. [Metric tests](tests/test_eval.py),
-[telemetry tests](tests/test_telemetry.py),
-[registry/backend contracts](tests/test_tui_components.py) and
-[runner tests](tests/test_run_experiment.py) cover their separate boundaries;
+reconnection. [Metric tests](../tests/test_eval.py),
+[telemetry tests](../tests/test_telemetry.py),
+[registry/backend contracts](../tests/test_tui_components.py) and
+[runner tests](../tests/test_run_experiment.py) cover their separate boundaries;
 they are not all real execution evidence. Session-specific commands/results
 and exclusions are in [the inventory](INVENTORY.md).
 

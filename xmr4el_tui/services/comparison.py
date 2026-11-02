@@ -1,4 +1,4 @@
-"""Results comparison (TUI.md#comparison-contract): what is known about each saved evaluation, how a challenger relates to the
+"""Results comparison (docs/TUI.md#comparison-contract): what is known about each saved evaluation, how a challenger relates to the
 baseline (VERIFIED / CAUTION / INCOMPATIBLE, with the reason), and the rows of the five analysis groups with the
 deltas the evidence allows. Stdlib only, no UI.
 
@@ -111,7 +111,7 @@ def assess(base, other):
     """How `other` compares with `base` (both Facts). The evaluated file (sha256), its loaded row count and metrics
     files that agree with their specs decide eligibility; vocabularies, beams and search settings never do. Every
     delta needs one recorded evaluation protocol; deltas of in-vocabulary metrics need a population hash match or its
-    derivation (TUI.md#comparison-contract); Generalization deltas need equal strings hashes (groups and dictionary answers)."""
+    derivation (docs/TUI.md#comparison-contract); Generalization deltas need equal strings hashes (groups and dictionary answers)."""
     if other.key == base.key:
         return BASELINE
     if not other.metrics:

@@ -1,5 +1,18 @@
 # Documentation inventory
 
+## Current layout
+
+`README.md`, `AGENTS.md` and `CLAUDE.md` remain at the repository root.
+The instruction files stay tracked on the local development branch for `origin`;
+omit them from the separate snapshot prepared for `upstream`.
+The five reference documents live in `docs/`: `PIPELINE.md`, `SCRIPTS.md`,
+`TUI.md`, `BENCHMARK.md` and this inventory. Dockerfiles live in `docker/`;
+build commands still run from the repository root with `.` as the context.
+The README retains its Dashboard and Results screenshots and test-batch caption.
+
+The session records below describe the earlier consolidation and its original
+root paths. They are historical evidence, not instructions for further changes.
+
 ## Scope and baseline
 
 Consolidate documentation on `docs/current-state`, created from local `tui` at
@@ -7,7 +20,7 @@ Consolidate documentation on `docs/current-state`, created from local `tui` at
 checkpoint commit per session; do not merge or push. Complete only the next
 unfinished session, update this inventory, commit, then stop.
 
-The final Markdown set is exactly eight root files: `README.md`, `PIPELINE.md`,
+The consolidation's final Markdown set was exactly eight root files: `README.md`, `PIPELINE.md`,
 `TUI.md`, `SCRIPTS.md`, `BENCHMARK.md`, `AGENTS.md`, `CLAUDE.md`, `INVENTORY.md`.
 Remove future-work documentation without recreating a backlog. Preserve all
 non-Markdown assets, datasets, outputs and runtime behavior. Source edits may
@@ -31,7 +44,7 @@ it does not verify implementation claims. S2–S5 completed the necessary
 verification/extraction below. **Session 6 removed all 21 superseded originals**
 after matching their dispositions to the 24 originals preserved at `e5d97ef`.
 The three rewritten original root files and five added root references/inventory
-form the final eight-file Markdown set. Dated audit findings are not current
+formed the consolidation's eight-file Markdown set. Dated audit findings are not current
 defects unless verified against current code.
 
 | Original path | Actual purpose | Disposition | Destination | Verification status |
@@ -341,8 +354,9 @@ corpora, saved models, hardware or benchmark reproduction. Earlier S2–S5 evide
 and environment limitations remain applicable. No training, benchmark rerun,
 merge or push was performed.
 
-## Unresolved items and exact next action
+## Consolidation completion
 
 All six documentation sessions are complete; no documentation blocker remains.
-The earlier evidence/environment limitations are recorded above. Commit this
-local Session 6 checkpoint, then stop; no further cleanup session, merge or push.
+The earlier evidence/environment limitations are recorded above. The original
+Session 6 checkpoint instructions were to commit locally and stop; they do not
+authorize committing or publishing the current layout changes.

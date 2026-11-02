@@ -1,6 +1,6 @@
 # LOCAL TEST ARTIFACT (user's baseline comparison): kept on `repeat`, not merged into `main`.
 # PECOS baseline runtime (libpecos has no macOS wheel). Used by scripts/baselines/pecos_run.py.
-#   docker build --platform linux/amd64 -f pecos.dockerfile -t xmr4el-pecos .
+#   docker build --platform linux/amd64 -f docker/pecos.dockerfile -t xmr4el-pecos .
 FROM python:3.10-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
@@ -14,5 +14,5 @@ RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir libpecos \
  && python -c "from pecos.xmc.xlinear.model import XLinearModel"
 
-# Source and data are mounted here at runtime (see SCRIPTS.md#baselines-and-external-environments).
+# Source and data are mounted here at runtime (see docs/SCRIPTS.md#baselines-and-external-environments).
 WORKDIR /app

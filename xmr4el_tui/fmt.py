@@ -1,4 +1,4 @@
-"""Display formats (TUI.md#navigation-logs-and-notifications). Stdlib only."""
+"""Display formats (docs/TUI.md#navigation-logs-and-notifications). Stdlib only."""
 import locale
 import math
 import os

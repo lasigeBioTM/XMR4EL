@@ -22,7 +22,7 @@ Model JSON is passed to `XModel(**config)`; component configs use `type` and
 
 ## Preprocessing
 
-[Preprocessor](xmr4el/data/readers.py) loads and groups training text by label.
+[Preprocessor](../xmr4el/data/readers.py) loads and groups training text by label.
 `XModel.train(groups, labels)` expects one text list per label entry; it flattens
 those lists into training rows. Repeated labels share a target column. A group
 without texts contributes no column.
@@ -52,13 +52,13 @@ Reader rules:
   and out-of-document spans fail the load.
 - Warnings identify file/line and the problem without reproducing mention text.
 
-Checks: [reader tests](tests/data/test_readers.py),
-[conversion tests](tests/data/test_to_pubtator.py), and reader regressions in
-[test_audit_regressions.py](tests/test_audit_regressions.py).
+Checks: [reader tests](../tests/data/test_readers.py),
+[conversion tests](../tests/data/test_to_pubtator.py), and reader regressions in
+[test_audit_regressions.py](../tests/test_audit_regressions.py).
 
 ## Feature generation
 
-[TextEncoder._encode](xmr4el/features/encoder.py) supports two compositions:
+[TextEncoder._encode](../xmr4el/features/encoder.py) supports two compositions:
 
 | `features` | Output |
 | --- | --- |
@@ -70,14 +70,14 @@ is no configured block weighting. PIFA later consumes the complete feature row,
 including context. All-empty or fully filtered TF-IDF vocabularies fail fitting;
 for example, zero context windows can leave the context block unfit.
 
-Backend names are explicit: `tfidf` in [vectorizers.py](xmr4el/features/vectorizers.py)
-and `sklearntruncatedsvd` in [reduction.py](xmr4el/features/reduction.py). If the
+Backend names are explicit: `tfidf` in [vectorizers.py](../xmr4el/features/vectorizers.py)
+and `sklearntruncatedsvd` in [reduction.py](../xmr4el/features/reduction.py). If the
 requested SVD components exceed the vocabulary width, reduction is skipped with
 a warning. SVD output is dense; an unreduced TF-IDF block stays sparse. Mixed
 blocks are assembled as CSR. `block_widths` stores actual fitted widths for
 `XModel.feature_blocks()`.
 
-[Transformer](xmr4el/features/transformers.py) uses frozen Hugging Face models.
+[Transformer](../xmr4el/features/transformers.py) uses frozen Hugging Face models.
 Short types are `sapbert`, `biobert`, and `sentencetbiobert`;
 `kwargs.model_name` can select another Hub ID or a local directory. `pooling`
 (`cls` or `mean`), `max_seq_length` and `revision` customize encoding. SapBERT's
@@ -92,14 +92,14 @@ keyed by checkpoint, revision, pooling, length, dtype and distinct texts.
 computed embeddings. Local checkpoint edits require clearing/disabling the cache;
 the key does not hash model-directory contents.
 
-Checks: [encoder tests](tests/features/test_text_encoder.py),
-[adapters](tests/features/test_adapters.py), [SVD](tests/features/test_reduction.py),
-[transformer tests](tests/features/test_transformers.py), and revision/cache
-regressions in [test_audit_regressions.py](tests/test_audit_regressions.py).
+Checks: [encoder tests](../tests/features/test_text_encoder.py),
+[adapters](../tests/features/test_adapters.py), [SVD](../tests/features/test_reduction.py),
+[transformer tests](../tests/features/test_transformers.py), and revision/cache
+regressions in [test_audit_regressions.py](../tests/test_audit_regressions.py).
 
 ## Label embeddings and hierarchy
 
-[XModel._fit](xmr4el/xmodel.py) builds:
+[XModel._fit](../xmr4el/xmodel.py) builds:
 
 - `X`: training rows × features, normally float32, dense or CSR.
 - `Y`: sparse one-hot training rows × labels, fitted with `MultiLabelBinarizer`.
@@ -107,10 +107,10 @@ regressions in [test_audit_regressions.py](tests/test_audit_regressions.py).
 
 The invariant is **column j of Y = row j of Z = initial_labels[j]**. Label names
 follow sorted fitted classes, not incoming group order; empty groups disappear.
-[test_label_mapping.py](tests/integration/test_label_mapping.py) checks this
+[test_label_mapping.py](../tests/integration/test_label_mapping.py) checks this
 through train/save/load using stubbed encoder and hierarchy components.
 
-[BalancedKMeans](xmr4el/hierarchy/clusterers.py) performs seeded spherical
+[BalancedKMeans](../xmr4el/hierarchy/clusterers.py) performs seeded spherical
 recursive two-means followed by joint balanced refinement. The cluster matrix
 `C` maps node-local labels to children. Undersized clusters are reassigned to
 valid centroids; they do not discard labels. An internal node must retain at
@@ -120,24 +120,24 @@ least two valid clusters or training fails.
 leaf. Every earlier layer is split; there is no adaptive early leaf. With
 `cut_half_cluster=true`, requested cluster counts halve below the root (minimum
 2). Defaults are resolved before halving and the caller's config is preserved.
-Checks: [clustering](tests/hierarchy/test_clusterers.py) and
-[tree tests](tests/hierarchy/test_tree.py).
+Checks: [clustering](../tests/hierarchy/test_clusterers.py) and
+[tree tests](../tests/hierarchy/test_tree.py).
 
 ## Training and inference
 
-[MLModel.train](xmr4el/hierarchy/node.py) trains internal matchers on `Y @ C`.
+[MLModel.train](../xmr4el/hierarchy/node.py) trains internal matchers on `Y @ C`.
 Leaves use identity `C`, so each leaf target is a label. Child training includes
 only rows with a positive label in that child; it has no out-of-cluster negatives.
-[Matcher](xmr4el/learning/matcher.py) preserves local target order and excludes
+[Matcher](../xmr4el/learning/matcher.py) preserves local target order and excludes
 rows without a local positive.
 
 With `routing_features=true` (code default),
-[prepare_layer](xmr4el/hierarchy/tree.py) appends the selected parent cluster
+[prepare_layer](../xmr4el/hierarchy/tree.py) appends the selected parent cluster
 probability, sum of parent probabilities and maximum parent probability, then
 normalizes. Prediction applies the same augmentation. Child label embeddings
 remain selected parent `Z` rows; they are not recomputed from augmented features.
 
-[JointOvRLogistic](xmr4el/learning/classifiers.py), type
+[JointOvRLogistic](../xmr4el/learning/classifiers.py), type
 `jointlogisticregression`, fits independent L2 logistic problems with a regularized
 bias using Torch L-BFGS. Predictions are per-target sigmoids. Large target
 matrices are fitted in label blocks. Low-density CSR features stay sparse, while
@@ -145,7 +145,7 @@ weights remain dense float32. CUDA is preferred; MPS is used only for sufficient
 large dense problems, otherwise CPU. CUDA/MPS matcher OOM falls back to CPU;
 transformer OOM instead retries smaller batches on the selected device.
 
-[HierarchicalMLModel.predict](xmr4el/hierarchy/tree.py) processes query batches,
+[HierarchicalMLModel.predict](../xmr4el/hierarchy/tree.py) processes query batches,
 keeps the best `beam_size` branches per query by cumulative log path probability,
 and selects up to `leaf_candidates` labels from each visited leaf. Base score:
 
@@ -153,10 +153,10 @@ and selects up to `leaf_candidates` labels from each visited leaf. Base score:
 leaf sigmoid probability × product of ancestor routing probabilities
 ```
 
-With `knn_beta > 0`, [XModel.predict_encoded](xmr4el/xmodel.py) multiplies each
+With `knn_beta > 0`, [XModel.predict_encoded](../xmr4el/xmodel.py) multiplies each
 candidate by `exp(knn_beta × max_cosine)`, using the query's mention-transformer
 block against the label's training mention rows (all features for `tfidf`).
-[label_max_cos](xmr4el/learning/scoring.py) scores candidate pairs only. It cannot
+[label_max_cos](../xmr4el/learning/scoring.py) scores candidate pairs only. It cannot
 recover a label discarded by routing or the leaf cap. The final `topk` cut is
 applied after fusion. Results are CSR rows ordered by decreasing score.
 
@@ -174,7 +174,7 @@ minimum cluster size 5; their root cluster requests are 6 and 128 respectively.
 Both presets request 768 SVD components for each TF-IDF block, character mention
 ngrams of lengths 2–4, word-unigram context, a 10-word context window and append
 abbreviation expansion. Actual widths depend on fitting/reduction.
-See [configs](configs/) before choosing a preset for a small dataset.
+See [configs](../configs/) before choosing a preset for a small dataset.
 
 Matcher/path scores are ranking rules, not established calibration across
 leaves. Pruning uses `argpartition` without a universal label-ID tie break;
@@ -182,15 +182,15 @@ stable sorting of retained candidates cannot recover excluded tied labels.
 Dense `Z`, dense weights and temporary score matrices still determine memory
 needs despite sparse input, label blocking and query batching.
 
-Checks: [matcher](tests/learning/test_matcher.py),
-[logistic solver](tests/learning/test_joint_logistic.py),
-[kNN](tests/learning/test_scoring.py),
-[child inputs](tests/hierarchy/test_prepare_layer.py), and
-[persistence](tests/integration/test_pipeline_persistence.py).
+Checks: [matcher](../tests/learning/test_matcher.py),
+[logistic solver](../tests/learning/test_joint_logistic.py),
+[kNN](../tests/learning/test_scoring.py),
+[child inputs](../tests/hierarchy/test_prepare_layer.py), and
+[persistence](../tests/integration/test_pipeline_persistence.py).
 
 ## Evaluation
 
-[evaluate_tree](xmr4el/eval.py) reads PubTator using the tree's preprocessing.
+[evaluate_tree](../xmr4el/eval.py) reads PubTator using the tree's preprocessing.
 Each loaded row has one gold label. Only rows with an in-vocabulary gold label
 enter ranking metrics; report `rows / rows_total` as coverage.
 
@@ -217,9 +217,9 @@ Metrics record `eval_protocol` (currently `EVAL_PROTOCOL = 1`),
 `population_sha256` (ordered loaded row positions and gold IDs), and, when a
 reference training file is supplied, `strings_sha256` (effective dictionary
 groups and answers). These hashes describe different evidence. TUI comparison
-decisions belong to [comparison.assess](xmr4el_tui/services/comparison.py).
+decisions belong to [comparison.assess](../xmr4el_tui/services/comparison.py).
 Changing metric definitions requires a protocol bump. Checks:
-[test_eval.py](tests/test_eval.py).
+[test_eval.py](../tests/test_eval.py).
 
 ## Persistence and optional reranking
 
@@ -240,8 +240,8 @@ and, when loaded, `Z`; hierarchy load sorts numeric layer/node directories and
 validates parent/child label membership. These checks do not make pickle safe:
 **load only trusted artifacts**. Older layouts are not migrated.
 
-[CrossEncoderReranker](xmr4el/rerank.py) is experimental and separate from
-`XModel.predict`. [train_reranker.py](scripts/train_reranker.py) uses saved-tree
+[CrossEncoderReranker](../xmr4el/rerank.py) is experimental and separate from
+`XModel.predict`. [train_reranker.py](../scripts/train_reranker.py) uses saved-tree
 top-K negatives, or document-held-out fold trees when requested; label texts
 come from frequent training mention strings. Reranker metadata is bound to a
 saved tree ID and loading rejects another ID. `evaluate.py -reranker_path`

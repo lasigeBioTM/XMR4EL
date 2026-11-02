@@ -1,4 +1,4 @@
-"""Palettes (theme.py, TUI.md#navigation-logs-and-notifications): every palette readable (WCAG AA), a switch reaches the Rich styles and the
+"""Palettes (theme.py, docs/TUI.md#navigation-logs-and-notifications): every palette readable (WCAG AA), a switch reaches the Rich styles and the
 Textual theme while the app runs, the choice is kept in outputs/tui/settings.json, offered on the Dashboard only."""
 import asyncio
 import json

@@ -1,6 +1,7 @@
 # Only dependency metadata enters the image. Source and data are mounted at runtime.
 *
-!xmr4el.dockerfile
+!docker/
+!docker/*.dockerfile
 !pyproject.toml
 !uv.lock
 !README.md

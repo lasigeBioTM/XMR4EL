@@ -3,6 +3,7 @@
 /tmp/
 /test/test_data/
 /outputs/
+/docs/tui/
 /.venv/
 /.ruff_cache/
 /.pytest_cache/
@@ -15,3 +16,5 @@ __pycache__/
 *.onnx
 .DS_Store
 .codemap
+/AGENTS.md
+/CLAUDE.md

@@ -24,7 +24,7 @@ the in-vocabulary rows.
 | NCBI-disease | 13,385 / 95,831 | 729 / 757 | 923 / 945 | 537 / 17 / 175 | 633 / 33 / 257 |
 | BC5CDR-chemical | 179,709 / 474,854 | 5,181 / 5,307 | 5,167 / 5,352 | 4,465 / 68 / 648 | 4,330 / 111 / 726 |
 
-Definitions follow [xmr4el/eval.py](xmr4el/eval.py), evaluation protocol **1**:
+Definitions follow [xmr4el/eval.py](../xmr4el/eval.py), evaluation protocol **1**:
 
 - **acc@1:** correct first label / in-vocabulary rows.
 - **cov × acc:** correct first label / all loaded rows, counting
@@ -47,7 +47,7 @@ all systems order equal scores identically.
 
 ## Systems
 
-The same [configuration](configs/xmr4el_bc5cdr_config.json) was recorded for
+The same [configuration](../configs/xmr4el_bc5cdr_config.json) was recorded for
 both trees; its SHA-256 is
 `8d1052315900b7f8d2841a5b0b022c4007b13901f5548b85ff429462aea26bcd`.
 
@@ -61,15 +61,15 @@ both trees; its SHA-256 is
   multiplies leaf matcher and routing probabilities, then applies mention-kNN
   re-scoring with beta 10; beam 10, 100 candidates per leaf, no final top-k cap.
   See [PIPELINE.md](PIPELINE.md) for the implemented stages.
-- **SapBERT 1-NN:** [nn_baselines.py](scripts/baselines/nn_baselines.py) scores
+- **SapBERT 1-NN:** [nn_baselines.py](../scripts/baselines/nn_baselines.py) scores
   each label by maximum cosine to its training mention embeddings, using the
   saved tree's training rows, vocabulary and transformer configuration.
 - **char TF-IDF 1-NN:** the same label scoring using unreduced character TF-IDF
   fitted on training mentions. It does not use the tree's SVD/context blocks.
   This is a string-similarity reference alongside the SapBERT baseline.
-- **PECOS XR-Linear:** [pecos_compare.py](scripts/baselines/pecos_compare.py)
+- **PECOS XR-Linear:** [pecos_compare.py](../scripts/baselines/pecos_compare.py)
   exports XMR4EL's fitted training and evaluation features and aligned labels.
-  [pecos_run.py](scripts/baselines/pecos_run.py) uses libpecos 1.2.8, its own
+  [pecos_run.py](../scripts/baselines/pecos_run.py) uses libpecos 1.2.8, its own
   PIFA/hierarchical-k-means hierarchy, `-nr_splits 16 -max_leaf_size 100
   -threshold 0`, beam 10, top 100. Logs confirm solver `L2R_L2LOSS_SVC_DUAL`,
   postprocessor `l3-hinge`, tolerance 0.1. The model is fitted to `X_trn`/`Y_trn`
@@ -88,7 +88,7 @@ earlier trees; they are not previously untouched test sets.
 
 ## Recorded run and evidence
 
-[run_validation.sh](scripts/run_validation.sh) ran at commit
+[run_validation.sh](../scripts/run_validation.sh) ran at commit
 `aeca7a449ce6e5730ff729e975c4326fcfc3be43`. All six tracked run records report
 clean code and completed status. The environment records a Tesla T4 on one
 Linux x86_64 server, CUDA execution, Python 3.12.16, Torch 2.14.1+cu126, and

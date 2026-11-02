@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LOCAL TEST ARTIFACT (benchmark validation, BENCHMARK.md#reproduction-recipe): not part of the release.
+# LOCAL TEST ARTIFACT (benchmark validation, docs/BENCHMARK.md#reproduction-recipe): not part of the release.
 # Current-code check of two Oct 20 benchmark sets (NCBI-disease, BC5CDR-chemical), configs/xmr4el_bc5cdr_config.json
 # unchanged: per set XMR4EL train + dev, test once on that tree, knn_beta 0 eval-only (dev + test, pre-registered ablation),
 # SapBERT / TF-IDF 1-NN and PECOS XR-Linear on the tree's exported features (trained once on the dev export, test
@@ -29,7 +29,7 @@ c59dbbb880244e6006bf7fb550cc1d95d7d73767184410b5b1562542a2370483  datasets/BC5CD
 c5666488b9b3aa4ff950ee39a0488fd07cf796e4e7307323d652f2371f05cb6a  datasets/BC5CDR/chemical/test.pubtator
 EOF
 mkdir -p "$V/specs" "$E" "$HOME/.cache/huggingface"
-docker build -q -f xmr4el.dockerfile -t xmr4el . && docker build -q -f pecos.dockerfile -t xmr4el-pecos .
+docker build -q -f docker/xmr4el.dockerfile -t xmr4el . && docker build -q -f docker/pecos.dockerfile -t xmr4el-pecos .
 
 THREADS=(-e OMP_NUM_THREADS="$NCPU" -e MKL_NUM_THREADS="$NCPU" -e OPENBLAS_NUM_THREADS="$NCPU" -e NUMEXPR_NUM_THREADS="$NCPU")
 LIMITS=(--cpuset-cpus "$CPUSET" --memory "$MEM" --memory-swap "$MEM" --cpu-shares "$SHARES" "${THREADS[@]}")

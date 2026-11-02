@@ -1,4 +1,4 @@
-"""Batch backend (TUI.md#execution-and-cancellation): snapshot, coordinator (sequential, continue on failure, integrity, stop), locks,
+"""Batch backend (docs/TUI.md#execution-and-cancellation): snapshot, coordinator (sequential, continue on failure, integrity, stop), locks,
 detachment and lost detection. A fake runner stands in for scripts/run_experiment.py: no model is trained."""
 import json
 import os

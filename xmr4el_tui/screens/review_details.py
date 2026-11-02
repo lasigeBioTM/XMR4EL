@@ -1,4 +1,4 @@
-"""Review Batch, Review Details texts (TUI.md#screens-and-workflow): Overview of one tree's applied configuration by model stage, and
+"""Review Batch, Review Details texts (docs/TUI.md#screens-and-workflow): Overview of one tree's applied configuration by model stage, and
 its Differences from the configuration reference. Pure: Rich text lines, no widgets."""
 from dataclasses import dataclass
 

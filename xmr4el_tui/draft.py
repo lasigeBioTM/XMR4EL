@@ -1,13 +1,13 @@
-"""New Experiment draft (TUI.md#screens-and-workflow): the dataset being configured and the one confirmed for the batch. Stdlib only.
+"""New Experiment draft (docs/TUI.md#screens-and-workflow): the dataset being configured and the one confirmed for the batch. Stdlib only.
 
 One draft per TUI session, on the app (`app.draft`, memory only). Dataset Setup edits a `datasets.Selection` per
 dataset; nothing reaches `confirmed` until Confirm Dataset validates it. Later New Experiment screens read
 `draft.confirmed` (training file, enabled evaluation splits, format): every tree of the batch shares it.
 
-Review Batch (TUI.md#screens-and-workflow) adds the batch's own name (`name`, display only: `id` is the identity runs and paths use),
+Review Batch (docs/TUI.md#screens-and-workflow) adds the batch's own name (`name`, display only: `id` is the identity runs and paths use),
 the execution order edits (`move`) and the configuration reference for Differences (`reference`).
 
-Model Builder (TUI.md#screens-and-workflow) keeps the batch's trees here: `trees` in execution order, each with a stable id, a
+Model Builder (docs/TUI.md#screens-and-workflow) keeps the batch's trees here: `trees` in execution order, each with a stable id, a
 display name and its one applied model configuration (a plain dict no other tree shares). Editor drafts never reach
 a tree: only Apply replaces its configuration (`apply`).
 """

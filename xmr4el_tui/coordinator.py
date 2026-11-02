@@ -1,4 +1,4 @@
-"""The detached batch coordinator (TUI.md#execution-and-cancellation): `python -m xmr4el_tui.coordinator <batch dir>`, run from the repo root.
+"""The detached batch coordinator (docs/TUI.md#execution-and-cancellation): `python -m xmr4el_tui.coordinator <batch dir>`, run from the repo root.
 
 Runs the trees of outputs/batches/<id>/batch.json one at a time through the existing runner (`process.spawn`), writes
 status.json, and exits when the batch is final. It is not a Textual app and does not depend on the TUI staying open.
