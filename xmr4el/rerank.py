@@ -1,4 +1,4 @@
-"""Cross-encoder reranker over the tree's top-K candidates (experimental; not used by default prediction).
+"""Cross-encoder reranker over the tree's top-K candidates (PIPELINE.md#persistence-and-optional-reranking).
 
 One shared model scores every (query text, label text) pair, so logits compare across labels.
 Query text = the PubTator row "mention [SEP] context"; label text = `label_texts`."""

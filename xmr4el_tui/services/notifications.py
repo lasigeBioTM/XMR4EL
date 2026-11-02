@@ -1,4 +1,4 @@
-"""Session notifications (tui.md §4 Notifications): experiment lifecycle events seen by the app's scans.
+"""Session notifications (TUI.md#navigation-logs-and-notifications): experiment lifecycle events seen by the app's scans.
 
 Memory only: nothing is written, nothing survives the TUI. The first scan only records each run's state (no flood
 of old results); a notice is made when a run seen active (RUNNING / UNVERIFIED) is later seen ended, or when a run

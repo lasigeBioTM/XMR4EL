@@ -1,4 +1,4 @@
-"""Process identity (tui.md §9), stdlib only: the runner records its own in status.json, the TUI compares it with
+"""Process identity (TUI.md#execution-and-cancellation), stdlib only: the runner records its own in status.json, the TUI compares it with
 the live process before calling a run RUNNING or signalling it. No Textual import (the runner imports this module
 without the tui extra).
 

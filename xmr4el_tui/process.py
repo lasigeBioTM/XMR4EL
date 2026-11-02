@@ -1,4 +1,4 @@
-"""Process side of the TUI (tui.md §9, §10): spawn a run (for the batch coordinator), liveness of recorded-running runs, stop.
+"""Process side of the TUI (TUI.md#execution-and-cancellation): spawn a run (for the batch coordinator), liveness of recorded-running runs, stop.
 Stdlib only. A run's state always comes from its files plus a live identity check, never from a Popen handle.
 """
 import json
@@ -124,7 +124,7 @@ def derived_state(run, here):
 
 
 def stop(run, force=False):
-    """Cancel `run` (tui.md §9): SIGTERM (force: SIGKILL) to its process group after re-reading status.json (a run
+    """Cancel `run` (TUI.md#execution-and-cancellation): SIGTERM (force: SIGKILL) to its process group after re-reading status.json (a run
     that already wrote a final status, or whose recorded identity changed since `run` was read, is not signalled)
     and re-verifying its identity, runtime, TUI launch record and that it leads its group. Returns what happened; on any mismatch nothing is sent. Safe to repeat: the runner records the first
     SIGTERM as stopped and ignores later ones, and ignores one that arrives after its final status is decided.

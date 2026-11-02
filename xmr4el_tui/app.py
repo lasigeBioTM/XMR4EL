@@ -1,4 +1,4 @@
-"""Textual app: rescans outputs/runs every 5 s in a thread and tells the screens (tui.md §5, §7)."""
+"""Textual app: rescans outputs/runs every 5 s in a thread and tells the screens (TUI.md#screens-and-workflow)."""
 import threading
 import time
 from datetime import datetime

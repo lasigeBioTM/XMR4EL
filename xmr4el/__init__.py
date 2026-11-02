@@ -7,7 +7,7 @@ _pkg_name = "xmr4el"
 _pkg_logger = logging.getLogger(_pkg_name)
 _pkg_logger.addHandler(logging.NullHandler())
 
-# Machine-readable progress (docs/design/tui.md §8): not propagated, so run.log stays unchanged;
+# Machine-readable progress (TUI.md#progress-and-resources): not propagated, so run.log stays unchanged;
 # scripts/run_experiment.py writes the `event` of every record to events.jsonl.
 _progress_logger = _pkg_logger.getChild("progress")
 _progress_logger.propagate = False

@@ -1,4 +1,4 @@
-"""Every file the TUI reads (tui.md §10): scans of outputs/runs/ and outputs/saved_trees/ into one Snapshot, and the
+"""Every file the TUI reads (TUI.md#files-and-read-behavior): scans of outputs/runs/ and outputs/saved_trees/ into one Snapshot, and the
 Details of the selected explorer item. Stdlib only, no UI.
 
 The repository owns the read cache, so one scan at a time may call `snapshot` (the app serializes its scans).

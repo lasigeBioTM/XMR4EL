@@ -1,4 +1,4 @@
-"""events.jsonl -> stage list (tui.md §8). Stdlib only.
+"""events.jsonl -> stage list (TUI.md#progress-and-resources). Stdlib only.
 
 Runs without events.jsonl (before increment 2) get an empty stage list; events without `v` / duration_seconds /
 failed / stopped phases (before schema v1) still read.
