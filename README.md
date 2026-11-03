@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/lasigeBioTM/XMR4EL/actions/workflows/ci.yml/badge.svg)](https://github.com/lasigeBioTM/XMR4EL/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Project page](https://img.shields.io/badge/project%20page-xmr4el--web-blue)](https://vedore.github.io/xmr4el-web/)
 
 Extreme multi-label ranking for biomedical entity linking on local files. Training
 groups texts by concept ID, encodes them, builds PIFA label embeddings, clusters
